@@ -1,0 +1,24 @@
+#python
+__pycache__/
+*.py[cod]
+*$py.class
+venv/
+env/
+.env
+instance/
+
+.ipynb_checkpoints/
+
+# Exclude heavy datasets, images, and trained weights
+*.h5
+*.pb
+*.tflite
+*.pt
+saved_model/
+data/
+datasets/
+images/
+
+.vscode/
+.DS_Store
+Thumbs.db
