@@ -1,4 +1,4 @@
-#python
+# Python
 __pycache__/
 *.py[cod]
 *$py.class
@@ -7,6 +7,7 @@ env/
 .env
 instance/
 
+# Jupyter
 .ipynb_checkpoints/
 
 # Exclude heavy datasets, images, and trained weights
@@ -19,6 +20,17 @@ data/
 datasets/
 images/
 
+# Logs
+*.log
+
+# Testing and coverage
+.pytest_cache/
+.coverage
+htmlcov/
+
+# IDE
 .vscode/
+
+# Operating system
 .DS_Store
 Thumbs.db
