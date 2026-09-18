@@ -1,0 +1,747 @@
+/* ==========================================================================
+   InfraVision Wireframe Components - Fig 4.6, Fig 4.7, Fig 4.8
+   ========================================================================== */
+
+/* --------------------------------------------------------------------------
+   Defect Submission Components (Fig 4.6)
+   -------------------------------------------------------------------------- */
+.upload-dropzone {
+    border: 2px dashed rgba(255, 255, 255, 0.15);
+    border-radius: var(--radius-md);
+    background: rgba(14, 19, 32, 0.5);
+    padding: 1.5rem;
+    text-align: center;
+    position: relative;
+    cursor: pointer;
+    transition: var(--transition-fast);
+}
+
+.upload-dropzone:hover {
+    border-color: var(--accent-primary);
+    background: rgba(59, 130, 246, 0.05);
+}
+
+.upload-icon-circle {
+    width: 48px;
+    height: 48px;
+    background: rgba(255, 255, 255, 0.05);
+    border-radius: 50%;
+    margin: 0 auto 0.75rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1.3rem;
+}
+
+.upload-title {
+    font-size: 0.95rem;
+    font-weight: 600;
+    font-family: var(--font-mono);
+    color: #e2e8f0;
+}
+
+.upload-meta {
+    font-size: 0.75rem;
+    color: var(--text-muted);
+    margin: 0.25rem 0 1rem;
+}
+
+.button-row {
+    display: flex;
+    gap: 0.5rem;
+    justify-content: center;
+}
+
+.file-input-hidden {
+    display: none;
+}
+
+.dropzone-preview {
+    position: relative;
+    width: 100%;
+    max-height: 240px;
+    overflow: hidden;
+    border-radius: var(--radius-sm);
+}
+
+.dropzone-preview img {
+    width: 100%;
+    max-height: 240px;
+    object-fit: cover;
+    display: block;
+    border-radius: var(--radius-sm);
+}
+
+.btn-remove-image {
+    position: absolute;
+    bottom: 10px;
+    right: 10px;
+    background: rgba(0, 0, 0, 0.75);
+    color: #ffffff;
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    padding: 0.35rem 0.75rem;
+    border-radius: var(--radius-sm);
+    font-size: 0.75rem;
+    cursor: pointer;
+}
+
+/* Detection Frame (Right Column Fig 4.6) */
+.detection-frame-wrapper {
+    background: #080b12;
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-md);
+    padding: 0.75rem;
+    margin-bottom: 1.25rem;
+}
+
+.detection-frame-header {
+    display: flex;
+    justify-content: space-between;
+    margin-bottom: 0.5rem;
+    font-family: var(--font-mono);
+    font-size: 0.75rem;
+    color: #94a3b8;
+}
+
+.detection-canvas-container {
+    position: relative;
+    width: 100%;
+    height: 220px;
+    background: #04070d;
+    border-radius: var(--radius-sm);
+    overflow: hidden;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.detection-canvas {
+    width: 100%;
+    height: 100%;
+    object-fit: contain;
+    display: block;
+}
+
+.canvas-placeholder {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+    color: var(--text-muted);
+    font-size: 0.8rem;
+    padding: 1.5rem;
+}
+
+.placeholder-icon {
+    font-size: 2rem;
+    margin-bottom: 0.5rem;
+    opacity: 0.5;
+}
+
+.assessment-spec-grid {
+    background: rgba(0, 0, 0, 0.25);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-sm);
+    padding: 0.85rem 1rem;
+    margin-bottom: 1.25rem;
+}
+
+.spec-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 0.4rem 0;
+    font-size: 0.88rem;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+}
+
+.spec-row:last-child {
+    border-bottom: none;
+}
+
+.spec-label {
+    color: var(--text-secondary);
+    font-family: var(--font-mono);
+    font-size: 0.8rem;
+}
+
+.spec-value {
+    font-weight: 600;
+    font-family: var(--font-mono);
+    color: #ffffff;
+}
+
+.highlight-defect {
+    color: #60a5fa;
+}
+
+/* Severity Pills */
+.severity-pill {
+    padding: 0.2rem 0.6rem;
+    border-radius: var(--radius-sm);
+    font-family: var(--font-mono);
+    font-size: 0.75rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+}
+
+.severity-pill.critical, .severity-pill.Critical {
+    background: var(--severity-critical-bg);
+    border: 1px solid var(--severity-critical-border);
+    color: var(--severity-critical-text);
+}
+
+.severity-pill.medium, .severity-pill.Medium {
+    background: var(--severity-medium-bg);
+    border: 1px solid var(--severity-medium-border);
+    color: var(--severity-medium-text);
+}
+
+.severity-pill.low, .severity-pill.Low {
+    background: var(--severity-low-bg);
+    border: 1px solid var(--severity-low-border);
+    color: var(--severity-low-text);
+}
+
+/* System Notice Box */
+.system-notice-box {
+    background: rgba(30, 41, 59, 0.5);
+    border-left: 3px solid var(--accent-primary);
+    padding: 0.75rem 1rem;
+    border-radius: var(--radius-sm);
+    margin-bottom: 1.25rem;
+}
+
+.notice-title {
+    font-size: 0.72rem;
+    font-family: var(--font-mono);
+    color: #94a3b8;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+}
+
+.notice-text {
+    font-size: 0.82rem;
+    color: #cbd5e1;
+    margin-top: 0.2rem;
+}
+
+.action-buttons-row {
+    display: flex;
+    gap: 0.75rem;
+    justify-content: flex-end;
+}
+
+/* --------------------------------------------------------------------------
+   Engineer Monitoring Dashboard (Fig 4.7)
+   -------------------------------------------------------------------------- */
+.kpi-grid {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 1.25rem;
+    margin-bottom: 1.75rem;
+}
+
+@media (max-width: 980px) {
+    .kpi-grid {
+        grid-template-columns: repeat(2, 1fr);
+    }
+}
+
+.kpi-card {
+    background: var(--bg-card);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-md);
+    padding: 1.25rem;
+    display: flex;
+    flex-direction: column;
+    transition: var(--transition-fast);
+}
+
+.kpi-card:hover {
+    background: var(--bg-card-hover);
+    border-color: rgba(255, 255, 255, 0.15);
+}
+
+.kpi-label {
+    font-size: 0.72rem;
+    font-family: var(--font-mono);
+    color: var(--text-muted);
+    letter-spacing: 0.05em;
+    font-weight: 600;
+}
+
+.kpi-value-row {
+    display: flex;
+    align-items: baseline;
+    gap: 0.5rem;
+    margin: 0.4rem 0 0.25rem;
+}
+
+.kpi-number {
+    font-size: 2.2rem;
+    font-weight: 800;
+    color: #ffffff;
+    font-family: var(--font-mono);
+}
+
+.kpi-number.model-text {
+    font-size: 1.35rem;
+    color: #60a5fa;
+}
+
+.kpi-unit {
+    font-size: 0.9rem;
+    color: var(--text-secondary);
+    font-family: var(--font-mono);
+}
+
+.kpi-status-badge {
+    font-size: 0.7rem;
+    padding: 0.15rem 0.5rem;
+    border-radius: 999px;
+    background: rgba(59, 130, 246, 0.15);
+    color: #93c5fd;
+    font-family: var(--font-mono);
+}
+
+.kpi-status-badge.critical {
+    background: var(--severity-critical-bg);
+    color: var(--severity-critical-text);
+}
+
+.text-danger {
+    color: #f87171 !important;
+}
+
+.kpi-footer {
+    font-size: 0.75rem;
+    color: var(--text-muted);
+}
+
+/* Dashboard Columns */
+.dashboard-columns {
+    display: grid;
+    grid-template-columns: 1.15fr 0.85fr;
+    gap: 1.5rem;
+}
+
+@media (max-width: 1040px) {
+    .dashboard-columns {
+        grid-template-columns: 1fr;
+    }
+}
+
+.chart-card {
+    display: flex;
+    flex-direction: column;
+}
+
+.chart-canvas-wrapper {
+    height: 280px;
+    width: 100%;
+    position: relative;
+    margin: 0.5rem 0 1rem;
+}
+
+.trend-canvas {
+    width: 100%;
+    height: 100%;
+    display: block;
+}
+
+.chart-legend {
+    display: flex;
+    gap: 1.5rem;
+    justify-content: center;
+    padding-top: 0.5rem;
+    border-top: 1px solid var(--border-color);
+}
+
+.legend-item {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    font-size: 0.78rem;
+    font-family: var(--font-mono);
+    color: var(--text-secondary);
+}
+
+.legend-color {
+    width: 12px;
+    height: 12px;
+    border-radius: 2px;
+}
+
+.legend-color.line-condition {
+    background: #3b82f6;
+}
+
+.legend-color.line-threshold {
+    background: #ef4444;
+}
+
+/* Queue List */
+.filter-select {
+    background: var(--bg-input);
+    border: 1px solid var(--border-color);
+    color: var(--text-secondary);
+    font-size: 0.75rem;
+    padding: 0.25rem 0.6rem;
+    border-radius: var(--radius-sm);
+    outline: none;
+    font-family: var(--font-mono);
+}
+
+.defect-queue-list {
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+    max-height: 380px;
+    overflow-y: auto;
+    padding-right: 0.4rem;
+}
+
+.queue-item {
+    background: rgba(14, 19, 32, 0.6);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-sm);
+    padding: 0.85rem 1rem;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    transition: var(--transition-fast);
+}
+
+.queue-item:hover {
+    background: rgba(26, 35, 54, 0.8);
+    border-color: var(--border-highlight);
+}
+
+.queue-item-info {
+    display: flex;
+    flex-direction: column;
+    gap: 0.2rem;
+}
+
+.queue-item-header {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.queue-frame-id {
+    font-family: var(--font-mono);
+    font-size: 0.75rem;
+    color: var(--text-muted);
+}
+
+.queue-location {
+    font-size: 0.88rem;
+    font-weight: 600;
+    color: #ffffff;
+}
+
+.queue-defect-desc {
+    font-size: 0.78rem;
+    color: var(--text-secondary);
+}
+
+.queue-action {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+}
+
+.certifier-tag {
+    font-family: var(--font-mono);
+    font-size: 0.8rem;
+    color: #94a3b8;
+    background: rgba(255, 255, 255, 0.05);
+    padding: 0.35rem 0.75rem;
+    border-radius: var(--radius-sm);
+}
+
+/* --------------------------------------------------------------------------
+   AI Defect Assessment & Professional Review Terminal (Fig 4.8)
+   -------------------------------------------------------------------------- */
+.terminal-container {
+    padding: 1.75rem;
+}
+
+.terminal-meta-bar {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 1rem;
+    padding: 0.85rem 1.25rem;
+    background: rgba(0, 0, 0, 0.4);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-sm);
+    margin-bottom: 1.5rem;
+}
+
+.meta-item {
+    display: flex;
+    flex-direction: column;
+    gap: 0.15rem;
+}
+
+.meta-label {
+    font-size: 0.7rem;
+    font-family: var(--font-mono);
+    color: var(--text-muted);
+}
+
+.meta-val {
+    font-size: 0.85rem;
+    font-family: var(--font-mono);
+    font-weight: 600;
+    color: #ffffff;
+}
+
+.gps-text {
+    color: var(--accent-cyan);
+}
+
+.terminal-split-view {
+    display: grid;
+    grid-template-columns: 1.15fr 0.85fr;
+    gap: 1.75rem;
+}
+
+@media (max-width: 1040px) {
+    .terminal-split-view {
+        grid-template-columns: 1fr;
+    }
+}
+
+.terminal-canvas-wrapper {
+    background: #04070d;
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-sm);
+    height: 320px;
+    position: relative;
+    overflow: hidden;
+    margin-bottom: 1rem;
+}
+
+.review-canvas {
+    width: 100%;
+    height: 100%;
+    object-fit: contain;
+    display: block;
+}
+
+.telemetry-bar {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 0.75rem;
+}
+
+.telemetry-box {
+    background: rgba(14, 19, 32, 0.8);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-sm);
+    padding: 0.75rem;
+    text-align: center;
+}
+
+.telem-label {
+    display: block;
+    font-size: 0.68rem;
+    font-family: var(--font-mono);
+    color: var(--text-muted);
+}
+
+.telem-val {
+    display: block;
+    font-size: 1.25rem;
+    font-weight: 700;
+    font-family: var(--font-mono);
+    color: #ffffff;
+    margin: 0.15rem 0;
+}
+
+.telem-sub {
+    font-size: 0.68rem;
+    color: #60a5fa;
+    font-family: var(--font-mono);
+}
+
+/* Right Output Block */
+.output-block {
+    background: rgba(0, 0, 0, 0.3);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-sm);
+    padding: 1rem;
+    margin-bottom: 1.25rem;
+}
+
+.defect-bold {
+    font-size: 1.15rem;
+    color: #f87171;
+}
+
+.action-matrix-card {
+    margin-top: 0.75rem;
+    padding: 0.75rem;
+    background: rgba(239, 68, 68, 0.1);
+    border: 1px solid rgba(239, 68, 68, 0.3);
+    border-radius: var(--radius-sm);
+}
+
+.matrix-tag {
+    font-size: 0.7rem;
+    font-family: var(--font-mono);
+    color: #fca5a5;
+    font-weight: 600;
+}
+
+.matrix-severity {
+    font-family: var(--font-mono);
+    font-weight: 700;
+    font-size: 0.95rem;
+    color: #ef4444;
+    margin: 0.2rem 0;
+}
+
+.matrix-sla {
+    font-size: 0.78rem;
+    color: #e2e8f0;
+}
+
+/* Radio Cards */
+.radio-decision-group {
+    display: flex;
+    gap: 0.75rem;
+    margin-bottom: 1rem;
+}
+
+.radio-card {
+    flex: 1;
+    display: flex;
+    align-items: flex-start;
+    gap: 0.5rem;
+    background: rgba(14, 19, 32, 0.7);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-sm);
+    padding: 0.75rem;
+    cursor: pointer;
+    transition: var(--transition-fast);
+}
+
+.radio-card:hover {
+    border-color: rgba(255, 255, 255, 0.2);
+}
+
+.radio-card input[type="radio"] {
+    margin-top: 0.2rem;
+    accent-color: var(--accent-primary);
+}
+
+.radio-label-text strong {
+    display: block;
+    font-size: 0.85rem;
+    color: #ffffff;
+}
+
+.radio-label-text small {
+    display: block;
+    font-size: 0.72rem;
+    color: var(--text-muted);
+}
+
+.override-fields {
+    background: rgba(0, 0, 0, 0.2);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-sm);
+    padding: 0.75rem;
+    margin-bottom: 1rem;
+}
+
+.form-row {
+    display: flex;
+    gap: 0.75rem;
+}
+
+.flex-1 {
+    flex: 1;
+}
+
+.btn-signoff {
+    width: 100%;
+    padding: 0.9rem 1.5rem;
+    font-size: 0.95rem;
+    background: linear-gradient(135deg, #10b981, #059669);
+    border-color: #34d399;
+}
+
+.btn-signoff:hover {
+    background: #059669;
+}
+
+/* --------------------------------------------------------------------------
+   Tables (Citizen Tracking & Admin Portal)
+   -------------------------------------------------------------------------- */
+.table-card {
+    padding: 1.25rem;
+}
+
+.table-container {
+    overflow-x: auto;
+}
+
+.data-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.85rem;
+    text-align: left;
+}
+
+.data-table th {
+    background: rgba(0, 0, 0, 0.35);
+    color: var(--text-muted);
+    font-family: var(--font-mono);
+    font-size: 0.72rem;
+    font-weight: 600;
+    letter-spacing: 0.04em;
+    padding: 0.75rem 1rem;
+    border-bottom: 1px solid var(--border-color);
+}
+
+.data-table td {
+    padding: 0.85rem 1rem;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+    color: #e2e8f0;
+}
+
+.data-table tr:hover td {
+    background: rgba(255, 255, 255, 0.02);
+}
+
+.status-badge {
+    padding: 0.2rem 0.5rem;
+    border-radius: 999px;
+    font-family: var(--font-mono);
+    font-size: 0.72rem;
+}
+
+.status-badge.pending {
+    background: rgba(245, 158, 11, 0.15);
+    color: #fcd34d;
+    border: 1px solid #f59e0b;
+}
+
+.status-badge.verified {
+    background: rgba(16, 185, 129, 0.15);
+    color: #6ee7b7;
+    border: 1px solid #10b981;
+}
+
+.status-badge.scheduled {
+    background: rgba(59, 130, 246, 0.15);
+    color: #93c5fd;
+    border: 1px solid #3b82f6;
+}

@@ -1,0 +1,14 @@
+item {
+  id: 1
+  name: 'Crack'
+}
+
+item {
+  id: 2
+  name: 'Pothole'
+}
+
+item {
+  id: 3
+  name: 'Surface Deterioration'
+}

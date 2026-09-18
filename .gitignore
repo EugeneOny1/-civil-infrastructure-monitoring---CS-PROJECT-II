@@ -3,9 +3,12 @@ __pycache__/
 *.py[cod]
 *$py.class
 venv/
+.venv/
 env/
 .env
 instance/
+backend/uploads/
+uploads/
 
 # Jupyter
 .ipynb_checkpoints/
