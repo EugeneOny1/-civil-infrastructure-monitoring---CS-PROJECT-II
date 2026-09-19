@@ -15,6 +15,10 @@ class Config:
     SECRET_KEY = os.getenv('SECRET_KEY', 'civil-infra-default-dev-secret-key-2026')
     DEBUG = os.getenv('DEBUG', 'True').lower() in ('true', '1', 't')
     
+    # JWT Authentication
+    JWT_SECRET_KEY = os.getenv('JWT_SECRET_KEY', SECRET_KEY)
+    JWT_EXPIRATION_HOURS = int(os.getenv('JWT_EXPIRATION_HOURS', '24'))
+    
     # MongoDB Configuration
     MONGO_URI = os.getenv('MONGO_URI', 'mongodb://localhost:27017/civil_infrastructure')
     DB_NAME = os.getenv('DB_NAME', 'civil_infrastructure')
