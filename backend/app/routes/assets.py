@@ -1,13 +1,14 @@
 from flask import Blueprint, request, jsonify
 from ..models.asset import InfrastructureAsset
-from ..services.db import db_service
-from ..utils.auth_helpers import get_current_user
+from ..services.database import db_service
+from ..utils.auth_helpers import login_required, role_required
 
 assets_bp = Blueprint('assets', __name__, url_prefix='/api/assets')
 
 @assets_bp.route('', methods=['GET'])
-def list_assets():
-    """Returns all registered civil infrastructure assets."""
+@login_required
+def list_assets(current_user):
+    """Returns registered civil infrastructure assets."""
     asset_type = request.args.get('type')
     query = {}
     if asset_type:
@@ -15,22 +16,24 @@ def list_assets():
 
     records = db_service.find('infrastructure_assets', query)
     assets = [InfrastructureAsset.from_dict(r).to_dict() for r in records]
-    return jsonify({'assets': assets, 'count': len(assets)})
+    return jsonify({'assets': assets, 'count': len(assets)}), 200
 
 @assets_bp.route('/<asset_id>', methods=['GET'])
-def get_asset(asset_id):
+@login_required
+def get_asset(current_user, asset_id):
     """Returns details and inspection history for a single asset."""
     asset_data = db_service.find_one('infrastructure_assets', {'_id': asset_id})
     if not asset_data:
         return jsonify({'error': 'Infrastructure asset not found.'}), 404
-    
+
     asset = InfrastructureAsset.from_dict(asset_data).to_dict()
     reports = db_service.find('infrastructure_reports', {'asset_id': asset_id})
-    return jsonify({'asset': asset, 'reports': reports})
+    return jsonify({'asset': asset, 'reports': reports}), 200
 
 @assets_bp.route('', methods=['POST'])
-def create_asset():
-    """Registers a new infrastructure asset."""
+@role_required('engineer', 'admin')
+def create_asset(current_user):
+    """Registers a new infrastructure asset in the monitored network."""
     data = request.get_json() or {}
     asset_type = data.get('asset_type', 'Road / Pavement')
     location = data.get('location', '').strip()

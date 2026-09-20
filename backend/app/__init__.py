@@ -3,7 +3,8 @@ from pathlib import Path
 from flask import Flask, jsonify, send_from_directory
 from flask_cors import CORS
 from .config import config_by_name
-from .routes import auth_bp, reports_bp, assets_bp, reviews_bp, analytics_bp, admin_bp
+from .services.database import db_service
+from .routes import auth_bp, users_bp, reports_bp, assets_bp, reviews_bp, analytics_bp, admin_bp
 
 def create_app(config_name=None):
     """
@@ -27,6 +28,9 @@ def create_app(config_name=None):
     cfg = config_by_name.get(config_name, config_by_name['default'])
     app.config.from_object(cfg)
 
+    # Initialize database service with app config
+    db_service.init_app(app)
+
     # Ensure upload directory exists
     os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
 
@@ -35,6 +39,7 @@ def create_app(config_name=None):
 
     # Register Blueprints
     app.register_blueprint(auth_bp)
+    app.register_blueprint(users_bp)
     app.register_blueprint(reports_bp)
     app.register_blueprint(assets_bp)
     app.register_blueprint(reviews_bp)
