@@ -1,5 +1,5 @@
 /**
- * Review Module - AI Defect Assessment & Professional Review Terminal (Figure 4.8)
+ * Review Module - AI Defect Assessment & Professional Engineer Review Terminal (Figure 4.8)
  */
 const Review = {
     currentReport: null,
@@ -12,7 +12,7 @@ const Review = {
     bindEvents() {
         const signOffBtn = document.getElementById('btnSubmitSignOff');
         if (signOffBtn) {
-            signOffBtn.addEventListener('click', () => this.submitProfessionalSignOff());
+            signOffBtn.addEventListener('click', () => this.submitProfessionalValidation());
         }
 
         const decisionRadios = document.querySelectorAll('input[name="reviewDecision"]');
@@ -35,33 +35,53 @@ const Review = {
             this.currentAssessment = data.assessment;
 
             // Update Header Meta
-            document.getElementById('reviewFrameId').textContent = `Frame ID: #${data.report.report_id}`;
-            document.getElementById('reviewGps').textContent = data.asset?.location || data.report.metadata?.location_name || 'Chainage 14+350';
-            
-            // Check review status
+            const frameEl = document.getElementById('reviewFrameId');
+            const locEl = document.getElementById('reviewGps');
+            const statusEl = document.getElementById('reviewHeaderStatus');
+            const badgeDot = document.getElementById('reviewBadgeDot');
+
+            if (frameEl) frameEl.textContent = `#${data.report.report_id || data.report._id}`;
+            if (locEl) locEl.textContent = data.asset?.location || data.report.metadata?.location_name || 'Corridor Asset';
+
+            // Review status display
             if (data.review) {
-                document.getElementById('reviewHeaderStatus').textContent = `Status: Certified by PE (${data.review.decision})`;
-                document.getElementById('engineerNotes').value = data.review.comments || '';
+                if (statusEl) statusEl.textContent = `Status: Validated (${data.review.decision})`;
+                if (badgeDot) {
+                    badgeDot.className = 'badge-dot success';
+                }
+                const notesEl = document.getElementById('engineerNotes');
+                if (notesEl) notesEl.value = data.review.comments || '';
             } else {
-                document.getElementById('reviewHeaderStatus').textContent = `Status: Pending PE Sign-Off`;
+                if (statusEl) statusEl.textContent = `Status: Pending Engineer Review`;
+                if (badgeDot) {
+                    badgeDot.className = 'badge-dot warning';
+                }
+                const notesEl = document.getElementById('engineerNotes');
+                if (notesEl) notesEl.value = '';
             }
 
-            // Output block
             const ai = data.assessment || {};
             const defectClass = ai.defect_class || 'Pothole';
             const severity = ai.relative_severity || 'Critical';
+            const confidence = Math.round((ai.confidence_score || 0.94) * 1000) / 10;
+            const areaRatio = Math.round((ai.area_percentage || 20) * 10) / 10;
 
-            document.getElementById('reviewPredictedClass').textContent = defectClass;
-            document.getElementById('reviewCalculatedSeverity').textContent = `[ CALCULATED SEVERITY: ${severity.toUpperCase()} ]`;
+            // Output panel
+            const predClassEl = document.getElementById('reviewPredictedClass');
+            const calcSevEl = document.getElementById('reviewCalculatedSeverity');
+            if (predClassEl) predClassEl.textContent = defectClass;
+            if (calcSevEl) calcSevEl.textContent = `[ RELATIVE SEVERITY: ${severity.toUpperCase()} ]`;
 
-            // Telemetry block
-            document.getElementById('telemConfidence').textContent = `${Math.round((ai.confidence_score || 0.946) * 100 * 10) / 10}%`;
-            document.getElementById('telemDepth').textContent = defectClass === 'Pothole' ? '68 mm' : (defectClass === 'Crack' ? '12 mm' : '3 mm');
-            
-            const areaM2 = (ai.detections?.[0]?.area_ratio || 0.25) * 1.6;
-            document.getElementById('telemArea').textContent = `${areaM2.toFixed(2)} m²`;
+            // Telemetry indicators
+            const confEl = document.getElementById('telemConfidence');
+            const sevEl = document.getElementById('telemSeverity');
+            const areaEl = document.getElementById('telemArea');
 
-            // Draw image on review canvas
+            if (confEl) confEl.textContent = `${confidence}%`;
+            if (sevEl) confEl.textContent = severity;
+            if (areaEl) areaEl.textContent = `${areaRatio}%`;
+
+            // Render inspection canvas with bounding boxes
             const imageUrl = data.image?.url || '/api/reports/images/seed_pothole.jpg';
             this.drawReviewCanvas(imageUrl, ai);
 
@@ -82,7 +102,7 @@ const Review = {
             canvas.height = img.height;
             ctx.drawImage(img, 0, 0);
 
-            // Bounding box overlay
+            // Draw bounding box
             const box = aiData.bounding_box || [0.22, 0.25, 0.72, 0.78];
             const ymin = box[0] * img.height;
             const xmin = box[1] * img.width;
@@ -91,13 +111,12 @@ const Review = {
             const boxW = xmax - xmin;
             const boxH = ymax - ymin;
 
-            // Precision bounding box
             ctx.strokeStyle = '#ef4444';
-            ctx.lineWidth = 5;
+            ctx.lineWidth = 4;
             ctx.strokeRect(xmin, ymin, boxW, boxH);
 
-            // Crosshair markers at corners
-            const ch = 12;
+            // Precision crosshair markers
+            const ch = 10;
             ctx.strokeStyle = '#ffffff';
             ctx.lineWidth = 2;
             [[xmin, ymin], [xmax, ymin], [xmin, ymax], [xmax, ymax]].forEach(([cx, cy]) => {
@@ -108,7 +127,8 @@ const Review = {
             });
 
             // Target banner
-            const labelText = `[ Bounding Box: ${aiData.defect_class || 'Severe Pothole'} - ${Math.round((aiData.confidence_score || 0.946) * 100)}% ]`;
+            const conf = Math.round((aiData.confidence_score || 0.94) * 100);
+            const labelText = `[ ${aiData.defect_class || 'Defect'} - ${conf}% ]`;
             ctx.font = 'bold 15px "JetBrains Mono", monospace';
             const tw = ctx.measureText(labelText).width;
 
@@ -119,7 +139,6 @@ const Review = {
         };
 
         img.onerror = () => {
-            // Draw placeholder defect canvas if image file is not on disk
             canvas.width = 640;
             canvas.height = 400;
             ctx.fillStyle = '#1e2536';
@@ -131,20 +150,20 @@ const Review = {
 
             ctx.fillStyle = '#ffffff';
             ctx.font = '14px "JetBrains Mono", monospace';
-            ctx.fillText(`[ Bounding Box: ${aiData.defect_class || 'Pothole'} - 94.6% ]`, 150, 75);
+            ctx.fillText(`[ ${aiData.defect_class || 'Pothole'} - Detected ]`, 150, 75);
         };
 
         img.src = imageUrl;
     },
 
-    async submitProfessionalSignOff() {
+    async submitProfessionalValidation() {
         if (!this.currentAssessment) {
-            window.App.showToast("No active assessment loaded to sign off.", true);
+            window.App.showToast("No active defect report loaded to review.", true);
             return;
         }
 
         const decision = document.querySelector('input[name="reviewDecision"]:checked')?.value || 'Confirmed';
-        const comments = document.getElementById('engineerNotes').value;
+        const comments = document.getElementById('engineerNotes')?.value.trim() || '';
         const assessmentId = this.currentAssessment._id || this.currentAssessment.assessment_id;
 
         const overrideDetails = decision === 'Overridden' ? {
@@ -155,18 +174,24 @@ const Review = {
         try {
             const res = await window.Api.submitReview(assessmentId, {
                 decision,
-                comments,
+                comments: comments || 'Concur with automated AI defect detection.',
                 override_details: overrideDetails
             });
 
-            document.getElementById('reviewHeaderStatus').textContent = `Status: Certified by PE (${decision})`;
-            window.App.showToast("Professional Sign-Off recorded and verified in infrastructure ledger!");
-            
-            // Refresh dashboard queue
-            window.Dashboard.loadDashboardData();
+            const statusEl = document.getElementById('reviewHeaderStatus');
+            const badgeDot = document.getElementById('reviewBadgeDot');
+            if (statusEl) statusEl.textContent = `Status: Validated (${decision})`;
+            if (badgeDot) badgeDot.className = 'badge-dot success';
+
+            window.App.showToast("Professional validation and engineer review recorded.");
+
+            // Refresh dashboard
+            if (window.Dashboard) {
+                window.Dashboard.loadDashboardData();
+            }
         } catch (e) {
             console.error("Sign off error:", e);
-            window.App.showToast(e.message || "Failed to submit professional sign-off.", true);
+            window.App.showToast(e.message || "Failed to submit professional validation.", true);
         }
     }
 };
