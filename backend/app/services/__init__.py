@@ -1,11 +1,15 @@
-from .db import db_service, DatabaseService
-from .severity_service import SeverityService
-from .ai_service import ai_model, AIModel
+from .database import db_service, DatabaseService
+from .inference import inference_service, InferenceService
+
+# Backwards compatibility aliases
+ai_model = inference_service
+AIModel = InferenceService
 
 __all__ = [
     'db_service',
     'DatabaseService',
-    'SeverityService',
+    'inference_service',
+    'InferenceService',
     'ai_model',
     'AIModel'
 ]
