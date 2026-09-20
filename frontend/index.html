@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>InfraVision | Civil Infrastructure Defect Monitoring System</title>
     <meta name="description" content="Computer Vision-Based Civil Infrastructure Monitoring System for Automated Structural Defect Detection and Assessment using SSD-MobileNetV2.">
-    <!-- Google Fonts: Inter -->
+    <!-- Google Fonts: Inter & JetBrains Mono -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
@@ -16,7 +16,7 @@
     <!-- Navigation Bar -->
     <header class="app-header" id="appHeader">
         <div class="header-container">
-            <div class="brand-group">
+            <div class="brand-group" id="brandHome" style="cursor: pointer;">
                 <div class="brand-logo-badge">
                     <span class="logo-icon">▲</span>
                 </div>
@@ -26,38 +26,49 @@
                 </div>
             </div>
 
-            <!-- Global Navigation Tabs -->
+            <!-- Role-Scoped Dynamic Navigation Links -->
             <nav class="nav-links" id="mainNav">
+                <!-- Citizen Navigation (Visible to citizens or public) -->
                 <button class="nav-tab active" id="tabSubmit" data-view="view-submit">
-                    <span class="tab-icon">📷</span> Submit Defect
+                    <span class="tab-icon">📷</span> Report Defect
                 </button>
                 <button class="nav-tab" id="tabTracking" data-view="view-tracking">
                     <span class="tab-icon">📍</span> My Reports
                 </button>
-                <button class="nav-tab" id="tabDashboard" data-view="view-dashboard">
-                    <span class="tab-icon">📊</span> Engineer Dashboard
+
+                <!-- Engineer Navigation (Visible only to authenticated engineers) -->
+                <button class="nav-tab role-guarded role-engineer hidden" id="tabDashboard" data-view="view-dashboard">
+                    <span class="tab-icon">📊</span> Monitoring Dashboard
                 </button>
-                <button class="nav-tab" id="tabReview" data-view="view-review">
+                <button class="nav-tab role-guarded role-engineer hidden" id="tabReview" data-view="view-review">
                     <span class="tab-icon">🔍</span> Defect Review
                 </button>
-                <button class="nav-tab" id="tabAdmin" data-view="view-admin">
-                    <span class="tab-icon">⚙️</span> Admin Portal
+
+                <!-- Administrator Navigation (Visible only to authenticated admins) -->
+                <button class="nav-tab role-guarded role-admin hidden" id="tabAdmin" data-view="view-admin">
+                    <span class="tab-icon">⚙️</span> User Governance
                 </button>
             </nav>
 
-            <!-- Role Selector & Session State -->
-            <div class="user-role-panel">
-                <div class="role-selector-wrapper">
-                    <label for="roleSelector" class="role-label">Active Role:</label>
-                    <select id="roleSelector" class="role-select">
-                        <option value="citizen">Citizen / Reporter</option>
-                        <option value="engineer" selected>Engineer (Lead Certifier)</option>
-                        <option value="admin">System Administrator</option>
-                    </select>
+            <!-- User Session State & Auth Controls -->
+            <div class="user-session-panel" id="userSessionPanel">
+                <!-- Authenticated User Display -->
+                <div class="user-profile-badge hidden" id="userProfileBadge">
+                    <span class="user-dot" id="userStatusDot"></span>
+                    <div class="user-info-text">
+                        <span class="user-name" id="currentUserName">User</span>
+                        <div class="user-role-line">
+                            <span class="role-badge" id="currentUserRole">Citizen</span>
+                            <span class="verification-badge" id="currentVerificationBadge">Verified</span>
+                        </div>
+                    </div>
+                    <button type="button" class="btn-logout" id="btnLogout" title="Log Out">⎋ Logout</button>
                 </div>
-                <div class="user-profile-badge" id="userBadge">
-                    <span class="user-dot"></span>
-                    <span class="user-name" id="currentUserName">Eng. Elena (PE #8491)</span>
+
+                <!-- Unauthenticated Login/Register Trigger Buttons -->
+                <div class="auth-buttons-group" id="authButtonsGroup">
+                    <button type="button" class="btn-secondary btn-sm" id="btnOpenLogin">Sign In</button>
+                    <button type="button" class="btn-primary btn-sm" id="btnOpenRegister">Register</button>
                 </div>
             </div>
         </div>
@@ -66,16 +77,72 @@
     <!-- Main Application Container -->
     <main class="main-content" id="mainContent">
 
-        <!-- VIEW 1: CITIZEN REPORT SUBMISSION (Wireframe Figure 4.6) -->
+        <!-- AUTHENTICATION VIEW: Sign In / Register -->
+        <section class="view-section" id="view-auth">
+            <div class="auth-modal-wrapper">
+                <div class="glass-card auth-card">
+                    <div class="auth-tabs-row">
+                        <button type="button" class="auth-tab active" id="tabAuthLogin">Sign In</button>
+                        <button type="button" class="auth-tab" id="tabAuthRegister">Create Account</button>
+                    </div>
+
+                    <!-- Login Form -->
+                    <form id="loginForm" class="auth-form">
+                        <div class="form-group">
+                            <label for="loginEmail" class="field-label">Email Address</label>
+                            <input type="email" id="loginEmail" class="field-input" placeholder="e.g., user@strathmore.edu" required>
+                        </div>
+                        <div class="form-group">
+                            <label for="loginPassword" class="field-label">Password</label>
+                            <input type="password" id="loginPassword" class="field-input" placeholder="••••••••" required>
+                        </div>
+                        <button type="submit" class="btn-primary btn-block" id="btnLoginSubmit">
+                            Sign In to InfraVision
+                        </button>
+                    </form>
+
+                    <!-- Registration Form -->
+                    <form id="registerForm" class="auth-form hidden">
+                        <div class="form-group">
+                            <label for="regName" class="field-label">Full Name *</label>
+                            <input type="text" id="regName" class="field-input" placeholder="e.g., Jane Doe" required>
+                        </div>
+                        <div class="form-group">
+                            <label for="regEmail" class="field-label">Email Address *</label>
+                            <input type="email" id="regEmail" class="field-input" placeholder="e.g., jane@example.com" required>
+                        </div>
+                        <div class="form-group">
+                            <label for="regPassword" class="field-label">Password * (minimum 6 characters)</label>
+                            <input type="password" id="regPassword" class="field-input" placeholder="••••••••" minlength="6" required>
+                        </div>
+                        <div class="form-group">
+                            <label for="regRole" class="field-label">Account Role *</label>
+                            <select id="regRole" class="field-input" required>
+                                <option value="citizen" selected>Citizen / Field Reporter</option>
+                                <option value="engineer">Civil Engineer / Inspector</option>
+                            </select>
+                            <small class="field-help-text" id="engineerVerificationNotice">
+                                Note: Engineer accounts require administrative verification before professional review tools are unlocked.
+                            </small>
+                        </div>
+                        <button type="submit" class="btn-primary btn-block" id="btnRegisterSubmit">
+                            Create Account
+                        </button>
+                    </form>
+                </div>
+            </div>
+        </section>
+
+        <!-- VIEW 1: CITIZEN REPORT SUBMISSION (Figure 4.6 Wireframe) -->
         <section class="view-section active" id="view-submit">
             <div class="view-header">
                 <div>
                     <h2 class="view-title">Infrastructure Defect Report Submission</h2>
-                    <p class="view-desc">Citizen Defect Submission & Automated AI Pre-Assessment Pipeline</p>
+                    <p class="view-desc">Submit civil infrastructure defect imagery for automated SSD-MobileNetV2 analysis</p>
                 </div>
                 <div class="pipeline-badge">
                     <span class="badge-dot pulse"></span>
-                    <span>Model Engine: SSD-MobileNetV2</span>
+                    <span>AI Engine: SSD-MobileNetV2</span>
                 </div>
             </div>
 
@@ -83,7 +150,7 @@
                 <!-- STEP 1: DEFECT CAPTURE & DETAILS -->
                 <div class="glass-card form-card">
                     <div class="card-header-bar">
-                        <span class="step-tag">[ STEP 1: DEFECT CAPTURE & DETAILS ]</span>
+                        <span class="step-tag">STEP 1: DEFECT CAPTURE & DETAILS</span>
                         <span class="mode-tag">Input Section</span>
                     </div>
 
@@ -100,9 +167,9 @@
                         <div class="form-group">
                             <label for="defectLocation" class="field-label">DEFECT LOCATION *</label>
                             <div class="input-with-button">
-                                <input type="text" id="defectLocation" class="field-input" placeholder="e.g., Uhuru Highway near Nyayo Stadium" value="Uhuru Highway near Nyayo Stadium" required>
-                                <button type="button" class="btn-secondary" id="btnAutoGps" title="Attach GPS Coordinates">
-                                    <span>📍 GPS Tagged</span>
+                                <input type="text" id="defectLocation" class="field-input" placeholder="e.g., Uhuru Highway near Nyayo Stadium" required>
+                                <button type="button" class="btn-secondary" id="btnAutoGps" title="Attach Device Location">
+                                    <span>📍 Tag Location</span>
                                 </button>
                             </div>
                         </div>
@@ -113,11 +180,11 @@
                                 <input type="file" id="imageFileInput" accept="image/png, image/jpeg, image/jpg, image/webp" class="file-input-hidden">
                                 <div class="dropzone-content" id="dropzonePrompt">
                                     <div class="upload-icon-circle">📷</div>
-                                    <p class="upload-title">[ + Upload Defect Photo ]</p>
-                                    <p class="upload-meta">Format: JPG/PNG under 16MB • Smartphone camera supported</p>
+                                    <p class="upload-title">[ Upload Defect Photo ]</p>
+                                    <p class="upload-meta">Supported: PNG, JPG, JPEG, WEBP under 16MB</p>
                                     <div class="button-row">
-                                        <button type="button" class="btn-micro" id="btnTriggerUpload">[ Local Storage / Camera ]</button>
-                                        <button type="button" class="btn-micro btn-accent" id="btnSamplePhoto">[ Load Test Sample ]</button>
+                                        <button type="button" class="btn-micro" id="btnTriggerUpload">Choose File / Camera</button>
+                                        <button type="button" class="btn-micro btn-accent" id="btnSamplePhoto">Load Test Sample</button>
                                     </div>
                                 </div>
                                 <div class="dropzone-preview hidden" id="dropzonePreview">
@@ -128,20 +195,20 @@
                         </div>
 
                         <div class="form-group">
-                            <label for="defectNotes" class="field-label">DESCRIPTION / FIELD NOTES</label>
-                            <textarea id="defectNotes" class="field-textarea" rows="3" placeholder="Provide context (e.g., depth, traffic obstruction, recent heavy rainfall)...">Multiple pothole clusters approximately 15cm deep across the center southbound lane causing vehicular obstruction.</textarea>
+                            <label for="defectNotes" class="field-label">DESCRIPTION / FIELD NOTES (OPTIONAL)</label>
+                            <textarea id="defectNotes" class="field-textarea" rows="3" placeholder="Provide context regarding road surface, visible cracks, or recent rainfall..."></textarea>
                         </div>
 
                         <button type="button" class="btn-primary btn-block" id="btnSubmitAiAnalysis">
-                            <span class="btn-icon">⚡</span> [ Submit for AI Analysis → ]
+                            <span class="btn-icon">⚡</span> Submit for AI Analysis →
                         </button>
                     </form>
                 </div>
 
-                <!-- STEP 2: AI PRE-ASSESSMENT (Wireframe Figure 4.6 Right Column) -->
+                <!-- STEP 2: AI PRE-ASSESSMENT (Figure 4.6 Right Column) -->
                 <div class="glass-card result-card">
                     <div class="card-header-bar">
-                        <span class="step-tag">[ STEP 2: AI PRE-ASSESSMENT ]</span>
+                        <span class="step-tag">STEP 2: AI PRE-ASSESSMENT</span>
                         <span class="mode-tag automated">AUTOMATED</span>
                     </div>
 
@@ -155,7 +222,7 @@
                             <canvas id="detectionCanvas" class="detection-canvas"></canvas>
                             <div class="canvas-placeholder" id="canvasPlaceholder">
                                 <span class="placeholder-icon">👁️</span>
-                                <p>Upload an image and run AI analysis to display defect bounding box coordinates.</p>
+                                <p>Upload an infrastructure photograph and run analysis to view automated defect detection.</p>
                             </div>
                         </div>
                     </div>
@@ -171,7 +238,7 @@
                             <span class="spec-value" id="resConfidence">—</span>
                         </div>
                         <div class="spec-row">
-                            <span class="spec-label">Assigned Severity:</span>
+                            <span class="spec-label">Relative Visual Severity:</span>
                             <span class="severity-pill" id="resSeverity">—</span>
                         </div>
                         <div class="spec-row">
@@ -180,15 +247,17 @@
                         </div>
                     </div>
 
-                    <!-- System Priority Notice -->
+                    <!-- Technical Disclaimer Notice -->
                     <div class="system-notice-box" id="systemNoticeBox">
-                        <p class="notice-title">Notice:</p>
-                        <p class="notice-text" id="noticeText">Submit an infrastructure photo to calculate triage turnaround and relative severity.</p>
+                        <p class="notice-title">Technical Disclaimer:</p>
+                        <p class="notice-text" id="noticeText">
+                            AI assessment is an automated preliminary estimate based on image-derived relative visual severity and is subject to professional review and validation by a certified civil engineer.
+                        </p>
                     </div>
 
                     <div class="action-buttons-row">
-                        <button type="button" class="btn-secondary" id="btnResetForm">[ Edit Details ]</button>
-                        <button type="button" class="btn-success" id="btnConfirmSubmit" disabled>[ Confirm & Submit Ticket ]</button>
+                        <button type="button" class="btn-secondary" id="btnResetForm">Submit Another Defect</button>
+                        <button type="button" class="btn-success" id="btnViewTrackingAfterSubmit" disabled>View My Reports →</button>
                     </div>
                 </div>
             </div>
@@ -199,7 +268,7 @@
             <div class="view-header">
                 <div>
                     <h2 class="view-title">Citizen Defect Tracking Portal</h2>
-                    <p class="view-desc">Monitor historical lifecycle and professional review status of your submitted tickets</p>
+                    <p class="view-desc">Monitor the status and engineer review updates of your submitted infrastructure defect reports</p>
                 </div>
                 <button class="btn-secondary btn-sm" id="btnRefreshTracking">🔄 Refresh Status</button>
             </div>
@@ -209,33 +278,31 @@
                     <table class="data-table" id="trackingTable">
                         <thead>
                             <tr>
-                                <th>Ticket ID</th>
-                                <th>Submission Date</th>
-                                <th>Infrastructure</th>
+                                <th>Report ID</th>
+                                <th>Date Submitted</th>
+                                <th>Infrastructure Location</th>
                                 <th>Detected Defect</th>
-                                <th>Severity</th>
-                                <th>Review Status</th>
-                                <th>Actions</th>
+                                <th>Relative Severity</th>
+                                <th>Report Status</th>
                             </tr>
                         </thead>
                         <tbody id="trackingTableBody">
-                            <!-- Populated dynamically via tracking JS -->
+                            <!-- Populated dynamically via JS -->
                         </tbody>
                     </table>
                 </div>
             </div>
         </section>
 
-        <!-- VIEW 3: ENGINEER MONITORING DASHBOARD (Wireframe Figure 4.7) -->
+        <!-- VIEW 3: ENGINEER MONITORING DASHBOARD (Figure 4.7 Wireframe) -->
         <section class="view-section" id="view-dashboard">
             <div class="view-header">
                 <div>
                     <h2 class="view-title">Engineer Monitoring Dashboard</h2>
-                    <p class="view-desc">Centralized Infrastructure Health, Defect Prioritization & Maintenance Planning</p>
+                    <p class="view-desc">Infrastructure Condition Tracking, Prioritized Inspection Queue & Defect Analytics</p>
                 </div>
                 <div class="header-actions">
-                    <span class="certifier-tag">User: Eng. Elena (Lead Certifier)</span>
-                    <button class="btn-secondary btn-sm" id="btnExportDashboard">📥 Export Report</button>
+                    <span class="certifier-tag" id="engineerHeaderBadge">Civil Infrastructure Reviewer</span>
                 </div>
             </div>
 
@@ -244,36 +311,36 @@
                 <div class="kpi-card">
                     <span class="kpi-label">ACTIVE DEFECT QUEUE</span>
                     <div class="kpi-value-row">
-                        <span class="kpi-number" id="kpiActiveQueue">18</span>
-                        <span class="kpi-status-badge">Pending</span>
+                        <span class="kpi-number" id="kpiActiveQueue">0</span>
+                        <span class="kpi-status-badge">Pending Review</span>
                     </div>
-                    <span class="kpi-footer">Requires engineer validation</span>
+                    <span class="kpi-footer">Awaiting engineer validation</span>
                 </div>
 
                 <div class="kpi-card">
-                    <span class="kpi-label">AVERAGE SLA</span>
+                    <span class="kpi-label">VERIFIED INSPECTIONS</span>
                     <div class="kpi-value-row">
-                        <span class="kpi-number" id="kpiAvgSla">4.2</span>
-                        <span class="kpi-unit">Hours</span>
+                        <span class="kpi-number" id="kpiVerifiedCount">0</span>
+                        <span class="kpi-unit">Records</span>
                     </div>
-                    <span class="kpi-footer">Triage turnaround speed</span>
+                    <span class="kpi-footer">Validated by professional engineers</span>
                 </div>
 
                 <div class="kpi-card">
-                    <span class="kpi-label">MODEL ARCHITECTURE</span>
+                    <span class="kpi-label">DETECTION ARCHITECTURE</span>
                     <div class="kpi-value-row">
                         <span class="kpi-number model-text" id="kpiModelVersion">SSD-MobileNetV2</span>
                     </div>
-                    <span class="kpi-footer">TensorFlow Object Detection API</span>
+                    <span class="kpi-footer">Single Shot MultiBox Detector</span>
                 </div>
 
                 <div class="kpi-card">
-                    <span class="kpi-label">CRITICAL HAZARDS</span>
+                    <span class="kpi-label">HIGH SEVERITY DEFECTS</span>
                     <div class="kpi-value-row">
-                        <span class="kpi-number text-danger" id="kpiCriticalHazards">3</span>
-                        <span class="kpi-status-badge critical">Immediate</span>
+                        <span class="kpi-number text-danger" id="kpiCriticalHazards">0</span>
+                        <span class="kpi-status-badge critical">Critical Extent</span>
                     </div>
-                    <span class="kpi-footer">24h Emergency repair SLA</span>
+                    <span class="kpi-footer">Relative visual severity &gt;= 15%</span>
                 </div>
             </div>
 
@@ -282,15 +349,15 @@
                 <!-- Structural Degradation Trend Chart (Figure 4.7) -->
                 <div class="glass-card chart-card">
                     <div class="card-header-bar">
-                        <span class="step-tag">STRUCTURAL DEGRADATION TREND</span>
-                        <span class="mode-tag">(LAST 6 MONTHS)</span>
+                        <span class="step-tag">STRUCTURAL CONDITION TRENDS</span>
+                        <span class="mode-tag">Historical Monitoring</span>
                     </div>
                     <div class="chart-canvas-wrapper">
                         <canvas id="degradationChart" class="trend-canvas"></canvas>
                     </div>
                     <div class="chart-legend">
-                        <div class="legend-item"><span class="legend-color line-condition"></span> Pavement Condition Score</div>
-                        <div class="legend-item"><span class="legend-color line-threshold"></span> Action Threshold (Score: 68)</div>
+                        <div class="legend-item"><span class="legend-color line-condition"></span> Structural Condition Index</div>
+                        <div class="legend-item"><span class="legend-color line-threshold"></span> Review Threshold (Score: 68)</div>
                     </div>
                 </div>
 
@@ -315,33 +382,33 @@
             </div>
         </section>
 
-        <!-- VIEW 4: AI DEFECT ASSESSMENT & PROFESSIONAL REVIEW (Wireframe Figure 4.8) -->
+        <!-- VIEW 4: AI DEFECT ASSESSMENT & PROFESSIONAL REVIEW (Figure 4.8 Wireframe) -->
         <section class="view-section" id="view-review">
             <div class="view-header">
                 <div>
                     <h2 class="view-title">AI Defect Assessment & Professional Review</h2>
-                    <p class="view-desc">Human-in-the-Loop Engineering Sign-Off and Defect Validation Terminal</p>
+                    <p class="view-desc">Engineer Inspection Terminal: Validate, calibrate or override automated AI defect assessment</p>
                 </div>
                 <div class="review-status-badge">
-                    <span class="badge-dot warning"></span>
-                    <span id="reviewHeaderStatus">Status: Pending PE Sign-Off</span>
+                    <span class="badge-dot warning" id="reviewBadgeDot"></span>
+                    <span id="reviewHeaderStatus">Status: Pending Engineer Review</span>
                 </div>
             </div>
 
             <div class="terminal-container glass-card">
-                <!-- Terminal Top Meta Header -->
+                <!-- Top Meta Header -->
                 <div class="terminal-meta-bar">
                     <div class="meta-item">
-                        <span class="meta-label">1. VISUAL DEFECT INSPECTION</span>
-                        <span class="meta-val" id="reviewFrameId">Frame ID: #INFRA-2024-0982-A</span>
+                        <span class="meta-label">REPORT ID</span>
+                        <span class="meta-val" id="reviewFrameId">#REP-2026-0001</span>
                     </div>
                     <div class="meta-item">
-                        <span class="meta-label">GPS COORDINATES</span>
-                        <span class="meta-val gps-text" id="reviewGps">37.7749° N, 122.4194° W</span>
+                        <span class="meta-label">INFRASTRUCTURE LOCATION</span>
+                        <span class="meta-val" id="reviewGps">Uhuru Highway (Chainage 14+350)</span>
                     </div>
                     <div class="meta-item">
-                        <span class="meta-label">2. AI MODEL OUTPUT & REVIEW DECISION</span>
-                        <span class="meta-val" id="reviewCertifier">Lead Certifier: PE #8491</span>
+                        <span class="meta-label">REVIEWER ROLE</span>
+                        <span class="meta-val" id="reviewCertifier">Civil Infrastructure Engineer</span>
                     </div>
                 </div>
 
@@ -359,43 +426,43 @@
                                 <span class="telem-sub">SSD-MobileNetV2</span>
                             </div>
                             <div class="telemetry-box">
-                                <span class="telem-label">ESTIMATED DEPTH / EXTENT</span>
-                                <span class="telem-val" id="telemDepth">68 mm</span>
-                                <span class="telem-sub">Surface Profile</span>
+                                <span class="telem-label">RELATIVE SEVERITY</span>
+                                <span class="telem-val" id="telemSeverity">Critical</span>
+                                <span class="telem-sub">Visual Bounding Extent</span>
                             </div>
                             <div class="telemetry-box">
-                                <span class="telem-label">ESTIMATED AREA</span>
-                                <span class="telem-val" id="telemArea">0.42 m²</span>
-                                <span class="telem-sub">Defect Envelope</span>
+                                <span class="telem-label">IMAGE EXTENT AREA</span>
+                                <span class="telem-val" id="telemArea">26.5%</span>
+                                <span class="telem-sub">Defect Envelope Ratio</span>
                             </div>
                         </div>
                     </div>
 
-                    <!-- Right: AI Output & Professional Sign-Off Form -->
+                    <!-- Right: AI Output & Professional Review Form -->
                     <div class="terminal-right-pane">
                         <div class="output-block">
                             <div class="spec-row">
                                 <span class="spec-label">PREDICTED CLASS:</span>
-                                <span class="spec-value defect-bold" id="reviewPredictedClass">Severe Pothole</span>
+                                <span class="spec-value defect-bold" id="reviewPredictedClass">Pothole</span>
                             </div>
 
                             <div class="action-matrix-card">
-                                <span class="matrix-tag">ACTION INDEX MATRIX</span>
-                                <p class="matrix-severity" id="reviewCalculatedSeverity">[ CALCULATED SEVERITY: CRITICAL ]</p>
-                                <p class="matrix-sla">Requires triage turnaround within 24h</p>
+                                <span class="matrix-tag">RELATIVE VISUAL SEVERITY</span>
+                                <p class="matrix-severity" id="reviewCalculatedSeverity">[ RELATIVE SEVERITY: CRITICAL ]</p>
+                                <p class="matrix-sla">Awaiting professional engineering assessment and validation notes</p>
                             </div>
                         </div>
 
                         <!-- Professional Review Decision Form -->
                         <form id="professionalReviewForm" class="review-form" onsubmit="return false;">
-                            <label class="field-label">PROFESSIONAL REVIEW DECISION *</label>
+                            <label class="field-label">ENGINEER REVIEW DECISION *</label>
                             <div class="radio-decision-group">
                                 <label class="radio-card">
                                     <input type="radio" name="reviewDecision" value="Confirmed" checked>
                                     <span class="radio-custom"></span>
                                     <span class="radio-label-text">
                                         <strong>Confirm AI Assessment</strong>
-                                        <small>Concur with AI defect class and severity</small>
+                                        <small>Concur with automated classification & severity</small>
                                     </span>
                                 </label>
                                 <label class="radio-card">
@@ -403,7 +470,7 @@
                                     <span class="radio-custom"></span>
                                     <span class="radio-label-text">
                                         <strong>Override Assessment</strong>
-                                        <small>Adjust defect category or severity rating</small>
+                                        <small>Modify defect class or relative severity rating</small>
                                     </span>
                                 </label>
                             </div>
@@ -431,12 +498,12 @@
                             </div>
 
                             <div class="form-group">
-                                <label for="engineerNotes" class="field-label">ENGINEER CERTIFICATION NOTES *</label>
-                                <textarea id="engineerNotes" class="field-textarea" rows="4">Concur with high-severity AI assessment. Subbase exposed with imminent rim collapse. Dispatched emergency patch crew.</textarea>
+                                <label for="engineerNotes" class="field-label">ENGINEER REVIEW NOTES *</label>
+                                <textarea id="engineerNotes" class="field-textarea" rows="4" placeholder="Enter engineering review findings, maintenance recommendations, or field observations..."></textarea>
                             </div>
 
                             <button type="button" class="btn-primary btn-signoff" id="btnSubmitSignOff">
-                                <span>🔒 [ SUBMIT PROFESSIONAL SIGN-OFF ]</span>
+                                <span>🔒 [ Submit Professional Validation ]</span>
                             </button>
                         </form>
                     </div>
@@ -453,10 +520,45 @@
                 </div>
             </div>
 
+            <!-- Admin Stats Row -->
+            <div class="kpi-grid" style="margin-bottom: 1.5rem;">
+                <div class="kpi-card">
+                    <span class="kpi-label">TOTAL REGISTERED USERS</span>
+                    <div class="kpi-value-row">
+                        <span class="kpi-number" id="adminTotalUsers">0</span>
+                    </div>
+                </div>
+                <div class="kpi-card">
+                    <span class="kpi-label">PENDING ENGINEER VERIFICATIONS</span>
+                    <div class="kpi-value-row">
+                        <span class="kpi-number text-danger" id="adminPendingEngineers">0</span>
+                    </div>
+                </div>
+                <div class="kpi-card">
+                    <span class="kpi-label">VERIFIED ENGINEERS</span>
+                    <div class="kpi-value-row">
+                        <span class="kpi-number" id="adminVerifiedEngineers">0</span>
+                    </div>
+                </div>
+                <div class="kpi-card">
+                    <span class="kpi-label">TOTAL DEFECT REPORTS</span>
+                    <div class="kpi-value-row">
+                        <span class="kpi-number" id="adminTotalReports">0</span>
+                    </div>
+                </div>
+            </div>
+
             <div class="glass-card table-card">
                 <div class="card-header-bar">
-                    <span class="step-tag">PROFESSIONAL VERIFICATION QUEUE</span>
-                    <span class="mode-tag">GOVERNANCE</span>
+                    <span class="step-tag">PROFESSIONAL VERIFICATION & USER QUEUE</span>
+                    <div class="filter-controls">
+                        <select id="adminRoleFilter" class="filter-select">
+                            <option value="">All Roles</option>
+                            <option value="engineer" selected>Engineers Only</option>
+                            <option value="citizen">Citizens Only</option>
+                            <option value="admin">Admins Only</option>
+                        </select>
+                    </div>
                 </div>
                 <div class="table-container">
                     <table class="data-table" id="adminUsersTable">
