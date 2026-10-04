@@ -243,6 +243,15 @@ class DatabaseService:
                 results.sort(key=lambda x: x.get(sort_key, ''), reverse=reverse)
             return results
 
+    def count(self, collection_name, query=None):
+        """Returns document count for collection matching query."""
+        if query is None:
+            query = {}
+        if not self.use_mock and self.db is not None:
+            return self.db[collection_name].count_documents(self._format_query(query))
+        else:
+            return len(self.find(collection_name, query))
+
     def update_one(self, collection_name, query, update_values):
         if not self.use_mock:
             return self.db[collection_name].update_one(self._format_query(query), {'$set': update_values})
