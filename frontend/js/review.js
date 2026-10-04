@@ -51,6 +51,13 @@ const Review = {
                 }
                 const notesEl = document.getElementById('engineerNotes');
                 if (notesEl) notesEl.value = data.review.comments || '';
+            } else if (data.report.status === 'Flagged for Review' || data.report.metadata?.is_unusual) {
+                if (statusEl) statusEl.textContent = `Status: ⚠️ Flagged for Engineer Review (Unusual Defect)`;
+                if (badgeDot) {
+                    badgeDot.className = 'badge-dot warning';
+                }
+                const notesEl = document.getElementById('engineerNotes');
+                if (notesEl) notesEl.value = data.report.metadata?.advisory_notes || '';
             } else {
                 if (statusEl) statusEl.textContent = `Status: Pending Engineer Review`;
                 if (badgeDot) {
@@ -78,7 +85,7 @@ const Review = {
             const areaEl = document.getElementById('telemArea');
 
             if (confEl) confEl.textContent = `${confidence}%`;
-            if (sevEl) confEl.textContent = severity;
+            if (sevEl) sevEl.textContent = severity;
             if (areaEl) areaEl.textContent = `${areaRatio}%`;
 
             // Render inspection canvas with bounding boxes

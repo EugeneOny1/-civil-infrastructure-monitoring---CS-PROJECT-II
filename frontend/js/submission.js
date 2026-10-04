@@ -86,6 +86,9 @@ const Submission = {
                     ctx.clearRect(0, 0, canvas.width, canvas.height);
                 }
 
+                const banner = document.getElementById('unusualDefectBanner');
+                if (banner) banner.classList.add('hidden');
+
                 document.getElementById('btnViewTrackingAfterSubmit').disabled = true;
                 window.App.showToast("Ready for new defect submission.");
             });
@@ -225,6 +228,20 @@ const Submission = {
         const noticeEl = document.getElementById('noticeText');
         if (noticeEl && ai.disclaimer) {
             noticeEl.textContent = ai.disclaimer;
+        }
+
+        // Defect integrity flag for unusual combinations (e.g. Building + Pothole)
+        const flagBanner = document.getElementById('unusualDefectBanner');
+        const flagMsgEl = document.getElementById('unusualDefectMessage');
+        if (flagBanner && flagMsgEl) {
+            if (data.validation && data.validation.is_unusual) {
+                flagBanner.classList.remove('hidden');
+                flagMsgEl.textContent = (data.validation.flag_reasons && data.validation.flag_reasons.length > 0)
+                    ? data.validation.flag_reasons.join(' • ')
+                    : 'Unusual defect-infrastructure pairing detected. Retained and flagged for certified civil engineer review.';
+            } else {
+                flagBanner.classList.add('hidden');
+            }
         }
 
         // Render Canvas Bounding Box (Figure 4.6)
