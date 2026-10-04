@@ -7,7 +7,7 @@ class User:
     Roles: 'citizen', 'engineer', 'admin'
     Verification status: 'pending', 'verified', 'rejected'
     """
-    def __init__(self, name, email, password=None, password_hash=None, role='citizen', verification_status=None, user_id=None, created_at=None):
+    def __init__(self, name, email, password=None, password_hash=None, role='citizen', verification_status=None, user_id=None, created_at=None, organization=None, professional_reg_no=None, phone=None, two_factor_enabled=False):
         self.user_id = str(user_id) if user_id else None
         self.name = name
         self.email = email.lower().strip() if email else ''
@@ -19,6 +19,10 @@ class User:
             self.password_hash = ''
         
         self.role = role  # 'citizen', 'engineer', 'admin'
+        self.organization = organization or ''
+        self.professional_reg_no = professional_reg_no or ''
+        self.phone = phone or ''
+        self.two_factor_enabled = bool(two_factor_enabled)
         
         # Engineers require admin verification per FR-01 / FR-10; citizens are automatically verified
         if verification_status:
@@ -37,6 +41,10 @@ class User:
             'name': self.name,
             'email': self.email,
             'role': self.role,
+            'organization': self.organization,
+            'professional_reg_no': self.professional_reg_no,
+            'phone': self.phone,
+            'two_factor_enabled': self.two_factor_enabled,
             'verification_status': self.verification_status,
             'created_at': self.created_at
         }
@@ -54,6 +62,10 @@ class User:
             email=data.get('email', ''),
             password_hash=data.get('password_hash', ''),
             role=data.get('role', 'citizen'),
+            organization=data.get('organization', ''),
+            professional_reg_no=data.get('professional_reg_no', ''),
+            phone=data.get('phone', ''),
+            two_factor_enabled=data.get('two_factor_enabled', False),
             verification_status=data.get('verification_status', 'verified'),
             created_at=data.get('created_at')
         )
