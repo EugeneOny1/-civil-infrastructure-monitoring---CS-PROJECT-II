@@ -5,6 +5,7 @@ from ..models.assessment import AIAssessment
 from ..models.asset import InfrastructureAsset
 from ..services.database import db_service
 from ..services.inference import inference_service
+from ..services.validation import validation_service
 from ..utils.auth_helpers import get_current_user, login_required
 from ..utils.file_helpers import allowed_file, save_uploaded_image
 
@@ -16,6 +17,7 @@ def submit_report(current_user):
     """
     FR-02 & FR-03: Defect report submission workflow.
     Validates uploaded photograph, executes SSD-MobileNetV2 defect detection,
+    performs backend integrity validation (flagging unusual combinations like Building + Pothole),
     evaluates FR-04 relative visual severity, and persists records.
     """
     if 'image' not in request.files:
@@ -33,8 +35,10 @@ def submit_report(current_user):
     asset_type = request.form.get('asset_type', 'Road / Pavement').strip()
     description = request.form.get('description', '').strip()
 
-    if not location:
-        return jsonify({'error': 'Defect location is required.'}), 400
+    # Input integrity validation
+    inputs_valid, input_errors = validation_service.validate_submission_inputs(asset_type, location, description)
+    if not inputs_valid:
+        return jsonify({'error': ' ; '.join(input_errors)}), 400
 
     user_id = str(current_user.get('_id') or current_user.get('user_id'))
 
@@ -52,6 +56,13 @@ def submit_report(current_user):
     except Exception as e:
         return jsonify({'error': f'Automated defect analysis failed: {str(e)}'}), 500
 
+    # Backend domain integrity validation (Defect vs Infrastructure pairing)
+    validation_result = validation_service.validate_report(asset_type, location, detection_result)
+
+    # Determine initial report status:
+    # Unusual combinations (e.g. Building + Pothole) are NOT rejected, but flagged for engineer review
+    initial_status = InfrastructureReport.STATUS_FLAGGED if validation_result['is_unusual'] else InfrastructureReport.STATUS_PENDING
+
     # Associate with Infrastructure Asset record
     matched_asset = db_service.find_one('infrastructure_assets', {'location': location})
     if not matched_asset:
@@ -65,16 +76,21 @@ def submit_report(current_user):
     else:
         asset_id = matched_asset['_id']
 
-    # Create InfrastructureReport
+    # Create InfrastructureReport with integrity validation metadata
     report = InfrastructureReport(
         user_id=user_id,
         asset_id=asset_id,
-        description=description or f"Observed {detection_result['defect_class']} defect.",
-        status=InfrastructureReport.STATUS_PENDING,
+        description=description or f"Observed {detection_result['defect_class']} defect on {asset_type}.",
+        status=initial_status,
         metadata={
             'location_name': location,
             'asset_type': asset_type,
-            'relative_severity': detection_result['relative_severity']
+            'relative_severity': detection_result['relative_severity'],
+            'is_unusual': validation_result['is_unusual'],
+            'flags': validation_result['flags'],
+            'flag_reasons': validation_result['flag_reasons'],
+            'advisory_notes': validation_result['advisory_notes'],
+            'priority': validation_result['priority']
         }
     )
     report_id = db_service.insert('infrastructure_reports', report.to_dict())
@@ -104,8 +120,14 @@ def submit_report(current_user):
     assessment_id = db_service.insert('ai_assessments', ai_assessment.to_dict())
     ai_assessment.assessment_id = assessment_id
 
+    response_message = (
+        'Report recorded. Note: An unusual defect-infrastructure combination was detected and flagged for certified engineer review.'
+        if validation_result['is_unusual']
+        else 'Infrastructure defect report submitted and analyzed successfully.'
+    )
+
     return jsonify({
-        'message': 'Infrastructure defect report submitted and analyzed successfully.',
+        'message': response_message,
         'report_id': report_id,
         'status': report.status,
         'report': report.to_dict(),
@@ -127,7 +149,8 @@ def submit_report(current_user):
             'bounding_box': detection_result['bounding_box'],
             'detections': detection_result['detections'],
             'disclaimer': detection_result['disclaimer']
-        }
+        },
+        'validation': validation_result
     }), 201
 
 @reports_bp.route('', methods=['GET'])

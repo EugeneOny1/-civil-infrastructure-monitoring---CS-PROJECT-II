@@ -6,6 +6,7 @@ class InfrastructureReport:
     Tracks citizen/inspector defect submission tickets through verification and resolution.
     """
     STATUS_PENDING = 'Pending'
+    STATUS_FLAGGED = 'Flagged for Review'
     STATUS_UNDER_REVIEW = 'Under Review'
     STATUS_VERIFIED = 'Verified'
     STATUS_SCHEDULED = 'Scheduled'

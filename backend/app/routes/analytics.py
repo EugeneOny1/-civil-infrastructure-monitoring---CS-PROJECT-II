@@ -13,7 +13,8 @@ def get_summary(current_user):
     all_reports = db_service.find('infrastructure_reports')
     all_assessments = db_service.find('ai_assessments')
 
-    pending_count = sum(1 for r in all_reports if r.get('status') == 'Pending')
+    pending_count = sum(1 for r in all_reports if r.get('status') in ['Pending', 'Flagged for Review', 'Under Review'])
+    flagged_unusual_count = sum(1 for r in all_reports if r.get('status') == 'Flagged for Review' or r.get('metadata', {}).get('is_unusual') is True)
     verified_count = sum(1 for r in all_reports if r.get('status') in ['Verified', 'Resolved'])
 
     # Relative visual severity distribution
@@ -28,6 +29,7 @@ def get_summary(current_user):
 
     return jsonify({
         'active_defect_queue': pending_count,
+        'flagged_unusual_count': flagged_unusual_count,
         'verified_inspections': verified_count,
         'total_submissions': len(all_reports),
         'model_architecture': 'Single Shot MultiBox Detector (SSD)',
