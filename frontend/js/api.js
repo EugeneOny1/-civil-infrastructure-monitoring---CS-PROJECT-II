@@ -1,7 +1,22 @@
 /**
  * InfraVision API Client - Handles authenticated REST communication with Flask backend
+ * Automatically resolves Flask API host across direct serving, Live Server (port 5500), and local origins.
  */
-const API_BASE = '/api';
+const getApiBase = () => {
+    try {
+        if (typeof window !== 'undefined') {
+            // When opened directly via file:/// protocol or via Live Server / alternative dev ports
+            if (window.location.protocol === 'file:' || (window.location.port && window.location.port !== '5000')) {
+                return 'http://127.0.0.1:5000/api';
+            }
+        }
+    } catch (e) {
+        // Fallback to relative
+    }
+    return '/api';
+};
+
+const API_BASE = getApiBase();
 
 const Api = {
     // Session token and user caching
@@ -46,15 +61,29 @@ const Api = {
         return headers;
     },
 
+    /**
+     * Resilient fetch wrapper providing clear diagnostics when the Flask server is not running.
+     */
+    async safeFetch(url, options = {}) {
+        try {
+            return await fetch(url, options);
+        } catch (networkError) {
+            console.error("[InfraVision API Connection Error]", networkError);
+            throw new Error(
+                "Unable to connect to backend server. Please make sure the Flask backend is started on http://127.0.0.1:5000 (run: python backend/run.py in your terminal)."
+            );
+        }
+    },
+
     // Health Check
     async checkHealth() {
-        const res = await fetch(`${API_BASE}/health`);
+        const res = await this.safeFetch(`${API_BASE}/health`);
         return res.json();
     },
 
     // Authentication (FR-01)
     async register(userData) {
-        const res = await fetch(`${API_BASE}/auth/register`, {
+        const res = await this.safeFetch(`${API_BASE}/auth/register`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(userData)
@@ -73,7 +102,7 @@ const Api = {
         const payload = { email, password };
         if (otp_code) payload.otp_code = otp_code;
 
-        const res = await fetch(`${API_BASE}/auth/login`, {
+        const res = await this.safeFetch(`${API_BASE}/auth/login`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(payload)
@@ -89,7 +118,7 @@ const Api = {
     },
 
     async verify2FA(email, otp_code) {
-        const res = await fetch(`${API_BASE}/auth/verify-2fa`, {
+        const res = await this.safeFetch(`${API_BASE}/auth/verify-2fa`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ email, otp_code })
@@ -105,7 +134,7 @@ const Api = {
     },
 
     async toggle2FA(enable) {
-        const res = await fetch(`${API_BASE}/auth/toggle-2fa`, {
+        const res = await this.safeFetch(`${API_BASE}/auth/toggle-2fa`, {
             method: 'POST',
             headers: this.getHeaders(false),
             body: JSON.stringify({ enable })
@@ -118,7 +147,7 @@ const Api = {
     },
 
     async getProfile() {
-        const res = await fetch(`${API_BASE}/auth/me`, {
+        const res = await this.safeFetch(`${API_BASE}/auth/me`, {
             headers: this.getHeaders()
         });
         if (!res.ok) {
@@ -133,7 +162,7 @@ const Api = {
 
     // Defect Reports (FR-02, FR-03, FR-04)
     async submitDefect(formData) {
-        const res = await fetch(`${API_BASE}/reports`, {
+        const res = await this.safeFetch(`${API_BASE}/reports`, {
             method: 'POST',
             headers: this.getHeaders(true),
             body: formData
@@ -147,7 +176,7 @@ const Api = {
 
     async getReports(params = {}) {
         const query = new URLSearchParams(params).toString();
-        const res = await fetch(`${API_BASE}/reports${query ? '?' + query : ''}`, {
+        const res = await this.safeFetch(`${API_BASE}/reports${query ? '?' + query : ''}`, {
             headers: this.getHeaders()
         });
         if (!res.ok) {
@@ -158,7 +187,7 @@ const Api = {
     },
 
     async getReportById(reportId) {
-        const res = await fetch(`${API_BASE}/reports/${reportId}`, {
+        const res = await this.safeFetch(`${API_BASE}/reports/${reportId}`, {
             headers: this.getHeaders()
         });
         if (!res.ok) {
@@ -169,7 +198,7 @@ const Api = {
     },
 
     async getMyReports() {
-        const res = await fetch(`${API_BASE}/users/reports`, {
+        const res = await this.safeFetch(`${API_BASE}/users/reports`, {
             headers: this.getHeaders()
         });
         if (!res.ok) {
@@ -181,7 +210,7 @@ const Api = {
 
     // Engineer Analytics & Trends (FR-07, FR-09)
     async getSummary() {
-        const res = await fetch(`${API_BASE}/analytics/summary`, {
+        const res = await this.safeFetch(`${API_BASE}/analytics/summary`, {
             headers: this.getHeaders()
         });
         if (!res.ok) {
@@ -192,7 +221,7 @@ const Api = {
     },
 
     async getDegradationTrends() {
-        const res = await fetch(`${API_BASE}/analytics/trends`, {
+        const res = await this.safeFetch(`${API_BASE}/analytics/trends`, {
             headers: this.getHeaders()
         });
         if (!res.ok) {
@@ -204,7 +233,7 @@ const Api = {
 
     // Engineer Defect Review & Assessment Validation (FR-06)
     async submitReview(assessmentId, reviewData) {
-        const res = await fetch(`${API_BASE}/reviews/${assessmentId}`, {
+        const res = await this.safeFetch(`${API_BASE}/reviews/${assessmentId}`, {
             method: 'POST',
             headers: this.getHeaders(false),
             body: JSON.stringify(reviewData)
@@ -217,7 +246,7 @@ const Api = {
     },
 
     async getReview(assessmentId) {
-        const res = await fetch(`${API_BASE}/reviews/${assessmentId}`, {
+        const res = await this.safeFetch(`${API_BASE}/reviews/${assessmentId}`, {
             headers: this.getHeaders()
         });
         return res.json();
@@ -229,7 +258,7 @@ const Api = {
         if (role) params.role = role;
         if (status) params.verification_status = status;
         const query = new URLSearchParams(params).toString();
-        const res = await fetch(`${API_BASE}/admin/users${query ? '?' + query : ''}`, {
+        const res = await this.safeFetch(`${API_BASE}/admin/users${query ? '?' + query : ''}`, {
             headers: this.getHeaders()
         });
         if (!res.ok) {
@@ -240,7 +269,7 @@ const Api = {
     },
 
     async verifyUser(userId, status) {
-        const res = await fetch(`${API_BASE}/admin/users/${userId}/verify`, {
+        const res = await this.safeFetch(`${API_BASE}/admin/users/${userId}/verify`, {
             method: 'PUT',
             headers: this.getHeaders(false),
             body: JSON.stringify({ status })
@@ -253,7 +282,7 @@ const Api = {
     },
 
     async getAdminStats() {
-        const res = await fetch(`${API_BASE}/admin/stats`, {
+        const res = await this.safeFetch(`${API_BASE}/admin/stats`, {
             headers: this.getHeaders()
         });
         if (!res.ok) {
