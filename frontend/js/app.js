@@ -1,8 +1,10 @@
 /**
- * App Module - Routing, Authentication State & Role-Based UI Guarding
+ * App Module - Routing, Authentication State, Role-Based UI Guarding & 2FA Flow
+ * Apple-Inspired Clean Interaction Design
  */
 const App = {
     currentUser: null,
+    pending2FA: null,
 
     init() {
         this.bindNavigation();
@@ -136,6 +138,7 @@ const App = {
             btnLogout.addEventListener('click', () => {
                 window.Api.clearSession();
                 this.currentUser = null;
+                this.pending2FA = null;
                 this.updateSessionUI();
                 this.showToast('Logged out successfully.');
                 this.navigateTo('view-submit');
@@ -147,6 +150,8 @@ const App = {
         const tabRegister = document.getElementById('tabAuthRegister');
         const loginForm = document.getElementById('loginForm');
         const registerForm = document.getElementById('registerForm');
+        const twoFactorForm = document.getElementById('twoFactorForm');
+        const authTabsRow = document.getElementById('authTabsRow');
 
         if (tabLogin && tabRegister) {
             tabLogin.addEventListener('click', () => {
@@ -154,12 +159,53 @@ const App = {
                 tabRegister.classList.remove('active');
                 loginForm.classList.remove('hidden');
                 registerForm.classList.add('hidden');
+                if (twoFactorForm) twoFactorForm.classList.add('hidden');
+                if (authTabsRow) authTabsRow.classList.remove('hidden');
             });
             tabRegister.addEventListener('click', () => {
                 tabRegister.classList.add('active');
                 tabLogin.classList.remove('active');
                 registerForm.classList.remove('hidden');
                 loginForm.classList.add('hidden');
+                if (twoFactorForm) twoFactorForm.classList.add('hidden');
+                if (authTabsRow) authTabsRow.classList.remove('hidden');
+            });
+        }
+
+        // Quick test account autofill chips
+        const chipCitizen = document.getElementById('chipCitizen');
+        const chipEngineer = document.getElementById('chipEngineer');
+        const chipAdmin = document.getElementById('chipAdmin');
+
+        if (chipCitizen) {
+            chipCitizen.addEventListener('click', () => {
+                document.getElementById('loginEmail').value = 'citizen@strathmore.edu';
+                document.getElementById('loginPassword').value = 'Citizen@123';
+            });
+        }
+        if (chipEngineer) {
+            chipEngineer.addEventListener('click', () => {
+                document.getElementById('loginEmail').value = 'engineer@kenha.go.ke';
+                document.getElementById('loginPassword').value = 'Engineer@123';
+            });
+        }
+        if (chipAdmin) {
+            chipAdmin.addEventListener('click', () => {
+                document.getElementById('loginEmail').value = 'admin@infravision.ke';
+                document.getElementById('loginPassword').value = 'Admin@123';
+            });
+        }
+
+        // Dynamic registration role toggle for professional fields
+        const regRoleSelect = document.getElementById('regRole');
+        const engineerFieldsContainer = document.getElementById('engineerFieldsContainer');
+        if (regRoleSelect && engineerFieldsContainer) {
+            regRoleSelect.addEventListener('change', (e) => {
+                if (e.target.value === 'engineer') {
+                    engineerFieldsContainer.classList.remove('hidden');
+                } else {
+                    engineerFieldsContainer.classList.add('hidden');
+                }
             });
         }
 
@@ -176,27 +222,96 @@ const App = {
 
                 try {
                     const data = await window.Api.login(email, password);
+
+                    // Check if Two-Factor Authentication challenge was returned
+                    if (data.require_2fa) {
+                        this.pending2FA = {
+                            email: data.email,
+                            role: data.role,
+                            demo_otp: data.demo_otp
+                        };
+
+                        // Switch to 2FA verification form
+                        loginForm.classList.add('hidden');
+                        if (authTabsRow) authTabsRow.classList.add('hidden');
+                        if (twoFactorForm) {
+                            twoFactorForm.classList.remove('hidden');
+                            document.getElementById('twoFactorEmailDisplay').textContent = data.email;
+                            document.getElementById('twoFactorOtpInput').value = '';
+                            document.getElementById('twoFactorHelpText').innerHTML = 
+                                `Dispatched verification passcode: <strong>${data.demo_otp || '123456'}</strong> (or enter test code <strong>123456</strong>)`;
+                        }
+                        this.showToast(data.message || 'Two-Factor Authentication required.');
+                        return;
+                    }
+
+                    // Direct login success (e.g. citizens or accounts with 2FA off)
                     this.currentUser = data.user;
                     this.updateSessionUI();
-                    this.showToast(`Welcome back, ${data.user.name || data.user.email}!`);
+                    this.showToast(`Welcome, ${data.user.name || data.user.email}!`);
                     
-                    if (data.user.role === 'engineer') {
-                        if (data.user.verification_status === 'verified') {
-                            this.navigateTo('view-dashboard');
-                        } else {
-                            this.showToast("Your engineer account is awaiting administrative verification.", true);
-                            this.navigateTo('view-submit');
-                        }
-                    } else if (data.user.role === 'admin') {
-                        this.navigateTo('view-admin');
-                    } else {
-                        this.navigateTo('view-submit');
-                    }
+                    this.routeUserAfterAuth(data.user);
                 } catch (err) {
                     this.showToast(err.message || 'Login failed.', true);
                 } finally {
                     submitBtn.disabled = false;
                     submitBtn.textContent = 'Sign In to InfraVision';
+                }
+            });
+        }
+
+        // Two-Factor Authentication Form Handling
+        if (twoFactorForm) {
+            const btnFillDemo = document.getElementById('btnFillDemoOtp');
+            if (btnFillDemo) {
+                btnFillDemo.addEventListener('click', () => {
+                    const code = (this.pending2FA && this.pending2FA.demo_otp) ? this.pending2FA.demo_otp : '123456';
+                    document.getElementById('twoFactorOtpInput').value = code;
+                    this.showToast("Test security code filled.");
+                });
+            }
+
+            const btnCancel2FA = document.getElementById('btnCancelTwoFactor');
+            if (btnCancel2FA) {
+                btnCancel2FA.addEventListener('click', () => {
+                    this.pending2FA = null;
+                    twoFactorForm.classList.add('hidden');
+                    loginForm.classList.remove('hidden');
+                    if (authTabsRow) authTabsRow.classList.remove('hidden');
+                });
+            }
+
+            twoFactorForm.addEventListener('submit', async (e) => {
+                e.preventDefault();
+                if (!this.pending2FA || !this.pending2FA.email) {
+                    this.showToast("No active 2FA verification session. Please sign in again.", true);
+                    this.showAuthView('login');
+                    return;
+                }
+
+                const otpCode = document.getElementById('twoFactorOtpInput').value.trim();
+                const btnVerify = document.getElementById('btnVerifyTwoFactor');
+
+                btnVerify.disabled = true;
+                btnVerify.textContent = 'Verifying Code...';
+
+                try {
+                    const data = await window.Api.verify2FA(this.pending2FA.email, otpCode);
+                    this.currentUser = data.user;
+                    this.pending2FA = null;
+                    this.updateSessionUI();
+                    this.showToast("2FA verification successful. Access granted!");
+                    
+                    twoFactorForm.classList.add('hidden');
+                    if (authTabsRow) authTabsRow.classList.remove('hidden');
+                    loginForm.classList.remove('hidden');
+
+                    this.routeUserAfterAuth(data.user);
+                } catch (err) {
+                    this.showToast(err.message || 'Invalid 2FA verification code.', true);
+                } finally {
+                    btnVerify.disabled = false;
+                    btnVerify.textContent = 'Verify & Complete Login';
                 }
             });
         }
@@ -209,19 +324,34 @@ const App = {
                 const email = document.getElementById('regEmail').value.trim();
                 const password = document.getElementById('regPassword').value.trim();
                 const role = document.getElementById('regRole').value;
+                const organization = document.getElementById('regOrg')?.value.trim() || '';
+                const professional_reg_no = document.getElementById('regLicense')?.value.trim() || '';
+                const phone = document.getElementById('regPhone')?.value.trim() || '';
+                const two_factor_enabled = document.getElementById('regTwoFactor')?.checked || false;
+
                 const submitBtn = document.getElementById('btnRegisterSubmit');
 
                 submitBtn.disabled = true;
                 submitBtn.textContent = 'Creating Account...';
 
                 try {
-                    const data = await window.Api.register({ name, email, password, role });
+                    const data = await window.Api.register({
+                        name,
+                        email,
+                        password,
+                        role,
+                        organization,
+                        professional_reg_no,
+                        phone,
+                        two_factor_enabled
+                    });
+
                     this.currentUser = data.user;
                     this.updateSessionUI();
                     this.showToast(data.message || 'Account created successfully!');
 
                     if (role === 'engineer') {
-                        this.showToast("Engineer account pending administrative verification.", true);
+                        this.showToast("Engineer account submitted for administrative accreditation verification.", true);
                     }
                     this.navigateTo('view-submit');
                 } catch (err) {
@@ -234,11 +364,30 @@ const App = {
         }
     },
 
+    routeUserAfterAuth(user) {
+        if (!user) return;
+        if (user.role === 'engineer') {
+            if (user.verification_status === 'verified') {
+                this.navigateTo('view-dashboard');
+            } else {
+                this.showToast("Engineer account pending administrative verification. Professional tools locked.", true);
+                this.navigateTo('view-submit');
+            }
+        } else if (user.role === 'admin') {
+            this.navigateTo('view-admin');
+        } else {
+            this.navigateTo('view-submit');
+        }
+    },
+
     showAuthView(mode = 'login') {
         const tabLogin = document.getElementById('tabAuthLogin');
         const tabRegister = document.getElementById('tabAuthRegister');
-        const loginForm = document.getElementById('loginForm');
-        const registerForm = document.getElementById('registerForm');
+        const twoFactorForm = document.getElementById('twoFactorForm');
+        const authTabsRow = document.getElementById('authTabsRow');
+
+        if (twoFactorForm) twoFactorForm.classList.add('hidden');
+        if (authTabsRow) authTabsRow.classList.remove('hidden');
 
         if (mode === 'login') {
             if (tabLogin) tabLogin.click();
@@ -286,7 +435,7 @@ const App = {
         if (!this.currentUser) {
             tbody.innerHTML = `
                 <tr>
-                    <td colspan="6" style="text-align:center; padding: 2.5rem; color: #94a3b8;">
+                    <td colspan="6" style="text-align:center; padding: 2.5rem; color: #86868b;">
                         Please <button type="button" class="btn-micro btn-accent" onclick="window.App.showAuthView('login')">Sign In</button> to view your submitted infrastructure defect reports.
                     </td>
                 </tr>`;
@@ -300,7 +449,7 @@ const App = {
             if (reports.length === 0) {
                 tbody.innerHTML = `
                     <tr>
-                        <td colspan="6" style="text-align:center; padding: 2.5rem; color: #94a3b8;">
+                        <td colspan="6" style="text-align:center; padding: 2.5rem; color: #86868b;">
                             No defect reports submitted yet. Use the 'Report Defect' tab to photograph and submit an infrastructure defect!
                         </td>
                     </tr>`;
@@ -310,8 +459,9 @@ const App = {
             tbody.innerHTML = reports.map(item => {
                 const rep = item.report;
                 const ai = item.assessment || {};
-                const sev = ai.relative_severity || 'Low';
+                const sev = ai.relative_severity || rep.metadata?.relative_severity || 'Low';
                 const status = rep.status || 'Pending';
+                const isFlagged = status === 'Flagged for Review' || rep.metadata?.is_unusual === true;
                 const dateStr = rep.date_submitted ? new Date(rep.date_submitted).toLocaleDateString() : 'Recent';
                 const location = rep.metadata?.location_name || 'Corridor Asset';
 
@@ -321,14 +471,22 @@ const App = {
                         <td>${dateStr}</td>
                         <td>${location}</td>
                         <td><strong>${ai.defect_class || 'Pavement Distress'}</strong></td>
-                        <td><span class="severity-pill ${sev.toLowerCase()}">[ ${sev.toUpperCase()} ]</span></td>
-                        <td><span class="status-badge ${status.toLowerCase()}">${status}</span></td>
+                        <td><span class="severity-pill ${sev.toLowerCase()}">${sev.toUpperCase()}</span></td>
+                        <td>
+                            ${isFlagged ? `
+                                <span class="report-status-badge flagged" title="${rep.metadata?.advisory_notes || 'Flagged for engineer review'}">
+                                    ⚠️ Flagged for Review
+                                </span>
+                            ` : `
+                                <span class="report-status-badge ${status.toLowerCase()}">${status}</span>
+                            `}
+                        </td>
                     </tr>
                 `;
             }).join('');
         } catch (e) {
             console.error("Failed to load tracking data:", e);
-            tbody.innerHTML = `<tr><td colspan="6" style="text-align:center; padding: 2rem; color: #ef4444;">Failed to load defect reports.</td></tr>`;
+            tbody.innerHTML = `<tr><td colspan="6" style="text-align:center; padding: 2rem; color: #dc2626;">Failed to load defect reports.</td></tr>`;
         }
     },
 
@@ -353,7 +511,7 @@ const App = {
 
             const users = usersData.users || [];
             if (users.length === 0) {
-                tbody.innerHTML = `<tr><td colspan="7" style="text-align:center; padding: 2rem; color: #64748b;">No user records found.</td></tr>`;
+                tbody.innerHTML = `<tr><td colspan="7" style="text-align:center; padding: 2rem; color: #86868b;">No user records found.</td></tr>`;
                 return;
             }
 
@@ -361,35 +519,37 @@ const App = {
                 const isVerified = u.verification_status === 'verified';
                 const isEngineer = u.role === 'engineer';
                 const uid = u.user_id || u._id;
+                const orgInfo = u.organization ? `${u.organization} ${u.professional_reg_no ? '(' + u.professional_reg_no + ')' : ''}` : (u.professional_reg_no || '—');
+                const has2fa = u.two_factor_enabled ? '<span style="color:#16a34a; font-weight:600;">🔐 Enabled</span>' : '<span style="color:#86868b;">Disabled</span>';
 
                 return `
                     <tr>
-                        <td><code>${uid ? uid.slice(0, 16) : 'ID'}</code></td>
                         <td><strong>${u.name}</strong></td>
                         <td>${u.email}</td>
                         <td><span class="certifier-tag">${u.role.toUpperCase()}</span></td>
+                        <td><span style="font-size:0.82rem; color: #515154;">${orgInfo}</span></td>
+                        <td>${has2fa}</td>
                         <td>
-                            <span class="status-badge ${isVerified ? 'verified' : 'pending'}">
+                            <span class="verification-badge ${isVerified ? 'verified' : 'pending'}">
                                 ${u.verification_status.toUpperCase()}
                             </span>
                         </td>
-                        <td>${u.created_at ? new Date(u.created_at).toLocaleDateString() : 'N/A'}</td>
                         <td>
                             ${isEngineer && !isVerified ? `
-                                <button type="button" class="btn-success btn-sm" onclick="App.handleVerifyUser('${uid}', 'verified')">
-                                    ✓ Approve
+                                <button type="button" class="btn-action-verify" onclick="App.handleVerifyUser('${uid}', 'verified')">
+                                    ✓ Verify Engineer
                                 </button>
-                                <button type="button" class="btn-secondary btn-sm" onclick="App.handleVerifyUser('${uid}', 'rejected')">
+                                <button type="button" class="btn-action-reject" onclick="App.handleVerifyUser('${uid}', 'rejected')">
                                     ✕ Reject
                                 </button>
-                            ` : `<span style="color: #64748b; font-size: 0.8rem;">Access Active</span>`}
+                            ` : `<span style="color: #86868b; font-size: 0.8rem;">Active</span>`}
                         </td>
                     </tr>
                 `;
             }).join('');
         } catch (e) {
             console.error("Admin data load error:", e);
-            tbody.innerHTML = `<tr><td colspan="7" style="text-align:center; padding: 2rem; color: #ef4444;">Admin access required. Please authenticate as administrator.</td></tr>`;
+            tbody.innerHTML = `<tr><td colspan="7" style="text-align:center; padding: 2rem; color: #dc2626;">Admin access required. Please authenticate as administrator.</td></tr>`;
         }
     },
 
@@ -408,16 +568,13 @@ const App = {
         if (!container) return;
 
         const toast = document.createElement('div');
-        toast.className = 'toast-msg';
-        if (isError) {
-            toast.style.borderLeftColor = '#ef4444';
-        }
+        toast.className = `toast-msg ${isError ? 'error' : ''}`;
         toast.textContent = message;
         container.appendChild(toast);
 
         setTimeout(() => {
             toast.style.opacity = '0';
-            setTimeout(() => toast.remove(), 300);
+            setTimeout(() => toast.remove(), 250);
         }, 3400);
     }
 };
