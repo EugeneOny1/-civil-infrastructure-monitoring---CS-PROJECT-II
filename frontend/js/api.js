@@ -69,11 +69,14 @@ const Api = {
         return data;
     },
 
-    async login(email, password) {
+    async login(email, password, otp_code = '') {
+        const payload = { email, password };
+        if (otp_code) payload.otp_code = otp_code;
+
         const res = await fetch(`${API_BASE}/auth/login`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ email, password })
+            body: JSON.stringify(payload)
         });
         const data = await res.json();
         if (!res.ok) {
@@ -81,6 +84,35 @@ const Api = {
         }
         if (data.token && data.user) {
             this.setSession(data.token, data.user);
+        }
+        return data;
+    },
+
+    async verify2FA(email, otp_code) {
+        const res = await fetch(`${API_BASE}/auth/verify-2fa`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ email, otp_code })
+        });
+        const data = await res.json();
+        if (!res.ok) {
+            throw new Error(data.error || '2FA verification failed.');
+        }
+        if (data.token && data.user) {
+            this.setSession(data.token, data.user);
+        }
+        return data;
+    },
+
+    async toggle2FA(enable) {
+        const res = await fetch(`${API_BASE}/auth/toggle-2fa`, {
+            method: 'POST',
+            headers: this.getHeaders(false),
+            body: JSON.stringify({ enable })
+        });
+        const data = await res.json();
+        if (!res.ok) {
+            throw new Error(data.error || 'Failed to toggle 2FA.');
         }
         return data;
     },

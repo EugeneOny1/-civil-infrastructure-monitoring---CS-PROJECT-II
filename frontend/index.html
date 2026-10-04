@@ -12,7 +12,7 @@
     <link rel="stylesheet" href="css/main.css">
     <link rel="stylesheet" href="css/components.css">
 </head>
-<body class="dark-theme">
+<body class="light-theme">
     <!-- Navigation Bar -->
     <header class="app-header" id="appHeader">
         <div class="header-container">
@@ -77,11 +77,11 @@
     <!-- Main Application Container -->
     <main class="main-content" id="mainContent">
 
-        <!-- AUTHENTICATION VIEW: Sign In / Register -->
+        <!-- AUTHENTICATION VIEW: Sign In / Register / 2FA -->
         <section class="view-section" id="view-auth">
             <div class="auth-modal-wrapper">
                 <div class="glass-card auth-card">
-                    <div class="auth-tabs-row">
+                    <div class="auth-tabs-row" id="authTabsRow">
                         <button type="button" class="auth-tab active" id="tabAuthLogin">Sign In</button>
                         <button type="button" class="auth-tab" id="tabAuthRegister">Create Account</button>
                     </div>
@@ -96,35 +96,96 @@
                             <label for="loginPassword" class="field-label">Password</label>
                             <input type="password" id="loginPassword" class="field-input" placeholder="••••••••" required>
                         </div>
+                        <div class="quick-login-hints">
+                            <span class="hint-label">Quick test accounts:</span>
+                            <div class="hint-chips">
+                                <button type="button" class="chip-btn" id="chipCitizen">Citizen</button>
+                                <button type="button" class="chip-btn" id="chipEngineer">Engineer</button>
+                                <button type="button" class="chip-btn" id="chipAdmin">Admin</button>
+                            </div>
+                        </div>
                         <button type="submit" class="btn-primary btn-block" id="btnLoginSubmit">
                             Sign In to InfraVision
                         </button>
                     </form>
 
-                    <!-- Registration Form -->
+                    <!-- Two-Factor Authentication (2FA) OTP Verification Form -->
+                    <form id="twoFactorForm" class="auth-form hidden">
+                        <div class="two-factor-banner">
+                            <div class="two-factor-icon">🔐</div>
+                            <div>
+                                <h3 class="two-factor-title">Two-Factor Authentication</h3>
+                                <p class="two-factor-desc">A 6-digit verification code has been dispatched to your email address: <strong id="twoFactorEmailDisplay">user@example.com</strong></p>
+                            </div>
+                        </div>
+                        <div class="form-group">
+                            <label for="twoFactorOtpInput" class="field-label">Security Verification Code (6 digits)</label>
+                            <div class="input-with-button">
+                                <input type="text" id="twoFactorOtpInput" class="field-input text-center font-mono" maxlength="6" placeholder="000000" required>
+                                <button type="button" class="btn-secondary btn-sm" id="btnFillDemoOtp" title="Autofill standard test code">
+                                    Fill Demo Code
+                                </button>
+                            </div>
+                            <small class="field-help-text" id="twoFactorHelpText">
+                                Standard testing passcode: <strong>123456</strong> or the one-time code shown in the dispatch notice.
+                            </small>
+                        </div>
+                        <button type="submit" class="btn-primary btn-block" id="btnVerifyTwoFactor">
+                            Verify & Complete Login
+                        </button>
+                        <button type="button" class="btn-secondary btn-block" id="btnCancelTwoFactor">
+                            ← Back to Sign In
+                        </button>
+                    </form>
+
+                    <!-- Registration Form with Professional Role Differentiation -->
                     <form id="registerForm" class="auth-form hidden">
                         <div class="form-group">
+                            <label for="regRole" class="field-label">Account Role *</label>
+                            <select id="regRole" class="field-input" required>
+                                <option value="citizen" selected>Citizen / Field Reporter (Immediate Access)</option>
+                                <option value="engineer">Civil Engineer / Inspector (Awaits Verification)</option>
+                                <option value="admin">System Administrator</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
                             <label for="regName" class="field-label">Full Name *</label>
-                            <input type="text" id="regName" class="field-input" placeholder="e.g., Jane Doe" required>
+                            <input type="text" id="regName" class="field-input" placeholder="e.g., Eng. Eugene Odhiambo" required>
                         </div>
                         <div class="form-group">
                             <label for="regEmail" class="field-label">Email Address *</label>
-                            <input type="email" id="regEmail" class="field-input" placeholder="e.g., jane@example.com" required>
+                            <input type="email" id="regEmail" class="field-input" placeholder="e.g., eugene@kenha.go.ke" required>
                         </div>
                         <div class="form-group">
                             <label for="regPassword" class="field-label">Password * (minimum 6 characters)</label>
                             <input type="password" id="regPassword" class="field-input" placeholder="••••••••" minlength="6" required>
                         </div>
-                        <div class="form-group">
-                            <label for="regRole" class="field-label">Account Role *</label>
-                            <select id="regRole" class="field-input" required>
-                                <option value="citizen" selected>Citizen / Field Reporter</option>
-                                <option value="engineer">Civil Engineer / Inspector</option>
-                            </select>
-                            <small class="field-help-text" id="engineerVerificationNotice">
-                                Note: Engineer accounts require administrative verification before professional review tools are unlocked.
-                            </small>
+
+                        <!-- Professional Fields for Engineers -->
+                        <div id="engineerFieldsContainer" class="hidden">
+                            <div class="form-group">
+                                <label for="regOrg" class="field-label">Organization / Authority *</label>
+                                <input type="text" id="regOrg" class="field-input" placeholder="e.g., KeNHA, KURA, KeRRA, County Govt, or Consultant">
+                            </div>
+                            <div class="form-group">
+                                <label for="regLicense" class="field-label">Engineers Board Registration / EBK No. *</label>
+                                <input type="text" id="regLicense" class="field-input" placeholder="e.g., EBK/A.166333 or IEK Graduate Member">
+                            </div>
+                            <div class="form-group">
+                                <label for="regPhone" class="field-label">Official Contact Phone</label>
+                                <input type="tel" id="regPhone" class="field-input" placeholder="e.g., +254 700 000 000">
+                            </div>
+                            <div class="form-group checkbox-group">
+                                <label class="checkbox-label">
+                                    <input type="checkbox" id="regTwoFactor" checked>
+                                    <span>Enable Email OTP Two-Factor Authentication (2FA) for this professional account</span>
+                                </label>
+                            </div>
+                            <div class="notice-callout">
+                                ℹ️ Note: Engineer accounts require administrative verification of accreditation before professional inspection tools are unlocked.
+                            </div>
                         </div>
+
                         <button type="submit" class="btn-primary btn-block" id="btnRegisterSubmit">
                             Create Account
                         </button>
@@ -247,6 +308,20 @@
                         </div>
                     </div>
 
+                    <!-- Integrity Flag Banner for Unusual Combinations (e.g. Building + Pothole) -->
+                    <div class="integrity-flag-box hidden" id="unusualDefectBanner">
+                        <div class="integrity-flag-header">
+                            <span class="flag-icon">⚠️</span>
+                            <strong class="flag-title">Defect-Infrastructure Integrity Flag</strong>
+                        </div>
+                        <p class="flag-message" id="unusualDefectMessage">
+                            Unusual combination detected: Pothole on Building structure.
+                        </p>
+                        <p class="flag-sub">
+                            This report is retained and assigned status <strong class="badge-tag flagged">Flagged for Review</strong> for certified civil engineer review.
+                        </p>
+                    </div>
+
                     <!-- Technical Disclaimer Notice -->
                     <div class="system-notice-box" id="systemNoticeBox">
                         <p class="notice-title">Technical Disclaimer:</p>
@@ -367,10 +442,11 @@
                         <span class="step-tag">PRIORITIZED DEFECT QUEUE</span>
                         <div class="filter-controls">
                             <select id="filterSeveritySelect" class="filter-select">
-                                <option value="">All Severities</option>
-                                <option value="Critical">Critical</option>
-                                <option value="Medium">Medium</option>
-                                <option value="Low">Low</option>
+                                <option value="">All Reports</option>
+                                <option value="Flagged">⚠️ Flagged for Review Only</option>
+                                <option value="Critical">Critical Severity</option>
+                                <option value="Medium">Medium Severity</option>
+                                <option value="Low">Low Severity</option>
                             </select>
                         </div>
                     </div>
@@ -564,12 +640,12 @@
                     <table class="data-table" id="adminUsersTable">
                         <thead>
                             <tr>
-                                <th>User ID</th>
                                 <th>Full Name</th>
                                 <th>Email</th>
                                 <th>Assigned Role</th>
+                                <th>Organization / EBK License</th>
+                                <th>2FA Status</th>
                                 <th>Verification Status</th>
-                                <th>Registered Date</th>
                                 <th>Administrative Action</th>
                             </tr>
                         </thead>
