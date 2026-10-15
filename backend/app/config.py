@@ -29,15 +29,22 @@ class Config:
     ALLOWED_EXTENSIONS = {'png', 'jpg', 'jpeg', 'webp'}
 
     # Machine Learning / AI Model
-    MODEL_DIR = os.getenv('MODEL_DIR', str(ROOT_DIR / 'models'))
+    MODEL_PATH = os.getenv('MODEL_PATH', str(BASE_DIR / 'models' / 'structural_defect_detector'))
+    MODEL_DIR = os.getenv('MODEL_DIR', str(BASE_DIR / 'models'))
     MODEL_NAME = 'SSD-MobileNetV2'
-    MODEL_VERSION = os.getenv('MODEL_VERSION', 'SSD-MobileNetV2-v1.0')
+    MODEL_VERSION = os.getenv('MODEL_VERSION', 'ssd_mobilenet_v2_lr00125_step5000_v1')
+    DETECTION_CONFIDENCE_THRESHOLD = float(os.getenv('DETECTION_CONFIDENCE_THRESHOLD', '0.30'))
 
-    # Target defect classes defined in project proposal
-    DEFECT_CLASSES = ['Crack', 'Pothole', 'Surface Deterioration']
+    # Target defect classes defined in project proposal & label_map.pbtxt
+    CLASS_NAMES = {
+        1: 'Crack',
+        2: 'Pothole',
+        3: 'Surface deterioration'
+    }
+    DEFECT_CLASSES = ['Crack', 'Pothole', 'Surface deterioration']
 
     # Severity assessment thresholds (relative bounding box area to image area)
-    # FR-04: Defect extent mapped to Low, Medium, Critical
+    # FR-04: Defect extent mapped to Low, Moderate, High/Critical
     SEVERITY_LOW_THRESHOLD = float(os.getenv('SEVERITY_LOW_THRESHOLD', '0.05'))       # < 5%
     SEVERITY_CRITICAL_THRESHOLD = float(os.getenv('SEVERITY_CRITICAL_THRESHOLD', '0.15')) # >= 15%
 

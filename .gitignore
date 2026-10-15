@@ -18,6 +18,8 @@ uploads/
 *.pb
 *.tflite
 *.pt
+*.data*
+*.index
 saved_model/
 data/
 datasets/
