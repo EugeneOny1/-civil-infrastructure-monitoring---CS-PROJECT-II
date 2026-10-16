@@ -65,13 +65,17 @@ const Review = {
                 }
                 const notesEl = document.getElementById('engineerNotes');
                 if (notesEl) notesEl.value = '';
-            }
+                       const ai = data.assessment || {};
+            const detections = (ai.detections && ai.detections.length > 0)
+                ? ai.detections
+                : (ai.defect_class && ai.defect_class !== 'None Detected' ? [ai] : []);
+            const hasDetections = detections.length > 0;
 
-            const ai = data.assessment || {};
-            const defectClass = ai.defect_class || 'Pothole';
-            const severity = ai.relative_severity || 'Critical';
-            const confidence = Math.round((ai.confidence_score || 0.94) * 1000) / 10;
-            const areaRatio = Math.round((ai.area_percentage || 20) * 10) / 10;
+            const defectClass = ai.class_name || ai.defect_class || (hasDetections ? 'Crack' : 'None Detected');
+            const severity = ai.severity || ai.relative_severity || 'Low';
+            const rawScore = ai.confidence !== undefined ? ai.confidence : (ai.confidence_score !== undefined ? ai.confidence_score : 0.0);
+            const confidence = hasDetections ? Math.round(rawScore * 1000) / 10 : 0.0;
+            const areaRatio = Math.round((ai.area_percentage || 0) * 10) / 10;
 
             // Output panel
             const predClassEl = document.getElementById('reviewPredictedClass');
@@ -84,7 +88,7 @@ const Review = {
             const sevEl = document.getElementById('telemSeverity');
             const areaEl = document.getElementById('telemArea');
 
-            if (confEl) confEl.textContent = `${confidence}%`;
+            if (confEl) confEl.textContent = hasDetections ? `${confidence}%` : '—';
             if (sevEl) sevEl.textContent = severity;
             if (areaEl) areaEl.textContent = `${areaRatio}%`;
 
@@ -104,60 +108,108 @@ const Review = {
         const ctx = canvas.getContext('2d');
 
         const img = new Image();
+        img.crossOrigin = 'anonymous';
         img.onload = () => {
-            canvas.width = img.width;
-            canvas.height = img.height;
-            ctx.drawImage(img, 0, 0);
+            const origW = img.naturalWidth || img.width;
+            const origH = img.naturalHeight || img.height;
+            canvas.width = origW;
+            canvas.height = origH;
+            ctx.drawImage(img, 0, 0, origW, origH);
 
-            // Draw bounding box
-            const box = aiData.bounding_box || [0.22, 0.25, 0.72, 0.78];
-            const ymin = box[0] * img.height;
-            const xmin = box[1] * img.width;
-            const ymax = box[2] * img.height;
-            const xmax = box[3] * img.width;
-            const boxW = xmax - xmin;
-            const boxH = ymax - ymin;
+            const detections = (aiData.detections && aiData.detections.length > 0)
+                ? aiData.detections
+                : (aiData.defect_class && aiData.defect_class !== 'None Detected' ? [aiData] : []);
 
-            ctx.strokeStyle = '#ef4444';
-            ctx.lineWidth = 4;
-            ctx.strokeRect(xmin, ymin, boxW, boxH);
+            if (detections.length === 0) {
+                const bannerH = Math.max(40, Math.round(origH * 0.08));
+                ctx.fillStyle = 'rgba(15, 23, 42, 0.85)';
+                ctx.fillRect(0, 0, origW, bannerH);
+                ctx.fillStyle = '#10b981';
+                const fontSize = Math.max(14, Math.round(origW * 0.024));
+                ctx.font = `600 ${fontSize}px "Inter", sans-serif`;
+                ctx.fillText('[ ✓ No Structural Defects Detected (Confidence >= 30%) ]', 16, Math.round(bannerH * 0.65));
+                return;
+            }
 
-            // Precision crosshair markers
-            const ch = 10;
-            ctx.strokeStyle = '#ffffff';
-            ctx.lineWidth = 2;
-            [[xmin, ymin], [xmax, ymin], [xmin, ymax], [xmax, ymax]].forEach(([cx, cy]) => {
-                ctx.beginPath();
-                ctx.moveTo(cx - ch, cy); ctx.lineTo(cx + ch, cy);
-                ctx.moveTo(cx, cy - ch); ctx.lineTo(cx, cy + ch);
-                ctx.stroke();
+            detections.forEach(det => {
+                let xmin, ymin, xmax, ymax;
+
+                if (det.bounding_box && typeof det.bounding_box === 'object' && !Array.isArray(det.bounding_box)) {
+                    xmin = det.bounding_box.xmin;
+                    ymin = det.bounding_box.ymin;
+                    xmax = det.bounding_box.xmax;
+                    ymax = det.bounding_box.ymax;
+                } else if (Array.isArray(det.bounding_box)) {
+                    ymin = det.bounding_box[0] * origH;
+                    xmin = det.bounding_box[1] * origW;
+                    ymax = det.bounding_box[2] * origH;
+                    xmax = det.bounding_box[3] * origW;
+                } else if (Array.isArray(det.normalized_box)) {
+                    ymin = det.normalized_box[0] * origH;
+                    xmin = det.normalized_box[1] * origW;
+                    ymax = det.normalized_box[2] * origH;
+                    xmax = det.normalized_box[3] * origW;
+                } else {
+                    return;
+                }
+
+                xmin = Math.max(0, Math.min(origW, xmin));
+                ymin = Math.max(0, Math.min(origH, ymin));
+                xmax = Math.max(xmin, Math.min(origW, xmax));
+                ymax = Math.max(ymin, Math.min(origH, ymax));
+
+                const boxW = xmax - xmin;
+                const boxH = ymax - ymin;
+                const defectClass = det.class_name || det.defect_class || 'Defect';
+                const color = defectClass === 'Pothole' ? '#ef4444' : (defectClass === 'Crack' ? '#f59e0b' : '#06b6d4');
+
+                const lineWidth = Math.max(3, Math.round(origW / 240));
+                ctx.strokeStyle = color;
+                ctx.lineWidth = lineWidth;
+                ctx.strokeRect(xmin, ymin, boxW, boxH);
+
+                // Precision crosshair markers
+                const ch = Math.max(6, Math.round(origW / 80));
+                ctx.strokeStyle = '#ffffff';
+                ctx.lineWidth = 2;
+                [[xmin, ymin], [xmax, ymin], [xmin, ymax], [xmax, ymax]].forEach(([cx, cy]) => {
+                    ctx.beginPath();
+                    ctx.moveTo(cx - ch, cy); ctx.lineTo(cx + ch, cy);
+                    ctx.moveTo(cx, cy - ch); ctx.lineTo(cx, cy + ch);
+                    ctx.stroke();
+                });
+
+                // Target banner
+                const confVal = det.confidence !== undefined ? det.confidence : (det.confidence_score || 0.0);
+                const conf = Math.round(confVal * 100);
+                const sevVal = det.severity || det.relative_severity || '';
+                const labelText = sevVal
+                    ? `[ ${defectClass} • ${conf}% • ${sevVal} ]`
+                    : `[ ${defectClass} • ${conf}% ]`;
+
+                const fontSize = Math.max(13, Math.round(origW * 0.022));
+                ctx.font = `bold ${fontSize}px "JetBrains Mono", monospace`;
+                const tw = ctx.measureText(labelText).width;
+                const pillH = fontSize + 12;
+                const pillY = Math.max(0, ymin - pillH);
+
+                ctx.fillStyle = 'rgba(0, 0, 0, 0.88)';
+                ctx.fillRect(xmin, pillY, tw + 16, pillH);
+                ctx.fillStyle = color;
+                ctx.fillText(labelText, xmin + 8, pillY + fontSize + 2);
             });
-
-            // Target banner
-            const conf = Math.round((aiData.confidence_score || 0.94) * 100);
-            const labelText = `[ ${aiData.defect_class || 'Defect'} - ${conf}% ]`;
-            ctx.font = 'bold 15px "JetBrains Mono", monospace';
-            const tw = ctx.measureText(labelText).width;
-
-            ctx.fillStyle = 'rgba(0, 0, 0, 0.85)';
-            ctx.fillRect(xmin, Math.max(0, ymin - 28), tw + 16, 28);
-            ctx.fillStyle = '#ef4444';
-            ctx.fillText(labelText, xmin + 8, Math.max(20, ymin - 9));
         };
 
         img.onerror = () => {
-            canvas.width = 640;
-            canvas.height = 400;
+            const placeholderW = 640;
+            const placeholderH = 400;
+            canvas.width = placeholderW;
+            canvas.height = placeholderH;
             ctx.fillStyle = '#1e2536';
-            ctx.fillRect(0, 0, 640, 400);
-
-            ctx.strokeStyle = '#ef4444';
-            ctx.lineWidth = 4;
-            ctx.strokeRect(140, 90, 360, 220);
-
-            ctx.fillStyle = '#ffffff';
+            ctx.fillRect(0, 0, placeholderW, placeholderH);
+            ctx.fillStyle = '#ef4444';
             ctx.font = '14px "JetBrains Mono", monospace';
-            ctx.fillText(`[ ${aiData.defect_class || 'Pothole'} - Detected ]`, 150, 75);
+            ctx.fillText('Inspection photograph could not be loaded.', 40, 200);
         };
 
         img.src = imageUrl;

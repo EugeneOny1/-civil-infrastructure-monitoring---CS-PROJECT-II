@@ -215,15 +215,29 @@ const Submission = {
         const ai = data.ai_assessment;
         if (!ai) return;
 
-        // Populate metrics
-        document.getElementById('resDefectClass').textContent = ai.defect_class;
-        document.getElementById('resConfidence').textContent = `${ai.confidence_percentage}%`;
-        
-        const sevEl = document.getElementById('resSeverity');
-        sevEl.textContent = `[ ${ai.relative_severity.toUpperCase()} ]`;
-        sevEl.className = `severity-pill ${ai.relative_severity.toLowerCase()}`;
+        const detections = (ai.detections && ai.detections.length > 0)
+            ? ai.detections
+            : (ai.defect_class && ai.defect_class !== 'None Detected' ? [ai] : []);
 
-        document.getElementById('resAreaRatio').textContent = `${ai.area_percentage}% of image extent`;
+        const hasDetections = detections.length > 0;
+        const defectName = (hasDetections && ai.defect_class && ai.defect_class !== 'None Detected')
+            ? ai.defect_class
+            : 'None Detected';
+
+        // Populate metrics separately
+        document.getElementById('resDefectClass').textContent = defectName;
+        document.getElementById('resConfidence').textContent = hasDetections
+            ? `${ai.confidence_percentage}%`
+            : '—';
+
+        const sev = ai.relative_severity || ai.severity || 'Low';
+        const sevEl = document.getElementById('resSeverity');
+        sevEl.textContent = `[ ${sev.toUpperCase()} ]`;
+        sevEl.className = `severity-pill ${sev.toLowerCase()}`;
+
+        document.getElementById('resAreaRatio').textContent = hasDetections
+            ? `${ai.area_percentage}% of image extent`
+            : '0.0% of image extent';
 
         const noticeEl = document.getElementById('noticeText');
         if (noticeEl && ai.disclaimer) {
@@ -236,15 +250,15 @@ const Submission = {
         if (flagBanner && flagMsgEl) {
             if (data.validation && data.validation.is_unusual) {
                 flagBanner.classList.remove('hidden');
-                flagMsgEl.textContent = (data.validation.flag_reasons && data.validation.flag_reasons.length > 0)
-                    ? data.validation.flag_reasons.join(' • ')
-                    : 'Unusual defect-infrastructure pairing detected. Retained and flagged for certified civil engineer review.';
+                flagMsgEl.textContent = data.validation.validation_message
+                    || (data.validation.flag_reasons && data.validation.flag_reasons.length > 0 ? data.validation.flag_reasons.join(' • ') : '')
+                    || 'Unusual defect-infrastructure pairing detected. Retained and flagged for certified civil engineer review.';
             } else {
                 flagBanner.classList.add('hidden');
             }
         }
 
-        // Render Canvas Bounding Box (Figure 4.6)
+        // Render Canvas Bounding Box
         this.drawBoundingBoxOnCanvas(data.image.url, ai);
     },
 
@@ -255,43 +269,93 @@ const Submission = {
         const ctx = canvas.getContext('2d');
 
         const img = new Image();
+        img.crossOrigin = 'anonymous';
         img.onload = () => {
             if (placeholder) placeholder.classList.add('hidden');
-            canvas.width = img.width;
-            canvas.height = img.height;
-            ctx.drawImage(img, 0, 0);
 
-            // Render bounding boxes for each detection
-            const detections = aiData.detections || [aiData];
+            const origW = img.naturalWidth || img.width;
+            const origH = img.naturalHeight || img.height;
+            canvas.width = origW;
+            canvas.height = origH;
+            ctx.drawImage(img, 0, 0, origW, origH);
+
+            const detections = (aiData.detections && aiData.detections.length > 0)
+                ? aiData.detections
+                : (aiData.defect_class && aiData.defect_class !== 'None Detected' ? [aiData] : []);
+
+            if (detections.length === 0) {
+                // Zero detections overlay banner
+                const bannerH = Math.max(40, Math.round(origH * 0.08));
+                ctx.fillStyle = 'rgba(15, 23, 42, 0.85)';
+                ctx.fillRect(0, 0, origW, bannerH);
+                ctx.fillStyle = '#10b981';
+                const fontSize = Math.max(14, Math.round(origW * 0.024));
+                ctx.font = `600 ${fontSize}px "Inter", sans-serif`;
+                ctx.fillText('[ ✓ No Structural Defects Detected (Confidence >= 30%) ]', 16, Math.round(bannerH * 0.65));
+                return;
+            }
+
+            // Render responsive bounding boxes for each detection
             detections.forEach(det => {
-                const box = det.bounding_box || [0.2, 0.2, 0.8, 0.8];
-                const ymin = box[0] * img.height;
-                const xmin = box[1] * img.width;
-                const ymax = box[2] * img.height;
-                const xmax = box[3] * img.width;
+                let xmin, ymin, xmax, ymax;
+
+                if (det.bounding_box && typeof det.bounding_box === 'object' && !Array.isArray(det.bounding_box)) {
+                    xmin = det.bounding_box.xmin;
+                    ymin = det.bounding_box.ymin;
+                    xmax = det.bounding_box.xmax;
+                    ymax = det.bounding_box.ymax;
+                } else if (Array.isArray(det.bounding_box)) {
+                    ymin = det.bounding_box[0] * origH;
+                    xmin = det.bounding_box[1] * origW;
+                    ymax = det.bounding_box[2] * origH;
+                    xmax = det.bounding_box[3] * origW;
+                } else if (Array.isArray(det.normalized_box)) {
+                    ymin = det.normalized_box[0] * origH;
+                    xmin = det.normalized_box[1] * origW;
+                    ymax = det.normalized_box[2] * origH;
+                    xmax = det.normalized_box[3] * origW;
+                } else {
+                    return;
+                }
+
+                xmin = Math.max(0, Math.min(origW, xmin));
+                ymin = Math.max(0, Math.min(origH, ymin));
+                xmax = Math.max(xmin, Math.min(origW, xmax));
+                ymax = Math.max(ymin, Math.min(origH, ymax));
+
                 const boxW = xmax - xmin;
                 const boxH = ymax - ymin;
 
-                const color = det.defect_class === 'Pothole' ? '#ef4444' : (det.defect_class === 'Crack' ? '#f59e0b' : '#06b6d4');
+                const defectClass = det.class_name || det.defect_class || 'Defect';
+                const color = defectClass === 'Pothole' ? '#ef4444' : (defectClass === 'Crack' ? '#f59e0b' : '#06b6d4');
 
-                // Draw bounding box
+                // Responsive stroke width
+                const lineWidth = Math.max(3, Math.round(origW / 240));
                 ctx.strokeStyle = color;
-                ctx.lineWidth = 4;
-                ctx.setLineDash([6, 4]);
+                ctx.lineWidth = lineWidth;
+                ctx.setLineDash([lineWidth * 2, lineWidth]);
                 ctx.strokeRect(xmin, ymin, boxW, boxH);
                 ctx.setLineDash([]);
 
                 // Label background pill
-                const confText = Math.round((det.confidence_score || 0.9) * 100);
-                const labelText = `[ ${det.defect_class} (${confText}%) ]`;
-                ctx.font = 'bold 15px "JetBrains Mono", monospace';
-                const textWidth = ctx.measureText(labelText).width;
+                const confVal = det.confidence !== undefined ? det.confidence : (det.confidence_score || 0.0);
+                const confText = Math.round(confVal * 100);
+                const sevVal = det.severity || det.relative_severity || '';
+                const labelText = sevVal
+                    ? `[ ${defectClass} • ${confText}% • ${sevVal} ]`
+                    : `[ ${defectClass} • ${confText}% ]`;
 
-                ctx.fillStyle = 'rgba(0, 0, 0, 0.85)';
-                ctx.fillRect(xmin, Math.max(0, ymin - 26), textWidth + 16, 26);
+                const fontSize = Math.max(13, Math.round(origW * 0.022));
+                ctx.font = `bold ${fontSize}px "JetBrains Mono", monospace`;
+                const textWidth = ctx.measureText(labelText).width;
+                const pillH = fontSize + 12;
+                const pillY = Math.max(0, ymin - pillH);
+
+                ctx.fillStyle = 'rgba(0, 0, 0, 0.88)';
+                ctx.fillRect(xmin, pillY, textWidth + 16, pillH);
 
                 ctx.fillStyle = color;
-                ctx.fillText(labelText, xmin + 8, Math.max(18, ymin - 8));
+                ctx.fillText(labelText, xmin + 8, pillY + fontSize + 2);
             });
         };
         img.src = imageUrl;

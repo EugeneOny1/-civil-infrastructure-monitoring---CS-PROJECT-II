@@ -18,14 +18,17 @@ def get_summary(current_user):
     verified_count = sum(1 for r in all_reports if r.get('status') in ['Verified', 'Resolved'])
 
     # Relative visual severity distribution
-    critical_count = sum(1 for a in all_assessments if a.get('relative_severity') == 'Critical')
-    medium_count = sum(1 for a in all_assessments if a.get('relative_severity') == 'Medium')
+    critical_count = sum(1 for a in all_assessments if a.get('relative_severity') in ['Critical', 'High'])
+    moderate_count = sum(1 for a in all_assessments if a.get('relative_severity') in ['Moderate', 'Medium'])
     low_count = sum(1 for a in all_assessments if a.get('relative_severity') == 'Low')
 
-    # Defect category counts (Crack, Pothole, Surface Deterioration)
-    crack_count = sum(1 for a in all_assessments if a.get('defect_class') == 'Crack')
-    pothole_count = sum(1 for a in all_assessments if a.get('defect_class') == 'Pothole')
-    surface_count = sum(1 for a in all_assessments if a.get('defect_class') == 'Surface Deterioration')
+    # Defect category counts (Crack, Pothole, Surface deterioration)
+    crack_count = sum(1 for a in all_assessments if str(a.get('defect_class')).lower() == 'crack')
+    pothole_count = sum(1 for a in all_assessments if str(a.get('defect_class')).lower() == 'pothole')
+    surface_count = sum(1 for a in all_assessments if 'surface' in str(a.get('defect_class')).lower())
+
+    from flask import current_app
+    model_version = current_app.config.get('MODEL_VERSION', 'ssd_mobilenet_v2_lr00125_step5000_v1')
 
     return jsonify({
         'active_defect_queue': pending_count,
@@ -34,16 +37,17 @@ def get_summary(current_user):
         'total_submissions': len(all_reports),
         'model_architecture': 'Single Shot MultiBox Detector (SSD)',
         'model_backbone': 'MobileNetV2',
-        'model_version': 'SSD-MobileNetV2-v1.0',
+        'model_version': model_version,
         'severity_breakdown': {
             'Critical': critical_count,
-            'Medium': medium_count,
+            'Moderate': moderate_count,
+            'Medium': moderate_count,
             'Low': low_count
         },
         'defect_class_breakdown': {
             'Crack': crack_count,
             'Pothole': pothole_count,
-            'Surface Deterioration': surface_count
+            'Surface deterioration': surface_count
         }
     }), 200
 
