@@ -49,11 +49,14 @@ def create_app(config_name=None):
     # Health check endpoint
     @app.route('/api/health', methods=['GET'])
     def health_check():
+        from .services.inference import inference_service
         return jsonify({
             'status': 'online',
             'system': 'Civil Infrastructure Monitoring System',
             'version': '1.0.0',
-            'model': app.config.get('MODEL_VERSION', 'SSD-MobileNetV2-v1.0')
+            'model': app.config.get('MODEL_VERSION', 'ssd_mobilenet_v2_lr00125_step5000_v1'),
+            'model_loaded': inference_service.is_loaded,
+            'model_name': inference_service.model_name
         })
 
     # Serve Frontend Single Page App
