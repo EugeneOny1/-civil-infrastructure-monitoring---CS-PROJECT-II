@@ -33,6 +33,9 @@ except ImportError:
     HAS_OPENCV = False
 
 
+from .severity import severity_service
+
+
 class InferenceService:
     """
     Canonical AI Inference Service for Civil Infrastructure Structural Defect Detection.
@@ -201,23 +204,19 @@ class InferenceService:
     @classmethod
     def calculate_relative_severity(cls, relative_area, low_thresh=None, critical_thresh=None):
         """
-        Prototype visual severity heuristic based on detected bounding-box area extent.
-        Documented: "Relative visual severity based on detected bounding-box area."
+        Delegates visual severity heuristic to centralized SeverityService.
+        Documented: 'Relative visual severity based on detected bounding-box area.'
         It is NOT:
         - structural integrity certification
         - structural failure probability
         - engineering safety assessment
         - model confidence
         """
-        low_t = low_thresh if low_thresh is not None else cls.SEVERITY_LOW_THRESHOLD
-        crit_t = critical_thresh if critical_thresh is not None else cls.SEVERITY_CRITICAL_THRESHOLD
-
-        if relative_area >= crit_t:
-            return 'Critical'
-        elif relative_area >= low_t:
-            return 'Moderate'
-        else:
-            return 'Low'
+        return severity_service.calculate_severity_for_area(
+            relative_area,
+            low_thresh=low_thresh if low_thresh is not None else cls.SEVERITY_LOW_THRESHOLD,
+            critical_thresh=critical_thresh if critical_thresh is not None else cls.SEVERITY_CRITICAL_THRESHOLD
+        )
 
     def detect_defects(self, image_input, confidence_threshold=None):
         """
