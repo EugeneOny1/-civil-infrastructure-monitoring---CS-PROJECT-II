@@ -1212,14 +1212,82 @@ body, body.light-theme {
     .map-container {
         height: 420px;
     }
+    .map-toolbar {
+        flex-direction: column;
+        align-items: stretch;
+        gap: 0.75rem;
+    }
+    .map-filters {
+        flex-wrap: wrap;
+        width: 100%;
+    }
+    .map-filters select {
+        flex: 1 1 140px;
+    }
+    .map-legend-bar {
+        flex-wrap: wrap;
+        gap: 0.5rem;
+    }
+    .map-legend-bar > div:last-child {
+        margin-left: 0 !important;
+        width: 100%;
+    }
+    .casework-toolbar {
+        flex-direction: column;
+        align-items: stretch;
+        gap: 0.75rem;
+    }
+    .casework-select-group {
+        flex-direction: column;
+        align-items: stretch;
+        width: 100%;
+    }
+    .casework-select-group input,
+    .casework-select-group select {
+        width: 100% !important;
+    }
+    .lifecycle-btn-group {
+        width: 100%;
+        display: flex;
+        flex-wrap: wrap;
+    }
+    .lifecycle-btn-group .btn-lifecycle {
+        flex: 1 1 auto;
+        text-align: center;
+    }
     .strength-checklist {
         grid-template-columns: 1fr;
     }
 }
 
 @media (max-width: 430px) {
+    .header-container {
+        flex-direction: column;
+        align-items: stretch;
+        gap: 0.75rem;
+    }
+    .brand-group {
+        justify-content: center;
+    }
+    .user-session-panel {
+        justify-content: center;
+        width: 100%;
+    }
+    .auth-buttons-group {
+        width: 100%;
+        display: flex;
+        justify-content: center;
+    }
+    .auth-buttons-group .btn-sm {
+        flex: 1;
+        text-align: center;
+    }
     .kpi-grid {
         grid-template-columns: 1fr;
+    }
+    .admin-health-grid {
+        grid-template-columns: repeat(2, 1fr) !important;
+        gap: 0.5rem;
     }
     .btn-primary, .btn-secondary, .btn-success {
         width: 100%;
@@ -1232,6 +1300,15 @@ body, body.light-theme {
     }
     .data-table th, .data-table td {
         padding: 0.65rem 0.75rem;
+    }
+    .queue-item-card {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 0.5rem;
+    }
+    .queue-item-actions {
+        width: 100%;
+        justify-content: space-between;
     }
 }
 
