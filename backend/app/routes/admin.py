@@ -150,9 +150,12 @@ def get_admin_dashboard(current_user):
         # Location aggregations
         meta = r.get('metadata') or {}
         loc_name = meta.get('location_name') or r.get('location') or 'Unspecified Location'
-        # Group general area
         area_key = loc_name.split('(')[0].split(',')[0].strip()
-        reports_by_location[area_key] = reports_by_location.get(area_key, 0) + 1
+        if area_key not in reports_by_location:
+            reports_by_location[area_key] = {'corridor': area_key, 'total_defects': 0, 'critical_count': 0}
+        reports_by_location[area_key]['total_defects'] += 1
+        if (meta.get('relative_severity') or '').lower() == 'critical':
+            reports_by_location[area_key]['critical_count'] += 1
 
         # Asset type breakdown
         asset_type = meta.get('asset_type') or 'Road / Pavement'
@@ -191,8 +194,7 @@ def get_admin_dashboard(current_user):
     }
 
     # 3. Governance Analytics
-    sorted_locations = sorted(reports_by_location.items(), key=lambda x: x[1], reverse=True)[:5]
-    top_locations = [{'location': loc, 'count': count} for loc, count in sorted_locations]
+    sorted_corridors = sorted(reports_by_location.values(), key=lambda x: x['total_defects'], reverse=True)[:6]
 
     # Engineer workload distribution
     workload_map = {}
@@ -201,14 +203,26 @@ def get_admin_dashboard(current_user):
         workload_map[r_id] = workload_map.get(r_id, 0) + 1
 
     # Enrich reviewer names
-    user_lookup = {str(u.get('_id')): u.get('name', 'Unknown') for u in all_users}
-    engineer_workload = [
-        {'reviewer_name': user_lookup.get(uid, f"Engineer {uid[:6]}"), 'reviews_count': count}
-        for uid, count in workload_map.items()
-    ]
+    user_lookup = {str(u.get('_id')): u for u in all_users}
+    engineer_workload = []
+    for uid, count in workload_map.items():
+        u = user_lookup.get(uid)
+        engineer_workload.append({
+            'name': u.get('name', f"Engineer {uid[:6]}") if u else f"Engineer {uid[:6]}",
+            'organization': u.get('organization', 'KeNHA / Certified Inspector') if u else 'Independent Inspector',
+            'inspections_completed': count
+        })
+    if not engineer_workload:
+        for u in all_users:
+            if u.get('role') == 'engineer' and u.get('verification_status') == 'verified':
+                engineer_workload.append({
+                    'name': u.get('name', 'Certified Engineer'),
+                    'organization': u.get('organization', 'KeNHA / Certified Inspector'),
+                    'inspections_completed': 0
+                })
 
     governance_analytics = {
-        'top_locations': top_locations,
+        'top_locations': sorted_corridors,
         'reports_by_asset_type': reports_by_asset_type,
         'reports_by_defect': reports_by_defect,
         'engineer_workload': engineer_workload
@@ -221,11 +235,16 @@ def get_admin_dashboard(current_user):
 
     system_health = {
         'backend_api': {
-            'status': 'healthy',
+            'status': 'online',
             'version': '2.0.0',
             'framework': 'Flask 3.1 / Python 3.13'
         },
         'database': {
+            'status': 'connected' if not db_service.use_mock else 'mock_fallback',
+            'engine': 'MongoDB' if not db_service.use_mock else 'In-Memory Mock Store',
+            'database_name': db_service.db_name
+        },
+        'mongodb': {
             'status': 'connected' if not db_service.use_mock else 'mock_fallback',
             'engine': 'MongoDB' if not db_service.use_mock else 'In-Memory Mock Store',
             'database_name': db_service.db_name
@@ -236,6 +255,11 @@ def get_admin_dashboard(current_user):
             'version': inference_service.DEFAULT_MODEL_VERSION,
             'detections_supported': ['Crack', 'Pothole', 'Surface deterioration']
         },
+        'email_service': {
+            'configured': smtp_configured,
+            'status': 'configured' if smtp_configured else 'demo_mode',
+            'provider': 'SMTP External Server' if smtp_configured else 'Local Cryptographic Generator'
+        },
         'email_otp': {
             'status': 'configured' if smtp_configured else 'demo_mode',
             'provider': 'SMTP External Server' if smtp_configured else 'Local Cryptographic Generator (Demo Passcode)',
@@ -243,16 +267,41 @@ def get_admin_dashboard(current_user):
             'cooldown_seconds': email_service.RESEND_COOLDOWN_SECONDS
         },
         'google_auth': {
+            'configured': bool(google_client_id),
             'status': 'configured' if bool(google_client_id) else 'pending_client_id',
             'has_client_id': bool(google_client_id)
         },
         'google_maps': {
+            'configured': bool(google_maps_key),
             'status': 'configured' if bool(google_maps_key) else 'pending_api_key',
             'has_api_key': bool(google_maps_key)
         }
     }
 
+    overview = {
+        'total_users': total_users,
+        'citizens_count': citizens_count,
+        'engineers_count': engineers_count,
+        'admins_count': admins_count,
+        'verified_engineers_count': sum(1 for u in all_users if u.get('role') == 'engineer' and u.get('verification_status') == 'verified'),
+        'pending_engineers_count': len(pending_engineer_list)
+    }
+
+    reports = {
+        'total_reports': total_reports,
+        'open_reports': open_reports,
+        'resolution_rate_percent': resolution_rate,
+        'received': received_count,
+        'under_review': under_review_count,
+        'verified': verified_count,
+        'resolved': resolved_count
+    }
+
     return jsonify({
+        'overview': overview,
+        'reports': reports,
+        'reports_by_location': sorted_corridors,
+        'engineer_workload': engineer_workload,
         'users_summary': users_summary,
         'reports_summary': reports_summary,
         'governance_analytics': governance_analytics,

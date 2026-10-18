@@ -55,8 +55,9 @@ const App = {
         const verifEl = document.getElementById('currentVerificationBadge');
         const dotEl = document.getElementById('userStatusDot');
 
-        // Hide all role-guarded tabs first
-        document.querySelectorAll('.role-guarded').forEach(el => el.classList.add('hidden'));
+        const citizenTabs = document.querySelectorAll('.role-citizen');
+        const engineerTabs = document.querySelectorAll('.role-engineer');
+        const adminTabs = document.querySelectorAll('.role-admin');
 
         if (user) {
             if (profileBadge) profileBadge.classList.remove('hidden');
@@ -74,18 +75,37 @@ const App = {
                 dotEl.className = `user-dot ${isVerified ? 'verified' : 'pending'}`;
             }
 
-            // Expose role-specific navigation tabs
-            if (user.role === 'engineer') {
+            // Strict Role-Based Navigation:
+            if (user.role === 'admin') {
+                // Admin ONLY sees Admin Dashboard and User Governance
+                citizenTabs.forEach(el => el.classList.add('hidden'));
+                engineerTabs.forEach(el => el.classList.add('hidden'));
+                adminTabs.forEach(el => el.classList.remove('hidden'));
+            } else if (user.role === 'engineer') {
+                // Engineer sees Monitoring Dashboard, Defect Review, and Infrastructure Map
+                adminTabs.forEach(el => el.classList.add('hidden'));
+                document.getElementById('tabSubmit')?.classList.add('hidden');
+                document.getElementById('tabTracking')?.classList.add('hidden');
+                document.getElementById('tabMap')?.classList.remove('hidden');
                 if (isVerified) {
-                    document.querySelectorAll('.role-engineer').forEach(el => el.classList.remove('hidden'));
+                    engineerTabs.forEach(el => el.classList.remove('hidden'));
+                } else {
+                    document.getElementById('tabDashboard')?.classList.add('hidden');
+                    document.getElementById('tabReview')?.classList.add('hidden');
                 }
-            } else if (user.role === 'admin') {
-                document.querySelectorAll('.role-engineer').forEach(el => el.classList.remove('hidden'));
-                document.querySelectorAll('.role-admin').forEach(el => el.classList.remove('hidden'));
+            } else {
+                // Citizen sees Report Defect, My Reports, and Infrastructure Map
+                citizenTabs.forEach(el => el.classList.remove('hidden'));
+                engineerTabs.forEach(el => el.classList.add('hidden'));
+                adminTabs.forEach(el => el.classList.add('hidden'));
             }
         } else {
+            // Unauthenticated Guest: public Citizen views
             if (profileBadge) profileBadge.classList.add('hidden');
             if (authButtons) authButtons.classList.remove('hidden');
+            citizenTabs.forEach(el => el.classList.remove('hidden'));
+            engineerTabs.forEach(el => el.classList.add('hidden'));
+            adminTabs.forEach(el => el.classList.add('hidden'));
         }
     },
 
@@ -708,12 +728,19 @@ const App = {
                 }
             };
 
-            setPill('healthBackend', health.backend_api?.status === 'online', 'Online', 'Offline');
-            setPill('healthMongo', health.mongodb?.status === 'connected', 'Connected', 'Disconnected');
-            setPill('healthAiModel', health.ai_model?.status === 'loaded', 'Loaded', 'Unloaded');
-            setPill('healthEmail', health.email_service?.configured === true, 'Configured', 'Demo Fallback');
-            setPill('healthGoogle', health.google_auth?.configured === true, 'Configured', 'Ready');
-            setPill('healthMaps', health.google_maps?.configured === true, 'Active', 'Vector Mode');
+            const isBackendOnline = health.backend_api?.status === 'online' || health.backend_api?.status === 'healthy';
+            const isMongoConnected = (health.mongodb?.status || health.database?.status) === 'connected';
+            const isAiLoaded = health.ai_model?.status === 'loaded';
+            const isEmailConfigured = health.email_service?.configured === true || health.email_otp?.status === 'configured';
+            const isGoogleConfigured = health.google_auth?.configured === true || health.google_auth?.status === 'configured';
+            const isMapsConfigured = health.google_maps?.configured === true || health.google_maps?.status === 'configured';
+
+            setPill('healthBackend', isBackendOnline, 'Online', 'Offline');
+            setPill('healthMongo', isMongoConnected, 'Connected', 'Disconnected');
+            setPill('healthAiModel', isAiLoaded, 'Loaded', 'Offline');
+            setPill('healthEmail', isEmailConfigured, 'Configured', 'Demo Fallback');
+            setPill('healthGoogle', isGoogleConfigured, 'Configured', 'Pending ID');
+            setPill('healthMaps', isMapsConfigured, 'Active (Key)', 'Pending Key');
 
         } catch (err) {
             console.error("Failed to load admin dashboard:", err);
