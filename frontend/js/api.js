@@ -290,6 +290,100 @@ const Api = {
             throw new Error(err.error || 'Failed to fetch admin stats.');
         }
         return res.json();
+    },
+
+    async getAdminDashboard() {
+        const res = await this.safeFetch(`${API_BASE}/admin/dashboard`, {
+            headers: this.getHeaders()
+        });
+        if (!res.ok) {
+            const err = await res.json();
+            throw new Error(err.error || 'Failed to fetch admin dashboard.');
+        }
+        return res.json();
+    },
+
+    // OTP Resend & Google Sign-In
+    async resendOtp(email) {
+        const res = await this.safeFetch(`${API_BASE}/auth/resend-otp`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ email })
+        });
+        const data = await res.json();
+        if (!res.ok) {
+            throw new Error(data.error || 'Failed to resend OTP.');
+        }
+        return data;
+    },
+
+    async loginWithGoogle(credential) {
+        const res = await this.safeFetch(`${API_BASE}/auth/google`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ credential })
+        });
+        const data = await res.json();
+        if (!res.ok) {
+            throw new Error(data.error || 'Google sign-in failed.');
+        }
+        if (data.token && data.user) {
+            this.setSession(data.token, data.user);
+        }
+        return data;
+    },
+
+    async changePassword(old_password, new_password) {
+        const res = await this.safeFetch(`${API_BASE}/auth/change-password`, {
+            method: 'POST',
+            headers: this.getHeaders(false),
+            body: JSON.stringify({ old_password, new_password })
+        });
+        const data = await res.json();
+        if (!res.ok) {
+            throw new Error(data.error || 'Failed to change password.');
+        }
+        return data;
+    },
+
+    // Interactive Map Data
+    async getMapPoints(params = {}) {
+        const query = new URLSearchParams(params).toString();
+        const res = await this.safeFetch(`${API_BASE}/reports/map${query ? '?' + query : ''}`, {
+            headers: this.getHeaders()
+        });
+        if (!res.ok) {
+            const err = await res.json();
+            throw new Error(err.error || 'Failed to fetch map data.');
+        }
+        return res.json();
+    },
+
+    // Report Lifecycle & Engineer Casework
+    async updateReportStatus(reportId, targetStatus, reason = '') {
+        const res = await this.safeFetch(`${API_BASE}/reports/${reportId}/status`, {
+            method: 'PUT',
+            headers: this.getHeaders(false),
+            body: JSON.stringify({ status: targetStatus, reason })
+        });
+        const data = await res.json();
+        if (!res.ok) {
+            throw new Error(data.error || 'Failed to update report lifecycle status.');
+        }
+        return data;
+    },
+
+    async reviewReportDirect(reportId, reviewData) {
+        const res = await this.safeFetch(`${API_BASE}/reviews/report/${reportId}`, {
+            method: 'POST',
+            headers: this.getHeaders(false),
+            body: JSON.stringify(reviewData)
+        });
+        const data = await res.json();
+        if (!res.ok) {
+            throw new Error(data.error || 'Direct report review failed.');
+        }
+        return data;
     }
 };
 
