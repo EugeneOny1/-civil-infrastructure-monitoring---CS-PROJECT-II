@@ -211,71 +211,97 @@ class ValidationService:
     def validate_report(cls, asset_type: str, location: str, detection_result: Dict[str, Any]) -> Dict[str, Any]:
         """
         Performs holistic backend integrity validation combining input checks,
-        defect-infrastructure compatibility, and AI confidence/extent criteria.
+        defect-infrastructure compatibility across ALL detected classes, and AI telemetry.
         Enriches individual detection items with their validation status.
+
+        Decouples:
+        - Report Lifecycle: canonical status is 'Received'
+        - Validation Status: 'valid' | 'unusual' | 'invalid'
+        - Engineer Review Status: requires_engineer_review (boolean)
         """
-        defect_class = detection_result.get('defect_class') or detection_result.get('class_name') or 'Crack'
+        detections = detection_result.get('detections', [])
+        primary_defect = detection_result.get('defect_class') or detection_result.get('class_name') or 'Crack'
         confidence_score = float(detection_result.get('confidence_score') or detection_result.get('confidence') or 0.0)
         area_percentage = float(detection_result.get('area_percentage') or 0.0)
         relative_severity = detection_result.get('relative_severity') or detection_result.get('severity') or 'Moderate'
 
         flags = []
-        is_unusual = False
+        unusual_detected_classes = []
 
-        # 1. Defect vs Infrastructure pairing check
-        compat = cls.check_defect_compatibility(asset_type, defect_class)
-        if compat['is_unusual']:
-            is_unusual = True
-            flags.append({
-                'type': compat['flag_type'],
-                'reason': compat['flag_reason'],
-                'description': compat['validation_message']
-            })
+        # 1. Defect vs Infrastructure pairing check across ALL detected classes
+        classes_to_check = set()
+        if detections:
+            for det in detections:
+                c_name = det.get('class_name') or det.get('defect_class')
+                if c_name:
+                    classes_to_check.add(c_name)
+        else:
+            classes_to_check.add(primary_defect)
 
-        # 2. Check for AI anomalies (low confidence / extreme coverage)
-        anomalies = cls.evaluate_ai_anomalies(confidence_score, area_percentage)
-        for anomaly in anomalies:
-            is_unusual = True
-            flags.append({
-                'type': anomaly['flag_type'],
-                'reason': anomaly['flag_reason'],
-                'description': anomaly['flag_reason']
-            })
+        for d_class in classes_to_check:
+            compat = cls.check_defect_compatibility(asset_type, d_class)
+            if compat['is_unusual']:
+                unusual_detected_classes.append(d_class)
+                flags.append({
+                    'type': compat['flag_type'],
+                    'reason': compat['flag_reason'],
+                    'description': compat['validation_message']
+                })
 
-        # Enrich detections list if present
-        detections = detection_result.get('detections', [])
+        # Enrich each detection object
         for det in detections:
             d_class = det.get('class_name') or det.get('defect_class')
             d_compat = cls.check_defect_compatibility(asset_type, d_class)
             det['validation_status'] = d_compat['validation_status']
             det['validation_message'] = d_compat['validation_message']
 
-        # Determine recommended status and triage priority
-        if is_unusual:
-            recommended_status = 'Flagged for Review'
-            priority = 'Urgent Review' if relative_severity == 'Critical' else 'Review Required'
-            overall_validation_status = cls.STATUS_UNUSUAL
-            overall_validation_message = compat.get('validation_message') or " ; ".join([f['reason'] for f in flags])
-        else:
-            recommended_status = 'Pending'
-            priority = 'Critical' if relative_severity == 'Critical' else 'Standard'
-            overall_validation_status = cls.STATUS_VALID
-            overall_validation_message = compat.get('validation_message') or f"Standard submission verified: {defect_class} on {asset_type} ({relative_severity} severity)."
+        # Determine if pairing is unusual
+        is_unusual_pairing = len(unusual_detected_classes) > 0
 
-        # Advisory notes for UI and logs
+        # 2. Informational AI telemetry anomalies (flagged for review without altering standard pairing validity)
+        anomalies = cls.evaluate_ai_anomalies(confidence_score, area_percentage)
+        for anomaly in anomalies:
+            flags.append({
+                'type': anomaly['flag_type'],
+                'reason': anomaly['flag_reason'],
+                'description': anomaly['flag_reason']
+            })
+
+        # Decouple validation status from lifecycle:
+        # validation_status is 'unusual' only if an unusual pairing exists (e.g. Building + Pothole)
+        overall_validation_status = cls.STATUS_UNUSUAL if is_unusual_pairing else cls.STATUS_VALID
+        
+        # requires_engineer_review is set if unusual, critical, or anomalous
+        requires_engineer_review = is_unusual_pairing or (relative_severity == 'Critical') or (len(anomalies) > 0)
+
+        # Canonical initial report lifecycle status is ALWAYS 'Received'
+        canonical_lifecycle_status = 'Received'
+
+        if is_unusual_pairing:
+            priority = 'Urgent Review' if relative_severity == 'Critical' else 'Review Required'
+            overall_validation_message = (
+                f"Atypical combination detected: {', '.join(unusual_detected_classes)} on {asset_type}. "
+                "Retained for certified civil engineer review."
+            )
+        else:
+            priority = 'Critical' if relative_severity == 'Critical' else 'Standard'
+            overall_validation_message = f"Valid defect pairing: {', '.join(classes_to_check)} on {asset_type} ({relative_severity} visual severity)."
+
         notes = " ; ".join([f['reason'] for f in flags]) if flags else overall_validation_message
 
         return {
-            'is_valid': compat.get('is_valid', True),
-            'is_unusual': is_unusual,
+            'is_valid': True,
+            'is_unusual': is_unusual_pairing,
+            'requires_engineer_review': requires_engineer_review,
             'validation_status': overall_validation_status,
             'validation_message': overall_validation_message,
             'flags': flags,
             'flag_reasons': [f['reason'] for f in flags],
-            'recommended_status': recommended_status,
+            'recommended_status': canonical_lifecycle_status,
             'priority': priority,
             'advisory_notes': notes,
-            'compatibility': compat
+            'unusual_classes': unusual_detected_classes,
+            'checked_classes': list(classes_to_check)
         }
 
 

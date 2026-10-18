@@ -78,7 +78,8 @@ class TestValidationAndSeverity(unittest.TestCase):
         }
         report_val = validation_service.validate_report('Building', 'Annex Perimeter Wall', sample_detection_result)
         self.assertEqual(report_val['validation_status'], 'unusual')
-        self.assertEqual(report_val['recommended_status'], 'Flagged for Review')
+        self.assertEqual(report_val['recommended_status'], 'Received')
+        self.assertTrue(report_val['requires_engineer_review'])
 
         # Check that individual detection items received validation statuses
         pothole_det = sample_detection_result['detections'][0]

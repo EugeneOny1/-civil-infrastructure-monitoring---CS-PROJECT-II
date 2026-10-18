@@ -5,26 +5,85 @@ class InfrastructureReport:
     InfrastructureReport entity mapping to Figure 4.3 Class Diagram and Figure 4.5 Database Schema.
     Tracks citizen/inspector defect submission tickets through verification and resolution.
     """
-    STATUS_PENDING = 'Pending'
-    STATUS_FLAGGED = 'Flagged for Review'
+    # Canonical report lifecycle statuses
+    STATUS_RECEIVED = 'Received'
     STATUS_UNDER_REVIEW = 'Under Review'
     STATUS_VERIFIED = 'Verified'
-    STATUS_SCHEDULED = 'Scheduled'
     STATUS_RESOLVED = 'Resolved'
+
+    CANONICAL_LIFECYCLE = [
+        STATUS_RECEIVED,
+        STATUS_UNDER_REVIEW,
+        STATUS_VERIFIED,
+        STATUS_RESOLVED
+    ]
+
+    # Legacy status compatibility aliases
+    STATUS_PENDING = STATUS_RECEIVED
+    STATUS_FLAGGED = STATUS_RECEIVED
+    STATUS_SCHEDULED = STATUS_VERIFIED
     STATUS_REJECTED = 'Rejected'
 
-    def __init__(self, user_id, asset_id, description, status=STATUS_PENDING, report_id=None, date_submitted=None, metadata=None):
+    # Permitted forward lifecycle transitions
+    VALID_TRANSITIONS = {
+        STATUS_RECEIVED: [STATUS_UNDER_REVIEW, STATUS_VERIFIED],
+        STATUS_UNDER_REVIEW: [STATUS_VERIFIED, STATUS_RESOLVED],
+        STATUS_VERIFIED: [STATUS_RESOLVED, STATUS_UNDER_REVIEW],
+        STATUS_RESOLVED: [STATUS_UNDER_REVIEW]  # Allows reopening if defect recurs
+    }
+
+    @classmethod
+    def normalize_lifecycle_status(cls, raw_status: str) -> str:
+        """
+        Safely maps historical or alternate status strings to the canonical report lifecycle:
+        Received -> Under Review -> Verified -> Resolved.
+        """
+        if not raw_status:
+            return cls.STATUS_RECEIVED
+
+        s = str(raw_status).strip()
+        if s in cls.CANONICAL_LIFECYCLE:
+            return s
+
+        s_lower = s.lower()
+        if s_lower in ('submitted', 'pending', 'flagged for review', 'flagged', 'received'):
+            return cls.STATUS_RECEIVED
+        elif s_lower in ('under review', 'in review', 'reviewing', 'under_review'):
+            return cls.STATUS_UNDER_REVIEW
+        elif s_lower in ('verified', 'confirmed', 'validated', 'scheduled'):
+            return cls.STATUS_VERIFIED
+        elif s_lower in ('resolved', 'closed', 'fixed', 'completed'):
+            return cls.STATUS_RESOLVED
+
+        return cls.STATUS_RECEIVED
+
+    @classmethod
+    def can_transition(cls, current_status: str, target_status: str) -> bool:
+        """Validates if transition between report statuses is permitted."""
+        norm_curr = cls.normalize_lifecycle_status(current_status)
+        norm_target = cls.normalize_lifecycle_status(target_status)
+        if norm_curr == norm_target:
+            return True
+        return norm_target in cls.VALID_TRANSITIONS.get(norm_curr, [])
+
+    def __init__(self, user_id, asset_id, description, status=STATUS_RECEIVED, report_id=None, date_submitted=None, metadata=None, latitude=None, longitude=None):
         self.report_id = str(report_id) if report_id else None
         self.user_id = str(user_id)
         self.asset_id = str(asset_id) if asset_id else None
         self.description = description
-        self.status = status
+        self.status = self.normalize_lifecycle_status(status)
         self.date_submitted = date_submitted or datetime.utcnow().isoformat()
         self.metadata = metadata or {}
+        self.latitude = latitude if latitude is not None else self.metadata.get('latitude')
+        self.longitude = longitude if longitude is not None else self.metadata.get('longitude')
+        if self.latitude is not None:
+            self.metadata['latitude'] = float(self.latitude)
+        if self.longitude is not None:
+            self.metadata['longitude'] = float(self.longitude)
 
     def update_status(self, new_status):
-        """Updates the status of the infrastructure report."""
-        self.status = new_status
+        """Updates the status of the infrastructure report to a canonical status."""
+        self.status = self.normalize_lifecycle_status(new_status)
 
     def to_dict(self):
         return {
@@ -34,7 +93,9 @@ class InfrastructureReport:
             'description': self.description,
             'status': self.status,
             'date_submitted': self.date_submitted,
-            'metadata': self.metadata
+            'metadata': self.metadata,
+            'latitude': self.latitude,
+            'longitude': self.longitude
         }
 
     @classmethod
@@ -46,9 +107,11 @@ class InfrastructureReport:
             user_id=data.get('user_id'),
             asset_id=data.get('asset_id'),
             description=data.get('description', ''),
-            status=data.get('status', cls.STATUS_PENDING),
+            status=cls.normalize_lifecycle_status(data.get('status', cls.STATUS_RECEIVED)),
             date_submitted=data.get('date_submitted'),
-            metadata=data.get('metadata', {})
+            metadata=data.get('metadata', {}),
+            latitude=data.get('latitude') or data.get('metadata', {}).get('latitude'),
+            longitude=data.get('longitude') or data.get('metadata', {}).get('longitude')
         )
 
 
