@@ -1,6 +1,6 @@
 import os
 import uuid
-from datetime import datetime
+from datetime import datetime, timezone
 from bson import ObjectId
 from pymongo import MongoClient, ASCENDING
 from pymongo.errors import ConnectionFailure, ServerSelectionTimeoutError
@@ -73,23 +73,33 @@ class DatabaseService:
         engineer_id = 'usr_eng_01'
         citizen_id = 'usr_cit_01'
 
+        now_iso = datetime.now(timezone.utc).isoformat()
+
+        # Seed Primary Administrative & Operational Accounts
         self._mock_data['users'][admin_id] = {
             '_id': admin_id,
             'name': 'System Administrator',
-            'email': 'admin@infravision.ke',
+            'email': 'admin@strathmore.edu',
             'password_hash': generate_password_hash('Admin@123'),
             'role': 'admin',
             'verification_status': 'verified',
-            'created_at': datetime.utcnow().isoformat()
+            'two_factor_enabled': True,
+            'must_change_password': True,
+            'created_at': now_iso
         }
         self._mock_data['users'][engineer_id] = {
             '_id': engineer_id,
-            'name': 'Civil Infrastructure Engineer',
+            'name': 'Eng. Civil Infrastructure Reviewer',
             'email': 'engineer@kenha.go.ke',
             'password_hash': generate_password_hash('Engineer@123'),
             'role': 'engineer',
+            'engineering_category': 'Professional Engineer',
+            'professional_reg_no': 'A3947',
+            'organization': 'KeNHA',
             'verification_status': 'verified',
-            'created_at': datetime.utcnow().isoformat()
+            'two_factor_enabled': True,
+            'must_change_password': True,
+            'created_at': now_iso
         }
         self._mock_data['users'][citizen_id] = {
             '_id': citizen_id,
@@ -98,7 +108,9 @@ class DatabaseService:
             'password_hash': generate_password_hash('Citizen@123'),
             'role': 'citizen',
             'verification_status': 'verified',
-            'created_at': datetime.utcnow().isoformat()
+            'two_factor_enabled': False,
+            'must_change_password': True,
+            'created_at': now_iso
         }
 
         # Monitored Nairobi Infrastructure Assets
@@ -113,7 +125,7 @@ class DatabaseService:
             'description': 'Primary urban arterial carriageway subject to continuous heavy traffic.',
             'current_condition': 'Critical',
             'coordinates': {'lat': -1.2921, 'lng': 36.8219},
-            'created_at': datetime.utcnow().isoformat()
+            'created_at': now_iso
         }
         self._mock_data['infrastructure_assets'][asset_2] = {
             '_id': asset_2,
@@ -122,7 +134,7 @@ class DatabaseService:
             'description': 'Elevated reinforced concrete bridge section.',
             'current_condition': 'Fair',
             'coordinates': {'lat': -1.2758, 'lng': 36.8835},
-            'created_at': datetime.utcnow().isoformat()
+            'created_at': now_iso
         }
         self._mock_data['infrastructure_assets'][asset_3] = {
             '_id': asset_3,
@@ -131,7 +143,7 @@ class DatabaseService:
             'description': 'Public civil structure perimeter retaining wall.',
             'current_condition': 'Poor',
             'coordinates': {'lat': -1.3005, 'lng': 36.8231},
-            'created_at': datetime.utcnow().isoformat()
+            'created_at': now_iso
         }
 
         # Seed realistic sample report
@@ -144,12 +156,19 @@ class DatabaseService:
             'user_id': citizen_id,
             'asset_id': asset_1,
             'description': 'Road surface cavity observed across center southbound carriageway.',
-            'status': 'Pending',
-            'date_submitted': datetime.utcnow().isoformat(),
+            'status': 'Received',
+            'date_submitted': now_iso,
+            'latitude': -1.2921,
+            'longitude': 36.8219,
             'metadata': {
                 'location_name': 'Uhuru Highway near Nyayo Stadium',
                 'asset_type': 'Road / Pavement',
-                'priority': 'Critical'
+                'priority': 'Critical',
+                'validation_status': 'valid',
+                'is_unusual': False,
+                'requires_engineer_review': True,
+                'latitude': -1.2921,
+                'longitude': 36.8219
             }
         }
         self._mock_data['submitted_images'][img_1] = {
@@ -158,7 +177,7 @@ class DatabaseService:
             'image_path': 'seed_pothole.jpg',
             'original_filename': 'pothole_inspection.jpg',
             'file_size': 1024500,
-            'upload_date': datetime.utcnow().isoformat(),
+            'upload_date': now_iso,
             'dimensions': {'width': 1280, 'height': 720}
         }
         self._mock_data['ai_assessments'][ass_1] = {

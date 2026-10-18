@@ -47,6 +47,21 @@ class Config:
     # FR-04: Defect extent mapped to Low, Moderate, High/Critical
     SEVERITY_LOW_THRESHOLD = float(os.getenv('SEVERITY_LOW_THRESHOLD', '0.05'))       # < 5%
     SEVERITY_CRITICAL_THRESHOLD = float(os.getenv('SEVERITY_CRITICAL_THRESHOLD', '0.15')) # >= 15%
+    DUPLICATE_IOU_THRESHOLD = float(os.getenv('DUPLICATE_IOU_THRESHOLD', '0.50'))
+
+    # Two-Factor Authentication (2FA) & Real Email Delivery (SMTP)
+    SMTP_HOST = os.getenv('SMTP_HOST', '')
+    SMTP_PORT = int(os.getenv('SMTP_PORT', '587'))
+    SMTP_USER = os.getenv('SMTP_USER', '')
+    SMTP_PASSWORD = os.getenv('SMTP_PASSWORD', '')
+    SMTP_SENDER = os.getenv('SMTP_SENDER', 'infravision-alerts@strathmore.edu')
+    SMTP_USE_TLS = os.getenv('SMTP_USE_TLS', 'True').lower() in ('true', '1', 't')
+
+    # Google Authentication (OAuth2 / GIS)
+    GOOGLE_CLIENT_ID = os.getenv('GOOGLE_CLIENT_ID', '')
+
+    # Google Maps Platform
+    GOOGLE_MAPS_API_KEY = os.getenv('GOOGLE_MAPS_API_KEY', '')
 
 class DevelopmentConfig(Config):
     DEBUG = True
