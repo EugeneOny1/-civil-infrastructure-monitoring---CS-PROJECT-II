@@ -280,6 +280,41 @@ class TestAuthAndMaps(unittest.TestCase):
         self.assertEqual(res_verify.status_code, 200)
         self.assertEqual(res_verify.get_json()['status'], 'Verified')
 
+    def test_10_map_config_nairobi_defaults(self):
+        """Verifies GET /api/reports/map/config defaults strictly to Nairobi, Kenya."""
+        res = self.client.get('/api/reports/map/config')
+        self.assertEqual(res.status_code, 200)
+        data = res.get_json()
+        self.assertIn('default_center', data)
+        self.assertAlmostEqual(data['default_center']['lat'], -1.286389, places=4)
+        self.assertAlmostEqual(data['default_center']['lng'], 36.817223, places=4)
+        self.assertIn('default_zoom', data)
+        self.assertEqual(data['default_zoom'], 12)
+        self.assertIn('provider', data)
+        self.assertEqual(data['provider'], 'google_maps')
+
+    def test_11_admin_role_authorization_and_overview_metrics(self):
+        """Verifies non-admins are blocked with 403, and admins receive real metric overviews."""
+        from app.utils.auth_helpers import create_access_token
+        with self.app.app_context():
+            cit_token = create_access_token({'user_id': 'usr_cit_01', 'role': 'citizen', 'email': 'citizen@strathmore.edu'})
+            admin_token = create_access_token({'user_id': 'usr_admin_01', 'role': 'admin', 'email': 'admin@infravision.ke'})
+
+        # Citizen forbidden from admin dashboard
+        res_forbidden = self.client.get('/api/admin/dashboard', headers={'Authorization': f'Bearer {cit_token}'})
+        self.assertEqual(res_forbidden.status_code, 403)
+
+        # Admin authorized
+        res_admin = self.client.get('/api/admin/dashboard', headers={'Authorization': f'Bearer {admin_token}'})
+        self.assertEqual(res_admin.status_code, 200)
+        data = res_admin.get_json()
+        self.assertIn('overview', data)
+        self.assertIn('total_users', data['overview'])
+        self.assertIn('reports', data)
+        self.assertIn('reports_by_location', data)
+        self.assertIn('engineer_workload', data)
+
 
 if __name__ == '__main__':
     unittest.main()
+

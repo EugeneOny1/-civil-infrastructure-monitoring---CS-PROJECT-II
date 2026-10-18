@@ -386,6 +386,7 @@ def get_map_config():
             'lng': 36.817223
         },
         'default_zoom': 12,
+        'provider': 'google_maps',
         'map_id': 'DEMO_MAP_ID'
     }), 200
 
