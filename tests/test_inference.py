@@ -131,6 +131,52 @@ class TestInferenceService(unittest.TestCase):
             if os.path.exists(temp_corrupt):
                 os.remove(temp_corrupt)
 
+    def test_08_class_aware_duplicate_suppression(self):
+        """Verifies that duplicate boxes of the SAME class with high IoU are suppressed."""
+        mock_detections = [
+            {
+                'class_id': 1,
+                'class_name': 'Crack',
+                'confidence': 0.90,
+                'normalized_box': [0.10, 0.10, 0.50, 0.50],
+                'relative_area': 0.16
+            },
+            {
+                'class_id': 1,
+                'class_name': 'Crack',
+                'confidence': 0.70,
+                'normalized_box': [0.12, 0.11, 0.49, 0.51],  # ~90% IoU with previous box
+                'relative_area': 0.15
+            }
+        ]
+        surviving = self.service.suppress_class_aware_duplicates(mock_detections, iou_threshold=0.50)
+        self.assertEqual(len(surviving), 1)
+        self.assertEqual(surviving[0]['confidence'], 0.90)
+
+    def test_09_multi_class_overlapping_preservation(self):
+        """CRITICAL: Verifies that overlapping boxes of DIFFERENT classes (e.g. Crack + Pothole) are BOTH preserved."""
+        mock_detections = [
+            {
+                'class_id': 1,
+                'class_name': 'Crack',
+                'confidence': 0.92,
+                'normalized_box': [0.20, 0.20, 0.60, 0.60],
+                'relative_area': 0.16
+            },
+            {
+                'class_id': 2,
+                'class_name': 'Pothole',
+                'confidence': 0.88,
+                'normalized_box': [0.22, 0.21, 0.59, 0.58],  # Overlaps significantly with Crack
+                'relative_area': 0.14
+            }
+        ]
+        surviving = self.service.suppress_class_aware_duplicates(mock_detections, iou_threshold=0.50)
+        self.assertEqual(len(surviving), 2)
+        classes = {d['class_name'] for d in surviving}
+        self.assertIn('Crack', classes)
+        self.assertIn('Pothole', classes)
+
 
 if __name__ == '__main__':
     unittest.main()

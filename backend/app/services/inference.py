@@ -15,6 +15,7 @@ Expected Input: RGB image, dtype: uint8, shape: [1, height, width, 3]
 import os
 import sys
 from pathlib import Path
+from typing import List, Dict, Any, Tuple, Optional
 import numpy as np
 from PIL import Image
 
@@ -56,13 +57,21 @@ class InferenceService:
     SEVERITY_LOW_THRESHOLD = 0.05       # < 5%
     SEVERITY_CRITICAL_THRESHOLD = 0.15 # >= 15%
 
-    def __init__(self, model_path=None, confidence_threshold=None, model_version=None):
+    # Class-aware duplicate suppression IoU threshold
+    DEFAULT_IOU_THRESHOLD = 0.50
+
+    def __init__(self, model_path=None, confidence_threshold=None, model_version=None, iou_threshold=None):
         self.model_name = self.DEFAULT_MODEL_NAME
         self.model_version = model_version or os.getenv('MODEL_VERSION', self.DEFAULT_MODEL_VERSION)
         self.confidence_threshold = (
             confidence_threshold
             if confidence_threshold is not None
             else float(os.getenv('DETECTION_CONFIDENCE_THRESHOLD', str(self.DEFAULT_CONFIDENCE_THRESHOLD)))
+        )
+        self.iou_threshold = (
+            iou_threshold
+            if iou_threshold is not None
+            else float(os.getenv('DUPLICATE_IOU_THRESHOLD', str(self.DEFAULT_IOU_THRESHOLD)))
         )
         self.model_path = model_path or os.getenv('MODEL_PATH')
         self.saved_model = None
@@ -218,17 +227,85 @@ class InferenceService:
             critical_thresh=critical_thresh if critical_thresh is not None else cls.SEVERITY_CRITICAL_THRESHOLD
         )
 
-    def detect_defects(self, image_input, confidence_threshold=None):
+    @staticmethod
+    def calculate_box_iou(box_a, box_b) -> float:
+        """
+        Calculates Intersection-over-Union (IoU) between two bounding boxes.
+        Accepts normalized [ymin, xmin, ymax, xmax] or dicts with xmin, ymin, xmax, ymax.
+        """
+        if isinstance(box_a, (list, tuple)):
+            y1_a, x1_a, y2_a, x2_a = box_a
+        else:
+            x1_a, y1_a = box_a['xmin'], box_a['ymin']
+            x2_a, y2_a = box_a['xmax'], box_a['ymax']
+
+        if isinstance(box_b, (list, tuple)):
+            y1_b, x1_b, y2_b, x2_b = box_b
+        else:
+            x1_b, y1_b = box_b['xmin'], box_b['ymin']
+            x2_b, y2_b = box_b['xmax'], box_b['ymax']
+
+        inter_x1 = max(x1_a, x1_b)
+        inter_y1 = max(y1_a, y1_b)
+        inter_x2 = min(x2_a, x2_b)
+        inter_y2 = min(y2_a, y2_b)
+
+        inter_w = max(0.0, inter_x2 - inter_x1)
+        inter_h = max(0.0, inter_y2 - inter_y1)
+        inter_area = inter_w * inter_h
+
+        area_a = max(0.0, x2_a - x1_a) * max(0.0, y2_a - y1_a)
+        area_b = max(0.0, x2_b - x1_b) * max(0.0, y2_b - y1_b)
+        union_area = area_a + area_b - inter_area
+
+        if union_area <= 0.0:
+            return 0.0
+        return float(inter_area / union_area)
+
+    @classmethod
+    def suppress_class_aware_duplicates(cls, detections: List[Dict[str, Any]], iou_threshold: float = None) -> List[Dict[str, Any]]:
+        """
+        Applies class-aware Non-Maximum Suppression (NMS) duplicate suppression:
+        - Same class + high overlap (IoU >= threshold) -> duplicate suppressed (keeps higher confidence).
+        - Different classes (e.g. Crack vs Pothole) -> preserved even if their boxes overlap.
+        """
+        if not detections:
+            return []
+
+        threshold = iou_threshold if iou_threshold is not None else cls.DEFAULT_IOU_THRESHOLD
+
+        # Sort detections descending by confidence score
+        sorted_dets = sorted(detections, key=lambda d: d.get('confidence', 0.0), reverse=True)
+
+        surviving = []
+        for det in sorted_dets:
+            det_class = det.get('class_id')
+            det_box = det.get('normalized_box')
+            keep = True
+            for accepted in surviving:
+                # Class-aware: only suppress if they belong to the SAME defect class
+                if accepted.get('class_id') == det_class:
+                    iou = cls.calculate_box_iou(det_box, accepted.get('normalized_box'))
+                    if iou >= threshold:
+                        keep = False
+                        break
+            if keep:
+                surviving.append(det)
+
+        return surviving
+
+    def detect_defects(self, image_input, confidence_threshold=None, iou_threshold=None):
         """
         Executes structural defect detection using the loaded TensorFlow SavedModel.
         
         Args:
             image_input: File path, file-like object, or NumPy RGB array.
             confidence_threshold: Optional override for detection confidence threshold.
+            iou_threshold: Optional override for class-aware duplicate suppression IoU threshold.
 
         Returns:
-            Dictionary containing primary defect summary, full detections list,
-            pixel coordinates, relative visual severity, and metadata.
+            Dictionary containing primary defect summary, full surviving detections list,
+            detected classes list, pixel coordinates, relative visual severity, and metadata.
         """
         if not self.is_loaded or self.serving_fn is None:
             err = self.load_error or "SavedModel is not loaded."
@@ -238,6 +315,11 @@ class InferenceService:
             confidence_threshold
             if confidence_threshold is not None
             else self.confidence_threshold
+        )
+        nms_iou = (
+            iou_threshold
+            if iou_threshold is not None
+            else self.iou_threshold
         )
 
         rgb_arr, (orig_w, orig_h) = self.preprocess_image(image_input)
@@ -257,7 +339,7 @@ class InferenceService:
         raw_classes = output_dict['detection_classes'][0].numpy().astype(int)
         num_dets = int(output_dict.get('num_detections', [len(raw_scores)])[0].numpy()) if 'num_detections' in output_dict else len(raw_scores)
 
-        detections = []
+        raw_detections = []
         for i in range(min(num_dets, len(raw_scores))):
             score = float(raw_scores[i])
             if score < conf_thresh:
@@ -315,7 +397,10 @@ class InferenceService:
                 'severity': item_severity,
                 'validation_status': 'valid'
             }
-            detections.append(det_entry)
+            raw_detections.append(det_entry)
+
+        # Apply class-aware duplicate suppression (preserves overlapping different classes e.g. Crack + Pothole)
+        detections = self.suppress_class_aware_duplicates(raw_detections, iou_threshold=nms_iou)
 
         # Handle zero detections or aggregate assessment
         if detections:
@@ -326,10 +411,17 @@ class InferenceService:
             primary_box_px = primary['bounding_box']
             primary_box_norm = primary['normalized_box']
 
-            # Cumulative area extent for overall image
-            total_relative_area = min(1.0, sum(d['relative_area'] for d in detections))
-            overall_severity = self.calculate_relative_severity(total_relative_area)
-            area_percentage = round(total_relative_area * 100.0, 2)
+            # Unique detected defect classes across all preserved detections
+            detected_classes = list(dict.fromkeys(d['class_name'] for d in detections))
+
+            # Non-inflated relative area calculation:
+            # We take the maximum individual box extent and estimate combined coverage
+            max_single_area = max(d['relative_area'] for d in detections)
+            combined_area = min(1.0, sum(d['relative_area'] for d in detections))
+            # If multiple detections, avoid duplicate area inflation by using max(max_single, 0.75 * combined)
+            effective_area = max(max_single_area, combined_area * 0.75 if len(detections) > 1 else max_single_area)
+            overall_severity = self.calculate_relative_severity(effective_area)
+            area_percentage = round(effective_area * 100.0, 2)
         else:
             primary_class_id = None
             primary_class_name = 'None Detected'
@@ -339,23 +431,29 @@ class InferenceService:
             total_relative_area = 0.0
             overall_severity = 'Low'
             area_percentage = 0.0
+            detected_classes = []
+            effective_area = 0.0
 
         return {
             'model_name': self.model_name,
             'model_version': self.model_version,
             'threshold_applied': conf_thresh,
+            'iou_threshold_applied': nms_iou,
             'class_id': primary_class_id,
             'class_name': primary_class_name,
             'defect_class': primary_class_name,  # for backwards compatibility
+            'detected_classes': detected_classes,
             'confidence': primary_confidence,
             'confidence_score': primary_confidence,  # for backwards compatibility
             'bounding_box': primary_box_norm,  # normalized [ymin, xmin, ymax, xmax] for backwards compatibility
             'bounding_box_pixels': primary_box_px,
             'relative_severity': overall_severity,
             'severity': overall_severity,
-            'relative_area': total_relative_area,
+            'relative_area': effective_area,
             'area_percentage': area_percentage,
             'detections': detections,
+            'raw_detection_count': len(raw_detections),
+            'suppressed_count': len(raw_detections) - len(detections),
             'image_dimensions': {'width': orig_w, 'height': orig_h},
             'disclaimer': (
                 "Relative visual severity based on detected bounding-box area. "
