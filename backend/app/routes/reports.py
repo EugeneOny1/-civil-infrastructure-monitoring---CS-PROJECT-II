@@ -1,4 +1,5 @@
 import os
+from datetime import datetime, timezone
 from flask import Blueprint, request, jsonify, current_app, send_from_directory
 from ..models.report import InfrastructureReport, SubmittedImage
 from ..models.assessment import AIAssessment
@@ -35,6 +36,20 @@ def submit_report(current_user):
     location = request.form.get('location', '').strip()
     asset_type = request.form.get('asset_type', 'Road / Pavement').strip()
     description = request.form.get('description', '').strip()
+    
+    # Retrieve optional geographic coordinates
+    raw_lat = request.form.get('latitude')
+    raw_lng = request.form.get('longitude')
+    latitude = None
+    longitude = None
+    try:
+        if raw_lat is not None and str(raw_lat).strip() != '':
+            latitude = float(raw_lat)
+        if raw_lng is not None and str(raw_lng).strip() != '':
+            longitude = float(raw_lng)
+    except (ValueError, TypeError):
+        latitude = None
+        longitude = None
 
     # Input integrity validation
     inputs_valid, input_errors = validation_service.validate_submission_inputs(asset_type, location, description)
@@ -61,9 +76,9 @@ def submit_report(current_user):
     # Backend domain integrity validation (Defect vs Infrastructure pairing)
     validation_result = validation_service.validate_report(asset_type, location, detection_result)
 
-    # Determine initial report status:
-    # Unusual combinations (e.g. Building + Pothole) are NOT rejected, but flagged for engineer review
-    initial_status = InfrastructureReport.STATUS_FLAGGED if validation_result['is_unusual'] else InfrastructureReport.STATUS_PENDING
+    # Canonical initial report lifecycle status is ALWAYS 'Received'
+    # 'requires_engineer_review' and 'validation_status' are tracked separately in metadata
+    initial_status = InfrastructureReport.STATUS_RECEIVED
 
     # Associate with Infrastructure Asset record
     matched_asset = db_service.find_one('infrastructure_assets', {'location': location})
@@ -77,29 +92,47 @@ def submit_report(current_user):
         asset_id = db_service.insert('infrastructure_assets', asset_obj.to_dict())
     else:
         asset_id = matched_asset['_id']
+        # If coordinates were not explicitly provided, inherit from matched asset
+        if latitude is None and 'coordinates' in matched_asset:
+            latitude = matched_asset['coordinates'].get('lat')
+            longitude = matched_asset['coordinates'].get('lng')
 
-    # Create InfrastructureReport with integrity validation metadata
+    # Create InfrastructureReport with canonical lifecycle and validation metadata
     report = InfrastructureReport(
         user_id=user_id,
         asset_id=asset_id,
         description=description or f"Observed {detection_result['defect_class']} defect on {asset_type}.",
         status=initial_status,
+        latitude=latitude,
+        longitude=longitude,
         metadata={
             'location_name': location,
             'asset_type': asset_type,
             'defect_class': detection_result['defect_class'],
+            'detected_classes': detection_result.get('detected_classes', [detection_result['defect_class']]),
             'class_id': detection_result.get('class_id'),
             'confidence': detection_result['confidence_score'],
             'relative_severity': detection_result['relative_severity'],
             'relative_area': detection_result.get('relative_area', 0.0),
             'is_unusual': validation_result['is_unusual'],
+            'requires_engineer_review': validation_result.get('requires_engineer_review', True),
             'validation_status': validation_result.get('validation_status', 'valid'),
             'validation_message': validation_result.get('validation_message', ''),
             'flags': validation_result['flags'],
             'flag_reasons': validation_result['flag_reasons'],
             'advisory_notes': validation_result['advisory_notes'],
             'priority': validation_result['priority'],
-            'model_version': detection_result.get('model_version')
+            'model_version': detection_result.get('model_version'),
+            'latitude': latitude,
+            'longitude': longitude,
+            'status_history': [
+                {
+                    'status': initial_status,
+                    'timestamp': report_submitted_at if 'report_submitted_at' in locals() else datetime.now(timezone.utc).isoformat(),
+                    'updated_by': 'system',
+                    'note': 'Report received and registered in infrastructure defect monitoring pipeline.'
+                }
+            ]
         }
     )
     report_id = db_service.insert('infrastructure_reports', report.to_dict())
@@ -111,7 +144,7 @@ def submit_report(current_user):
         image_path=unique_filename,
         original_filename=orig_name,
         file_size=file_size,
-        dimensions=detection_result['image_dimensions']
+        dimensions=detection_result.get('image_dimensions', {'width': 300, 'height': 300})
     )
     image_id = db_service.insert('submitted_images', submitted_img.to_dict())
     submitted_img.image_id = image_id
@@ -119,12 +152,12 @@ def submit_report(current_user):
     # Create AIAssessment record
     ai_assessment = AIAssessment(
         image_id=image_id,
-        defect_class=detection_result['defect_class'],
-        confidence_score=detection_result['confidence_score'],
-        bounding_box=detection_result['bounding_box'],
-        relative_severity=detection_result['relative_severity'],
-        detections=detection_result['detections'],
-        model_name=detection_result['model_name'],
+        defect_class=detection_result.get('defect_class', 'None Detected'),
+        confidence_score=detection_result.get('confidence_score', 0.0),
+        bounding_box=detection_result.get('bounding_box', [0.0, 0.0, 0.0, 0.0]),
+        relative_severity=detection_result.get('relative_severity', 'Low'),
+        detections=detection_result.get('detections', []),
+        model_name=detection_result.get('model_name', 'SSD-MobileNetV2'),
         model_version=detection_result.get('model_version'),
         class_id=detection_result.get('class_id'),
         relative_area=detection_result.get('relative_area', 0.0),
@@ -338,6 +371,150 @@ def get_report_detail(current_user, report_id):
         } if image else None,
         'assessment': assessment,
         'review': review
+    }), 200
+
+
+@reports_bp.route('/map', methods=['GET'])
+def get_map_reports():
+    """
+    FR-09 & Map View: Returns geographic infrastructure defect reports for Google Maps.
+    - Accessible to both Citizens and Engineers.
+    - Privacy protection: For public/citizen requests, strips out private reporter identities,
+      emails, phone numbers, and internal user IDs.
+    - Supports filtering by defect_class, status, severity, and asset_type.
+    """
+    user = get_current_user()
+    is_privileged = user and user.get('role') in ['engineer', 'admin']
+
+    severity_filter = request.args.get('severity')
+    status_filter = request.args.get('status')
+    defect_filter = request.args.get('defect_class')
+    asset_filter = request.args.get('asset_type')
+
+    query = {}
+    if status_filter:
+        query['status'] = InfrastructureReport.normalize_lifecycle_status(status_filter)
+
+    reports = db_service.find('infrastructure_reports', query, sort_key='date_submitted', reverse=True)
+
+    map_points = []
+    for rep in reports:
+        meta = rep.get('metadata', {})
+        lat = rep.get('latitude') or meta.get('latitude')
+        lng = rep.get('longitude') or meta.get('longitude')
+
+        # Fallback to asset coordinates if report doesn't have explicit lat/lng
+        if lat is None or lng is None:
+            asset = db_service.find_one('infrastructure_assets', {'_id': rep.get('asset_id')})
+            if asset and 'coordinates' in asset:
+                lat = asset['coordinates'].get('lat')
+                lng = asset['coordinates'].get('lng')
+
+        # Skip points without valid coordinates
+        if lat is None or lng is None:
+            continue
+
+        assessment = None
+        image = db_service.find_one('submitted_images', {'report_id': rep['_id']})
+        if image:
+            assessment = db_service.find_one('ai_assessments', {'image_id': image['_id']})
+
+        rel_sev = (assessment.get('relative_severity') if assessment else None) or meta.get('relative_severity', 'Low')
+        defect_c = (assessment.get('defect_class') if assessment else None) or meta.get('defect_class', 'Crack')
+        asset_t = meta.get('asset_type', 'Road / Pavement')
+
+        # Apply optional filters
+        if severity_filter and rel_sev.lower() != severity_filter.lower():
+            continue
+        if defect_filter and defect_c.lower() != defect_filter.lower():
+            continue
+        if asset_filter and asset_t.lower() != asset_filter.lower():
+            continue
+
+        point = {
+            'report_id': rep['_id'],
+            'latitude': float(lat),
+            'longitude': float(lng),
+            'location_name': meta.get('location_name', 'Monitored Infrastructure'),
+            'asset_type': asset_t,
+            'defect_class': defect_c,
+            'detected_classes': meta.get('detected_classes', [defect_c]),
+            'relative_severity': rel_sev,
+            'status': InfrastructureReport.normalize_lifecycle_status(rep.get('status')),
+            'date_submitted': rep.get('date_submitted'),
+            'image_url': f"/api/reports/images/{image['image_path']}" if image else None
+        }
+
+        # Privacy Protection: Privileged roles get extra audit data; public gets clean defect record
+        if is_privileged:
+            point['validation_status'] = meta.get('validation_status', 'valid')
+            point['requires_engineer_review'] = meta.get('requires_engineer_review', False)
+            point['priority'] = meta.get('priority', 'Standard')
+
+        map_points.append(point)
+
+    return jsonify({
+        'points': map_points,
+        'count': len(map_points),
+        'mode': 'privileged' if is_privileged else 'public'
+    }), 200
+
+
+@reports_bp.route('/<report_id>/status', methods=['PUT'])
+@login_required
+def update_report_status(current_user, report_id):
+    """
+    FR-06 & Lifecycle Management: Allows authorized Civil Engineers and Administrators
+    to transition reports through the canonical lifecycle:
+    Received -> Under Review -> Verified -> Resolved
+    """
+    user_role = current_user.get('role', 'citizen')
+    if user_role not in ['engineer', 'admin']:
+        return jsonify({'error': 'Only certified civil engineers and administrators may update report lifecycle status.'}), 403
+
+    report = db_service.find_one('infrastructure_reports', {'_id': report_id})
+    if not report:
+        return jsonify({'error': 'Report not found.'}), 404
+
+    data = request.get_json() or {}
+    new_raw_status = data.get('status')
+    notes = data.get('notes', '').strip()
+
+    if not new_raw_status:
+        return jsonify({'error': 'Target status is required.'}), 400
+
+    target_status = InfrastructureReport.normalize_lifecycle_status(new_raw_status)
+    current_status = InfrastructureReport.normalize_lifecycle_status(report.get('status'))
+
+    if not InfrastructureReport.can_transition(current_status, target_status):
+        return jsonify({
+            'error': f"Invalid status transition from '{current_status}' to '{target_status}'. Permitted forward lifecycle: Received -> Under Review -> Verified -> Resolved."
+        }), 400
+
+    now_iso = datetime.utcnow().isoformat()
+    meta = report.get('metadata', {})
+    history = meta.get('status_history', [])
+    history.append({
+        'status': target_status,
+        'timestamp': now_iso,
+        'updated_by': current_user.get('name', 'Certified Engineer'),
+        'user_id': str(current_user.get('_id') or current_user.get('user_id')),
+        'notes': notes or f"Status transitioned to {target_status}."
+    })
+    meta['status_history'] = history
+    if target_status == InfrastructureReport.STATUS_VERIFIED:
+        meta['requires_engineer_review'] = False
+
+    db_service.update_one('infrastructure_reports', {'_id': report_id}, {
+        'status': target_status,
+        'metadata': meta,
+        'last_updated_at': now_iso
+    })
+
+    updated_report = db_service.find_one('infrastructure_reports', {'_id': report_id})
+    return jsonify({
+        'message': f"Report status successfully updated to '{target_status}'.",
+        'report': updated_report
     }), 200
 
 
