@@ -37,6 +37,8 @@ def update_profile(current_user):
         'user': User.from_dict(updated_user).to_dict()
     }), 200
 
+from ..models.report import InfrastructureReport
+
 @users_bp.route('/reports', methods=['GET'])
 @login_required
 def get_user_reports(current_user):
@@ -46,6 +48,18 @@ def get_user_reports(current_user):
     
     results = []
     for rep in reports:
+        raw_status = rep.get('status', 'Received')
+        canonical_status = InfrastructureReport.normalize_lifecycle_status(raw_status)
+        is_unusual = (
+            str(raw_status).lower() in ('flagged for review', 'flagged') or
+            rep.get('metadata', {}).get('is_unusual') is True or
+            rep.get('validation_status') == 'unusual'
+        )
+        rep['status'] = canonical_status
+        if 'metadata' not in rep or not rep['metadata']:
+            rep['metadata'] = {}
+        rep['metadata']['is_unusual'] = is_unusual
+
         image = db_service.find_one('submitted_images', {'report_id': rep['_id']})
         assessment = db_service.find_one('ai_assessments', {'image_id': image['_id']}) if image else None
         results.append({
