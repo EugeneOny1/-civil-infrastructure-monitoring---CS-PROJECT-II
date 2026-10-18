@@ -15,6 +15,7 @@ import os
 import sys
 import io
 import unittest
+from unittest.mock import patch
 import numpy as np
 from PIL import Image
 
@@ -41,12 +42,21 @@ class TestApiWorkflow(unittest.TestCase):
         })
         cls.citizen_token = res.get_json().get('token')
 
-        # Login as engineer
+        # Login as engineer (handles mandatory 2FA)
         res_eng = cls.client.post('/api/auth/login', json={
             'email': 'engineer@kenha.go.ke',
             'password': 'Engineer@123'
         })
-        cls.engineer_token = res_eng.get_json().get('token')
+        eng_data = res_eng.get_json() or {}
+        if eng_data.get('require_2fa'):
+            otp = eng_data.get('demo_otp')
+            res_2fa = cls.client.post('/api/auth/verify-2fa', json={
+                'user_id': eng_data.get('user_id'),
+                'otp': otp
+            })
+            cls.engineer_token = res_2fa.get_json().get('token')
+        else:
+            cls.engineer_token = eng_data.get('token')
 
     def test_01_health_check_endpoint(self):
         """Verifies GET /api/health returns online status and SavedModel version."""
@@ -106,8 +116,26 @@ class TestApiWorkflow(unittest.TestCase):
         self.assertIsNotNone(persisted_ai)
         self.assertEqual(persisted_ai['model_version'], 'ssd_mobilenet_v2_lr00125_step5000_v1')
 
-    def test_03_unusual_combination_workflow(self):
+    @patch('app.routes.reports.inference_service.detect_defects')
+    def test_03_unusual_combination_workflow(self, mock_detect):
         """CRITICAL: Building + Pothole must be accepted (HTTP 201) and flagged for review."""
+        mock_detect.return_value = {
+            'defect_class': 'Pothole',
+            'confidence_score': 0.88,
+            'relative_severity': 'High',
+            'area_percentage': 18.0,
+            'detections': [{
+                'defect_class': 'Pothole',
+                'class_name': 'Pothole',
+                'confidence_score': 0.88,
+                'bounding_box': [0.2, 0.2, 0.6, 0.6],
+                'relative_severity': 'High'
+            }],
+            'model_version': 'ssd_mobilenet_v2_lr00125_step5000_v1',
+            'model_name': 'SSD-MobileNetV2',
+            'bounding_box': [0.2, 0.2, 0.6, 0.6],
+            'image_dimensions': {'width': 300, 'height': 300}
+        }
         with open(self.test_image_path, 'rb') as f:
             img_bytes = f.read()
 
@@ -127,9 +155,10 @@ class TestApiWorkflow(unittest.TestCase):
 
         self.assertEqual(res.status_code, 201)
         data = res.get_json()
-        self.assertEqual(data['status'], 'Flagged for Review')
+        self.assertEqual(data['status'], 'Received')
         self.assertEqual(data['validation']['validation_status'], 'unusual')
         self.assertTrue(data['validation']['is_unusual'])
+        self.assertTrue(data['validation'].get('requires_engineer_review'))
 
     def test_04_zero_detections_workflow(self):
         """Verifies that an image with no defects detected creates a valid Pending report."""

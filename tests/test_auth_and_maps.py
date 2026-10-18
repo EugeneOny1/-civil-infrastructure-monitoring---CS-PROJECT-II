@@ -1,0 +1,220 @@
+"""
+Automated Unit and Integration Tests for Refined Authentication, EBK Validation,
+Password Security, Real OTP / 2FA, Google Authentication, and Maps Privacy API.
+"""
+
+import os
+import sys
+import unittest
+from datetime import datetime, timezone, timedelta
+
+# Ensure backend directory is in Python path
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..', 'backend')))
+
+from app import create_app
+from app.services.database import db_service
+from app.services.email_service import email_service
+from app.utils.auth_helpers import validate_password_strength, validate_ebk_registration
+
+
+class TestAuthAndMaps(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        cls.app = create_app('testing')
+        cls.client = cls.app.test_client()
+
+    def test_01_strong_password_policy(self):
+        """Verifies modern password complexity enforcement."""
+        # Too short (< 8 chars)
+        ok, msg = validate_password_strength("Pass1!")
+        self.assertFalse(ok)
+        self.assertIn("at least 8 characters", msg)
+
+        # Missing uppercase
+        ok, msg = validate_password_strength("lowercase123!")
+        self.assertFalse(ok)
+        self.assertIn("uppercase", msg)
+
+        # Missing lowercase
+        ok, msg = validate_password_strength("UPPERCASE123!")
+        self.assertFalse(ok)
+        self.assertIn("lowercase", msg)
+
+        # Missing digit
+        ok, msg = validate_password_strength("NoDigitsHere!")
+        self.assertFalse(ok)
+        self.assertIn("numeric digit", msg)
+
+        # Missing symbol
+        ok, msg = validate_password_strength("NoSymbols1234")
+        self.assertFalse(ok)
+        self.assertIn("special character", msg)
+
+        # Common weak/default password
+        ok, msg = validate_password_strength("password123")
+        self.assertFalse(ok)
+
+        # Strong valid password
+        ok, msg = validate_password_strength("StrongCivilPass@2026")
+        self.assertTrue(ok)
+        self.assertEqual(msg, "")
+
+    def test_02_ebk_category_validation(self):
+        """Verifies EBK registration format rules by engineering category."""
+        # Graduate Engineer: B followed by digits (e.g. B24512, B12345; does NOT require B0)
+        ok, clean, msg = validate_ebk_registration("Graduate Engineer", "B24512")
+        self.assertTrue(ok)
+        self.assertEqual(clean, "B24512")
+
+        ok, clean, msg = validate_ebk_registration("Graduate Engineer", "b98213")
+        self.assertTrue(ok)
+        self.assertEqual(clean, "B98213")
+
+        # Graduate Engineer with invalid prefix (e.g. A instead of B)
+        ok, clean, msg = validate_ebk_registration("Graduate Engineer", "A3947")
+        self.assertFalse(ok)
+
+        # Professional Engineer: A followed by digits (e.g. A3947)
+        ok, clean, msg = validate_ebk_registration("Professional Engineer", "A3947")
+        self.assertTrue(ok)
+        self.assertEqual(clean, "A3947")
+
+        # Consulting Engineer: E followed by digits (e.g. E475)
+        ok, clean, msg = validate_ebk_registration("Consulting Engineer", "E475")
+        self.assertTrue(ok)
+        self.assertEqual(clean, "E475")
+
+        # Invalid formats
+        ok, clean, msg = validate_ebk_registration("Professional Engineer", "INVALID_REG")
+        self.assertFalse(ok)
+
+    def test_03_citizen_registration_and_weak_password_rejection(self):
+        """Verifies citizen registration rejects weak passwords and accepts strong ones."""
+        weak_payload = {
+            'name': 'Test Citizen',
+            'email': f'weak_{int(datetime.now().timestamp())}@test.com',
+            'password': 'weak',
+            'role': 'citizen'
+        }
+        res = self.client.post('/api/auth/register', json=weak_payload)
+        self.assertEqual(res.status_code, 400)
+        self.assertIn('error', res.get_json())
+
+        strong_payload = {
+            'name': 'Test Citizen Secure',
+            'email': f'strong_cit_{int(datetime.now().timestamp())}@test.com',
+            'password': 'SecureCitizen@2026',
+            'role': 'citizen'
+        }
+        res_ok = self.client.post('/api/auth/register', json=strong_payload)
+        self.assertEqual(res_ok.status_code, 201)
+        self.assertIn('token', res_ok.get_json())
+
+    def test_04_engineer_registration_ebk_enforcement(self):
+        """Verifies engineer registration requires valid EBK format and sets pending verification."""
+        invalid_ebk_payload = {
+            'name': 'Eng. Jane Doe',
+            'email': f'jane_bad_{int(datetime.now().timestamp())}@test.com',
+            'password': 'SecureEngineer@2026',
+            'role': 'engineer',
+            'engineering_category': 'Graduate Engineer',
+            'professional_reg_no': 'XYZ999'  # Malformed
+        }
+        res = self.client.post('/api/auth/register', json=invalid_ebk_payload)
+        self.assertEqual(res.status_code, 400)
+        self.assertIn('error', res.get_json())
+
+        valid_ebk_payload = {
+            'name': 'Eng. Jane Doe Valid',
+            'email': f'jane_ok_{int(datetime.now().timestamp())}@test.com',
+            'password': 'SecureEngineer@2026',
+            'role': 'engineer',
+            'engineering_category': 'Graduate Engineer',
+            'professional_reg_no': 'B24512'
+        }
+        res_ok = self.client.post('/api/auth/register', json=valid_ebk_payload)
+        self.assertEqual(res_ok.status_code, 201)
+        user = res_ok.get_json()['user']
+        # Engineer accounts must remain pending professional verification
+        self.assertEqual(user['verification_status'], 'pending')
+        self.assertEqual(user['professional_reg_no'], 'B24512')
+
+    def test_05_otp_generation_and_2fa_workflow(self):
+        """Verifies OTP generation, expiry calculation, attempt limit, and verification."""
+        test_email = f'otp_user_{int(datetime.now().timestamp())}@test.com'
+        reg_payload = {
+            'name': 'Eng. OTP Test',
+            'email': test_email,
+            'password': 'SecureEngineer@2026',
+            'role': 'engineer',
+            'engineering_category': 'Professional Engineer',
+            'professional_reg_no': 'A8841'
+        }
+        self.client.post('/api/auth/register', json=reg_payload)
+
+        # Login requires 2FA for engineer
+        login_res = self.client.post('/api/auth/login', json={
+            'email': test_email,
+            'password': 'SecureEngineer@2026'
+        })
+        self.assertEqual(login_res.status_code, 200)
+        login_data = login_res.get_json()
+        self.assertTrue(login_data.get('require_2fa'))
+        self.assertIn('demo_otp', login_data)
+        demo_otp = login_data['demo_otp']
+
+        # Invalid OTP attempt
+        bad_verify = self.client.post('/api/auth/verify-2fa', json={
+            'email': test_email,
+            'otp_code': '000000'
+        })
+        self.assertEqual(bad_verify.status_code, 401)
+
+        # Successful OTP verification
+        good_verify = self.client.post('/api/auth/verify-2fa', json={
+            'email': test_email,
+            'otp_code': demo_otp
+        })
+        self.assertEqual(good_verify.status_code, 200)
+        self.assertIn('token', good_verify.get_json())
+
+    def test_06_google_sign_in_citizen_role_enforcement(self):
+        """Verifies Google Sign-In creates Citizen accounts and never grants Engineer or Admin roles."""
+        google_email = f'google_user_{int(datetime.now().timestamp())}@gmail.com'
+        res = self.client.post('/api/auth/google', json={
+            'email': google_email,
+            'name': 'Google Citizen',
+            'sub': 'google_oauth_123456789'
+        })
+        self.assertEqual(res.status_code, 200)
+        data = res.get_json()
+        self.assertIn('token', data)
+        user = data['user']
+        self.assertEqual(user['role'], 'citizen')
+        self.assertEqual(user['verification_status'], 'verified')
+
+    def test_07_maps_endpoint_and_privacy_filtering(self):
+        """Verifies GET /api/reports/map filters private citizen information for public/citizen callers."""
+        # Anonymous or citizen request
+        res = self.client.get('/api/reports/map')
+        self.assertEqual(res.status_code, 200)
+        data = res.get_json()
+        self.assertIn('points', data)
+        points = data['points']
+        self.assertGreater(len(points), 0)
+
+        for pt in points:
+            # Reporter identity, emails, and phone numbers must NOT leak
+            self.assertNotIn('email', pt)
+            self.assertNotIn('reporter_name', pt)
+            self.assertNotIn('phone', pt)
+            self.assertNotIn('user_id', pt)
+            self.assertIn('defect_class', pt)
+            self.assertIn('status', pt)
+            self.assertIn('relative_severity', pt)
+            self.assertIn('latitude', pt)
+            self.assertIn('longitude', pt)
+
+
+if __name__ == '__main__':
+    unittest.main()
