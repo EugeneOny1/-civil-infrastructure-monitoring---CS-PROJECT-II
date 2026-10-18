@@ -28,8 +28,13 @@ const App = {
         this.currentUser = window.Api.getUser();
         this.updateSessionUI();
         
+        const urlParams = new URLSearchParams(window.location.search);
+        const reportParam = urlParams.get('report_id');
+
         if (this.currentUser) {
-            if (this.currentUser.role === 'engineer' && this.currentUser.verification_status === 'verified') {
+            if (reportParam && (this.currentUser.role === 'engineer' || this.currentUser.role === 'admin')) {
+                this.navigateTo('view-review', { reportId: reportParam });
+            } else if (this.currentUser.role === 'engineer' && this.currentUser.verification_status === 'verified') {
                 this.navigateTo('view-dashboard');
             } else if (this.currentUser.role === 'admin') {
                 this.navigateTo('view-admin-dashboard');
@@ -533,7 +538,7 @@ const App = {
         this.navigateTo('view-auth');
     },
 
-    navigateTo(viewId) {
+    navigateTo(viewId, params = {}) {
         // Toggle tab active class
         document.querySelectorAll('.nav-tab').forEach(t => {
             t.classList.toggle('active', t.getAttribute('data-view') === viewId);
@@ -552,7 +557,9 @@ const App = {
         } else if (viewId === 'view-dashboard') {
             if (window.Dashboard) window.Dashboard.loadDashboardData();
         } else if (viewId === 'view-review') {
-            if (window.Review) window.Review.loadCaseworkList();
+            const reportId = params?.reportId || window.Review.targetReportId;
+            if (window.Review) window.Review.loadCaseworkList(reportId);
+            window.Review.targetReportId = null;
         } else if (viewId === 'view-admin-dashboard') {
             this.loadAdminDashboard();
         } else if (viewId === 'view-admin') {

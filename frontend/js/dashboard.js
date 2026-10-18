@@ -191,7 +191,7 @@ const Dashboard = {
                         <div class="queue-item-actions">
                             <span class="severity-pill ${severity.toLowerCase()}">${severity.toUpperCase()}</span>
                             <button type="button" class="btn-review-item btn-open-review" data-report-id="${r.report_id || r._id}">
-                                ${isVerified ? 'View Casework' : 'Review & Sign Off'}
+                                Review & Sign Off
                             </button>
                         </div>
                     </div>
@@ -201,8 +201,8 @@ const Dashboard = {
             queueContainer.querySelectorAll('.btn-open-review').forEach(btn => {
                 btn.addEventListener('click', (e) => {
                     const rId = e.currentTarget.getAttribute('data-report-id');
-                    window.Review.loadReportForReview(rId);
-                    window.App.navigateTo('view-review');
+                    window.Review.targetReportId = rId;
+                    window.App.navigateTo('view-review', { reportId: rId });
                 });
             });
         } catch (e) {
