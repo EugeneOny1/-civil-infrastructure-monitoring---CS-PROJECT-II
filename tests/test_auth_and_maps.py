@@ -215,6 +215,58 @@ class TestAuthAndMaps(unittest.TestCase):
             self.assertIn('latitude', pt)
             self.assertIn('longitude', pt)
 
+    def test_08_admin_dashboard_oversight_endpoint(self):
+        """Verifies GET /api/admin/dashboard returns comprehensive governance and health stats."""
+        from app.utils.auth_helpers import create_access_token
+        with self.app.app_context():
+            admin_token = create_access_token({'user_id': 'usr_admin_01', 'role': 'admin', 'email': 'admin@infravision.ke'})
+
+        res = self.client.get('/api/admin/dashboard', headers={'Authorization': f'Bearer {admin_token}'})
+        self.assertEqual(res.status_code, 200)
+        data = res.get_json()
+
+        self.assertIn('users_summary', data)
+        self.assertIn('reports_summary', data)
+        self.assertIn('governance_analytics', data)
+        self.assertIn('system_health', data)
+
+        self.assertIn('total', data['users_summary'])
+        self.assertIn('pending_engineers', data['users_summary'])
+        self.assertIn('received', data['reports_summary'])
+        self.assertIn('verified', data['reports_summary'])
+        self.assertIn('resolved', data['reports_summary'])
+        self.assertIn('backend_api', data['system_health'])
+        self.assertIn('ai_model', data['system_health'])
+
+    def test_09_engineer_report_review_and_lifecycle_controls(self):
+        """Verifies engineer can review, add evaluation notes, and transition report lifecycle."""
+        from app.utils.auth_helpers import create_access_token
+        with self.app.app_context():
+            eng_token = create_access_token({'user_id': 'usr_eng_01', 'role': 'engineer', 'name': 'Eng. Jane Doe'})
+
+        # Fetch an existing report
+        report = db_service.find_one('infrastructure_reports', {})
+        self.assertIsNotNone(report)
+        report_id = str(report['_id'])
+
+        # Engineer transitions to Under Review
+        res_review = self.client.post(
+            f'/api/reviews/report/{report_id}',
+            json={'decision': 'Under Investigation', 'target_status': 'Under Review', 'notes': 'Site inspection scheduled.'},
+            headers={'Authorization': f'Bearer {eng_token}'}
+        )
+        self.assertEqual(res_review.status_code, 200)
+        self.assertEqual(res_review.get_json()['status'], 'Under Review')
+
+        # Engineer transitions to Verified
+        res_verify = self.client.post(
+            f'/api/reviews/report/{report_id}',
+            json={'decision': 'Confirmed', 'target_status': 'Verified', 'notes': 'Structural defect verified by professional engineer.'},
+            headers={'Authorization': f'Bearer {eng_token}'}
+        )
+        self.assertEqual(res_verify.status_code, 200)
+        self.assertEqual(res_verify.get_json()['status'], 'Verified')
+
 
 if __name__ == '__main__':
     unittest.main()
