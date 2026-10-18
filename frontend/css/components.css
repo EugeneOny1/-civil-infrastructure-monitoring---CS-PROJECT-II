@@ -902,3 +902,108 @@
     font-weight: 600;
     cursor: pointer;
 }
+
+/* --------------------------------------------------------------------------
+   Google Maps Configuration & Empty State Card
+   -------------------------------------------------------------------------- */
+.map-config-card {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+    height: 100%;
+    padding: 2.5rem 1.5rem;
+    background: linear-gradient(180deg, #f8fafc 0%, #f1f5f9 100%);
+    color: #1e293b;
+    border-radius: var(--radius-md);
+}
+
+.map-config-icon {
+    font-size: 2.75rem;
+    margin-bottom: 1rem;
+}
+
+.map-config-title {
+    font-size: 1.25rem;
+    font-weight: 700;
+    color: #0f172a;
+    margin-bottom: 0.5rem;
+}
+
+.map-config-desc {
+    max-width: 580px;
+    font-size: 0.88rem;
+    color: #475569;
+    line-height: 1.5;
+    margin-bottom: 1.25rem;
+}
+
+.map-config-box {
+    background: #ffffff;
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-md);
+    padding: 1.25rem;
+    max-width: 540px;
+    width: 100%;
+    box-shadow: var(--shadow-sm);
+    text-align: left;
+    margin-bottom: 1.25rem;
+}
+
+.map-config-box h4 {
+    font-size: 0.85rem;
+    font-weight: 700;
+    color: #0f172a;
+    margin-bottom: 0.5rem;
+}
+
+.map-config-box ol {
+    padding-left: 1.25rem;
+    font-size: 0.8rem;
+    color: #475569;
+    line-height: 1.6;
+}
+
+.map-config-box code {
+    background: #f1f5f9;
+    color: #0f172a;
+    padding: 0.15rem 0.4rem;
+    border-radius: 4px;
+    font-family: var(--font-mono);
+    font-size: 0.78rem;
+}
+
+.map-key-form {
+    display: flex;
+    gap: 0.5rem;
+    max-width: 540px;
+    width: 100%;
+}
+
+.map-key-input {
+    flex: 1;
+    padding: 0.55rem 0.85rem;
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-sm);
+    font-size: 0.85rem;
+    font-family: var(--font-mono);
+}
+
+.map-empty-overlay {
+    position: absolute;
+    top: 16px;
+    left: 50%;
+    transform: translateX(-50%);
+    background: rgba(15, 23, 42, 0.88);
+    backdrop-filter: blur(8px);
+    color: #ffffff;
+    padding: 0.5rem 1rem;
+    border-radius: var(--radius-full);
+    font-size: 0.8rem;
+    font-weight: 500;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+    z-index: 10;
+    pointer-events: none;
+}
+

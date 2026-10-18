@@ -441,30 +441,31 @@
                     <div class="map-filter-group">
                         <span class="map-filter-label">Filter:</span>
                         <select id="mapFilterClass" class="filter-select">
-                            <option value="">All Defect Classes</option>
+                            <option value="" selected>All Defect Classes</option>
                             <option value="Crack">Crack</option>
                             <option value="Pothole">Pothole</option>
                             <option value="Surface Deterioration">Surface Deterioration</option>
                         </select>
                         <select id="mapFilterStatus" class="filter-select">
-                            <option value="">All Lifecycle Statuses</option>
+                            <option value="" selected>All Lifecycle Statuses</option>
                             <option value="Received">Received</option>
                             <option value="Under Review">Under Review</option>
                             <option value="Verified">Verified</option>
                             <option value="Resolved">Resolved</option>
                         </select>
                         <select id="mapFilterSeverity" class="filter-select">
-                            <option value="">All Visual Severities</option>
+                            <option value="" selected>All Visual Severities</option>
                             <option value="Critical">Critical</option>
                             <option value="Medium">Medium</option>
                             <option value="Low">Low</option>
                         </select>
                         <select id="mapFilterAsset" class="filter-select">
-                            <option value="">All Asset Types</option>
+                            <option value="" selected>All Asset Types</option>
                             <option value="Road / Pavement">Road / Pavement</option>
                             <option value="Bridge">Bridge / Viaduct</option>
                             <option value="Building">Building / Wall</option>
                         </select>
+                        <button type="button" class="btn-micro" id="btnResetMapFilters" title="Clear all filters">Reset</button>
                     </div>
                 </div>
                 <div class="map-container" id="infrastructureMapContainer">
@@ -942,6 +943,7 @@
     <div class="toast-container" id="toastContainer"></div>
 
     <!-- Scripts -->
+    <script src="https://unpkg.com/@googlemaps/markerclusterer/dist/index.min.js"></script>
     <script src="js/api.js"></script>
     <script src="js/map.js"></script>
     <script src="js/submission.js"></script>

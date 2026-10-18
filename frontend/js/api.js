@@ -346,7 +346,22 @@ const Api = {
         return data;
     },
 
-    // Interactive Map Data
+    // Interactive Map Data & Config
+    async getMapConfig() {
+        const res = await this.safeFetch(`${API_BASE}/reports/map/config`, {
+            headers: this.getHeaders()
+        });
+        if (!res.ok) {
+            return {
+                api_key: '',
+                has_api_key: false,
+                default_center: { lat: -1.286389, lng: 36.817223 },
+                default_zoom: 12
+            };
+        }
+        return res.json();
+    },
+
     async getMapPoints(params = {}) {
         const query = new URLSearchParams(params).toString();
         const res = await this.safeFetch(`${API_BASE}/reports/map${query ? '?' + query : ''}`, {

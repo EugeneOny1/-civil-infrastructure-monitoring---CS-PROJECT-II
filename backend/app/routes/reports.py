@@ -374,6 +374,22 @@ def get_report_detail(current_user, report_id):
     }), 200
 
 
+@reports_bp.route('/map/config', methods=['GET'])
+def get_map_config():
+    """Returns Google Maps configuration including Nairobi center defaults and API key."""
+    api_key = current_app.config.get('GOOGLE_MAPS_API_KEY', '').strip()
+    return jsonify({
+        'api_key': api_key,
+        'has_api_key': bool(api_key),
+        'default_center': {
+            'lat': -1.286389,
+            'lng': 36.817223
+        },
+        'default_zoom': 12,
+        'map_id': 'DEMO_MAP_ID'
+    }), 200
+
+
 @reports_bp.route('/map', methods=['GET'])
 def get_map_reports():
     """
