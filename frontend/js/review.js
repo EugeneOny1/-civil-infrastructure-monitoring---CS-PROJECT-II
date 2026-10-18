@@ -1,9 +1,12 @@
 /**
  * Review Module - AI Defect Assessment & Professional Engineer Review Terminal (Figure 4.8)
+ * Handles Casework switching, lifecycle transitions (Received -> Under Review -> Verified -> Resolved),
+ * visual bounding box overlay inspection, and certified engineer sign-off.
  */
 const Review = {
     currentReport: null,
     currentAssessment: null,
+    caseworkReports: [],
 
     init() {
         this.bindEvents();
@@ -26,6 +29,95 @@ const Review = {
                 }
             });
         });
+
+        const reportSelect = document.getElementById('reviewReportSelect');
+        if (reportSelect) {
+            reportSelect.addEventListener('change', (e) => {
+                if (e.target.value) {
+                    this.loadReportForReview(e.target.value);
+                }
+            });
+        }
+
+        const refreshCaseworkBtn = document.getElementById('btnRefreshCasework');
+        if (refreshCaseworkBtn) {
+            refreshCaseworkBtn.addEventListener('click', () => {
+                this.loadCaseworkList();
+                window.App.showToast("Refreshed defect casework queue.");
+            });
+        }
+
+        // Direct Lifecycle Controls
+        const btnUnderReview = document.getElementById('btnMoveUnderReview');
+        const btnVerified = document.getElementById('btnMarkVerified');
+        const btnResolved = document.getElementById('btnMarkResolved');
+
+        if (btnUnderReview) {
+            btnUnderReview.addEventListener('click', () => this.handleLifecycleTransition('Under Review', 'Inspection initiated by certified engineer.'));
+        }
+        if (btnVerified) {
+            btnVerified.addEventListener('click', () => this.handleLifecycleTransition('Verified', 'Engineering defect verification and severity confirmation completed.'));
+        }
+        if (btnResolved) {
+            btnResolved.addEventListener('click', () => this.handleLifecycleTransition('Resolved', 'Infrastructure defect remediation and road maintenance confirmed resolved.'));
+        }
+    },
+
+    async loadCaseworkList(preselectReportId = null) {
+        const reportSelect = document.getElementById('reviewReportSelect');
+        if (!reportSelect) return;
+
+        try {
+            const data = await window.Api.getReports({ limit: 50 });
+            this.caseworkReports = data.reports || [];
+
+            if (this.caseworkReports.length === 0) {
+                reportSelect.innerHTML = `<option value="">No defect casework available</option>`;
+                return;
+            }
+
+            reportSelect.innerHTML = this.caseworkReports.map(item => {
+                const rep = item.report;
+                const ai = item.assessment || {};
+                const defect = ai.defect_class || rep.defect_type || 'Defect';
+                const status = rep.status || 'Received';
+                const loc = rep.metadata?.location_name || 'Corridor';
+                const repId = rep.report_id || rep._id;
+                return `<option value="${repId}">${repId} — ${defect} [${status}] • ${loc}</option>`;
+            }).join('');
+
+            const targetId = preselectReportId || this.caseworkReports[0].report.report_id || this.caseworkReports[0].report._id;
+            reportSelect.value = targetId;
+            await this.loadReportForReview(targetId);
+        } catch (err) {
+            console.error("Failed to load casework list:", err);
+            reportSelect.innerHTML = `<option value="">Failed to load casework</option>`;
+        }
+    },
+
+    async handleLifecycleTransition(targetStatus, reason = '') {
+        if (!this.currentReport) {
+            window.App.showToast("No active defect report loaded.", true);
+            return;
+        }
+
+        const reportId = this.currentReport.report_id || this.currentReport._id;
+
+        try {
+            const res = await window.Api.updateReportStatus(reportId, targetStatus, reason);
+            window.App.showToast(`Lifecycle status updated: ${res.report.status}`);
+            
+            // Reload report to refresh indicators
+            await this.loadReportForReview(reportId);
+
+            // Also refresh Dashboard if open
+            if (window.Dashboard) {
+                window.Dashboard.loadDashboardData();
+            }
+        } catch (err) {
+            console.error("Lifecycle transition failed:", err);
+            window.App.showToast(err.message || `Cannot transition to '${targetStatus}'.`, true);
+        }
     },
 
     async loadReportForReview(reportId) {
@@ -34,44 +126,61 @@ const Review = {
             this.currentReport = data.report;
             this.currentAssessment = data.assessment;
 
+            // Sync dropdown selection if needed
+            const reportSelect = document.getElementById('reviewReportSelect');
+            if (reportSelect && reportSelect.value !== reportId) {
+                reportSelect.value = reportId;
+            }
+
             // Update Header Meta
             const frameEl = document.getElementById('reviewFrameId');
             const locEl = document.getElementById('reviewGps');
             const statusEl = document.getElementById('reviewHeaderStatus');
             const badgeDot = document.getElementById('reviewBadgeDot');
+            const citizenNotesEl = document.getElementById('reviewCitizenNotes');
 
-            if (frameEl) frameEl.textContent = `#${data.report.report_id || data.report._id}`;
-            if (locEl) locEl.textContent = data.asset?.location || data.report.metadata?.location_name || 'Corridor Asset';
+            const repId = data.report.report_id || data.report._id;
+            if (frameEl) frameEl.textContent = `#${repId}`;
+
+            const locName = data.asset?.location || data.report.metadata?.location_name || 'Corridor Asset';
+            const coordsStr = (data.report.latitude && data.report.longitude)
+                ? ` [${data.report.latitude.toFixed(4)}°, ${data.report.longitude.toFixed(4)}°]`
+                : '';
+            if (locEl) locEl.textContent = `${locName}${coordsStr}`;
+
+            if (citizenNotesEl) {
+                citizenNotesEl.textContent = data.report.description || data.report.metadata?.citizen_notes || 'No citizen field notes provided.';
+            }
 
             // Review status display
+            const status = data.report.status || 'Received';
+            const isUnusual = data.report.metadata?.is_unusual === true || data.report.validation_status === 'unusual';
+
             if (data.review) {
-                if (statusEl) statusEl.textContent = `Status: Validated (${data.review.decision})`;
-                if (badgeDot) {
-                    badgeDot.className = 'badge-dot success';
-                }
+                if (statusEl) statusEl.textContent = `Lifecycle: ${status} (Validated: ${data.review.decision})`;
+                if (badgeDot) badgeDot.className = 'badge-dot success';
                 const notesEl = document.getElementById('engineerNotes');
                 if (notesEl) notesEl.value = data.review.comments || '';
-            } else if (data.report.status === 'Flagged for Review' || data.report.metadata?.is_unusual) {
-                if (statusEl) statusEl.textContent = `Status: ⚠️ Flagged for Engineer Review (Unusual Defect)`;
-                if (badgeDot) {
-                    badgeDot.className = 'badge-dot warning';
-                }
+            } else if (isUnusual) {
+                if (statusEl) statusEl.textContent = `Lifecycle: ${status} ⚠️ Unusual Combination Flagged`;
+                if (badgeDot) badgeDot.className = 'badge-dot warning';
                 const notesEl = document.getElementById('engineerNotes');
                 if (notesEl) notesEl.value = data.report.metadata?.advisory_notes || '';
             } else {
-                if (statusEl) statusEl.textContent = `Status: Pending Engineer Review`;
-                if (badgeDot) {
-                    badgeDot.className = 'badge-dot warning';
-                }
+                if (statusEl) statusEl.textContent = `Lifecycle: ${status}`;
+                if (badgeDot) badgeDot.className = `badge-dot ${status === 'Resolved' ? 'success' : 'warning'}`;
                 const notesEl = document.getElementById('engineerNotes');
-                if (notesEl) notesEl.value = '';
-                       const ai = data.assessment || {};
+                if (notesEl && !notesEl.value) notesEl.value = '';
+            }
+
+            // Telemetry & metrics
+            const ai = data.assessment || {};
             const detections = (ai.detections && ai.detections.length > 0)
                 ? ai.detections
                 : (ai.defect_class && ai.defect_class !== 'None Detected' ? [ai] : []);
             const hasDetections = detections.length > 0;
 
-            const defectClass = ai.class_name || ai.defect_class || (hasDetections ? 'Crack' : 'None Detected');
+            const defectClass = ai.class_name || ai.defect_class || (hasDetections ? detections[0].class_name || 'Crack' : 'None Detected');
             const severity = ai.severity || ai.relative_severity || 'Low';
             const rawScore = ai.confidence !== undefined ? ai.confidence : (ai.confidence_score !== undefined ? ai.confidence_score : 0.0);
             const confidence = hasDetections ? Math.round(rawScore * 1000) / 10 : 0.0;
@@ -126,7 +235,7 @@ const Review = {
                 ctx.fillRect(0, 0, origW, bannerH);
                 ctx.fillStyle = '#10b981';
                 const fontSize = Math.max(14, Math.round(origW * 0.024));
-                ctx.font = `600 ${fontSize}px "Inter", sans-serif`;
+                ctx.font = `600 ${fontSize}px "Montserrat", sans-serif`;
                 ctx.fillText('[ ✓ No Structural Defects Detected (Confidence >= 30%) ]', 16, Math.round(bannerH * 0.65));
                 return;
             }
@@ -161,14 +270,14 @@ const Review = {
                 const boxW = xmax - xmin;
                 const boxH = ymax - ymin;
                 const defectClass = det.class_name || det.defect_class || 'Defect';
-                const color = defectClass === 'Pothole' ? '#ef4444' : (defectClass === 'Crack' ? '#f59e0b' : '#06b6d4');
+                const color = defectClass === 'Pothole' ? '#ef4444' : (defectClass === 'Crack' ? '#f59e0b' : '#0284c7');
 
                 const lineWidth = Math.max(3, Math.round(origW / 240));
                 ctx.strokeStyle = color;
                 ctx.lineWidth = lineWidth;
                 ctx.strokeRect(xmin, ymin, boxW, boxH);
 
-                // Precision crosshair markers
+                // Precision crosshairs
                 const ch = Math.max(6, Math.round(origW / 80));
                 ctx.strokeStyle = '#ffffff';
                 ctx.lineWidth = 2;
@@ -179,7 +288,7 @@ const Review = {
                     ctx.stroke();
                 });
 
-                // Target banner
+                // Target banner pill
                 const confVal = det.confidence !== undefined ? det.confidence : (det.confidence_score || 0.0);
                 const conf = Math.round(confVal * 100);
                 const sevVal = det.severity || det.relative_severity || '';
@@ -216,14 +325,14 @@ const Review = {
     },
 
     async submitProfessionalValidation() {
-        if (!this.currentAssessment) {
+        if (!this.currentReport) {
             window.App.showToast("No active defect report loaded to review.", true);
             return;
         }
 
         const decision = document.querySelector('input[name="reviewDecision"]:checked')?.value || 'Confirmed';
         const comments = document.getElementById('engineerNotes')?.value.trim() || '';
-        const assessmentId = this.currentAssessment._id || this.currentAssessment.assessment_id;
+        const reportId = this.currentReport.report_id || this.currentReport._id;
 
         const overrideDetails = decision === 'Overridden' ? {
             override_class: document.getElementById('overrideClassSelect').value,
@@ -231,18 +340,16 @@ const Review = {
         } : {};
 
         try {
-            const res = await window.Api.submitReview(assessmentId, {
+            await window.Api.reviewReportDirect(reportId, {
                 decision,
                 comments: comments || 'Concur with automated AI defect detection.',
                 override_details: overrideDetails
             });
 
-            const statusEl = document.getElementById('reviewHeaderStatus');
-            const badgeDot = document.getElementById('reviewBadgeDot');
-            if (statusEl) statusEl.textContent = `Status: Validated (${decision})`;
-            if (badgeDot) badgeDot.className = 'badge-dot success';
-
             window.App.showToast("Professional validation and engineer review recorded.");
+
+            // Reload report state
+            await this.loadReportForReview(reportId);
 
             // Refresh dashboard
             if (window.Dashboard) {

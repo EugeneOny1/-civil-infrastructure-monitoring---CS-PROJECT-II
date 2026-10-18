@@ -69,7 +69,7 @@ const Dashboard = {
         ctx.clearRect(0, 0, width, height);
 
         // Grid lines (0 to 100)
-        ctx.font = '11px -apple-system, BlinkMacSystemFont, "SF Pro Text", sans-serif';
+        ctx.font = '11px "Montserrat", sans-serif';
         ctx.fillStyle = '#86868b';
         ctx.strokeStyle = '#e5e5ea';
         ctx.lineWidth = 1;
@@ -132,11 +132,11 @@ const Dashboard = {
             ctx.stroke();
 
             ctx.fillStyle = '#1d1d1f';
-            ctx.font = 'bold 11px -apple-system, sans-serif';
+            ctx.font = 'bold 11px "Montserrat", sans-serif';
             ctx.fillText(pt.score.toString(), pt.x - 7, pt.y - 10);
 
             ctx.fillStyle = '#86868b';
-            ctx.font = '11px -apple-system, sans-serif';
+            ctx.font = '11px "Montserrat", sans-serif';
             ctx.fillText(pt.period, pt.x - 10, height - padB + 18);
         });
     },
@@ -157,7 +157,7 @@ const Dashboard = {
             let reports = data.reports || [];
 
             if (filterVal === 'Flagged') {
-                reports = reports.filter(r => r.status === 'Flagged for Review' || r.metadata?.is_unusual === true);
+                reports = reports.filter(r => r.validation_status === 'unusual' || r.requires_engineer_review === true || r.metadata?.is_unusual === true);
             }
 
             if (reports.length === 0) {
@@ -172,15 +172,18 @@ const Dashboard = {
                 const location = r.asset?.location || r.metadata?.location_name || 'Infrastructure Corridor';
                 const assetType = r.asset?.asset_type || r.metadata?.asset_type || 'Civil Asset';
                 const frameId = (r.report_id || r._id).slice(0, 18);
-                const isVerified = r.status === 'Verified';
-                const isFlagged = r.status === 'Flagged for Review' || r.metadata?.is_unusual === true;
+                const status = r.status || 'Received';
+                const statusSlug = status.toLowerCase().replace(' ', '-');
+                const isVerified = status === 'Verified' || status === 'Resolved';
+                const isFlagged = r.validation_status === 'unusual' || r.requires_engineer_review === true || r.metadata?.is_unusual === true;
 
                 return `
                     <div class="queue-item-card ${isFlagged ? 'is-flagged' : ''}" data-report-id="${r.report_id || r._id}">
                         <div class="queue-item-info">
                             <div style="display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap;">
                                 <span class="queue-item-title">${location}</span>
-                                ${isFlagged ? `<span class="badge-tag flagged">⚠️ Flagged Unusual</span>` : ''}
+                                <span class="status-chip ${statusSlug}">${status}</span>
+                                ${isFlagged ? `<span class="badge-tag flagged">⚠️ Unusual Pairing</span>` : ''}
                             </div>
                             <span class="queue-item-meta">${assetType} • ${defectClass} • [ ${frameId} ]</span>
                             ${isFlagged && r.metadata?.advisory_notes ? `<span style="font-size: 0.72rem; color: #b45309;">${r.metadata.advisory_notes}</span>` : ''}
@@ -188,7 +191,7 @@ const Dashboard = {
                         <div class="queue-item-actions">
                             <span class="severity-pill ${severity.toLowerCase()}">${severity.toUpperCase()}</span>
                             <button type="button" class="btn-review-item btn-open-review" data-report-id="${r.report_id || r._id}">
-                                ${isVerified ? 'View Sign-Off' : 'Review & Sign Off'}
+                                ${isVerified ? 'View Casework' : 'Review & Sign Off'}
                             </button>
                         </div>
                     </div>
