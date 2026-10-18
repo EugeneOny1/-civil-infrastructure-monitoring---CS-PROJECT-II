@@ -14,7 +14,7 @@
     --border-subtle: #f2f2f7;
     --border-highlight: #0071e3;
 
-    /* Accents (Apple HIG Palette) */
+    /* Accents (Human Interface Palette) */
     --accent-primary: #0071e3;
     --accent-primary-hover: #0077ed;
     --accent-primary-active: #005bb5;
@@ -22,7 +22,24 @@
     --accent-emerald: #16a34a;
     --accent-amber: #d97706;
     --accent-rose: #dc2626;
-    --accent-purple: #9333ea;
+    --accent-purple: #7c3aed;
+
+    /* Canonical Report Lifecycle Status Badges */
+    --status-received-bg: #eff6ff;
+    --status-received-border: #93c5fd;
+    --status-received-text: #1d4ed8;
+
+    --status-under-review-bg: #fffbeb;
+    --status-under-review-border: #fcd34d;
+    --status-under-review-text: #b45309;
+
+    --status-verified-bg: #f0fdf4;
+    --status-verified-border: #86efac;
+    --status-verified-text: #15803d;
+
+    --status-resolved-bg: #ecfeff;
+    --status-resolved-border: #67e8f9;
+    --status-resolved-text: #0e7490;
 
     /* Severity Colors (Accessible Light-Mode Badges) */
     --severity-critical-bg: #fef2f2;
@@ -37,9 +54,9 @@
     --severity-low-border: #86efac;
     --severity-low-text: #15803d;
 
-    /* Typography - Apple San Francisco Font Stack */
-    --font-main: -apple-system, BlinkMacSystemFont, "SF Pro Text", "SF Pro Display", "SF Pro", "Helvetica Neue", Helvetica, Arial, sans-serif;
-    --font-mono: "SF Mono", "JetBrains Mono", Menlo, Consolas, Monaco, monospace;
+    /* Typography - Google Fonts Montserrat Primary Stack */
+    --font-main: 'Montserrat', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    --font-mono: 'JetBrains Mono', "SF Mono", Menlo, Consolas, Monaco, monospace;
 
     --text-primary: #1d1d1f;
     --text-secondary: #424245;
@@ -730,4 +747,499 @@ body, body.light-theme {
 
 .hidden {
     display: none !important;
+}
+
+/* ==========================================================================
+   Google Sign-In Button
+   ========================================================================== */
+.btn-google {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.75rem;
+    width: 100%;
+    background: #ffffff;
+    color: #3c4043;
+    border: 1px solid #dadce0;
+    padding: 0.7rem 1.25rem;
+    border-radius: var(--radius-sm);
+    font-size: 0.9rem;
+    font-weight: 500;
+    cursor: pointer;
+    transition: var(--transition-fast);
+    box-shadow: 0 1px 2px rgba(60, 64, 67, 0.08);
+}
+
+.btn-google:hover {
+    background: #f8f9fa;
+    border-color: #d2e3fc;
+    box-shadow: 0 1px 3px rgba(60, 64, 67, 0.16);
+}
+
+.google-icon {
+    width: 18px;
+    height: 18px;
+    flex-shrink: 0;
+}
+
+.auth-divider {
+    display: flex;
+    align-items: center;
+    text-align: center;
+    margin: 1.25rem 0;
+    color: var(--text-muted);
+    font-size: 0.75rem;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+}
+
+.auth-divider::before,
+.auth-divider::after {
+    content: '';
+    flex: 1;
+    border-bottom: 1px solid var(--border-color);
+}
+
+.auth-divider span {
+    padding: 0 0.85rem;
+}
+
+/* ==========================================================================
+   Password Strength Meter
+   ========================================================================== */
+.password-strength-box {
+    margin-top: 0.5rem;
+    padding: 0.65rem 0.85rem;
+    background: #fbfbfd;
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-sm);
+}
+
+.strength-bar-track {
+    display: flex;
+    gap: 4px;
+    height: 5px;
+    margin-bottom: 0.45rem;
+}
+
+.strength-bar-seg {
+    flex: 1;
+    height: 100%;
+    background: #e5e5ea;
+    border-radius: 2px;
+    transition: background 0.25s ease;
+}
+
+.strength-bar-seg.active-weak { background: #ef4444; }
+.strength-bar-seg.active-fair { background: #f59e0b; }
+.strength-bar-seg.active-good { background: #3b82f6; }
+.strength-bar-seg.active-strong { background: #10b981; }
+
+.strength-checklist {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 0.25rem 0.75rem;
+    font-size: 0.72rem;
+    color: var(--text-muted);
+}
+
+.strength-item {
+    display: flex;
+    align-items: center;
+    gap: 0.35rem;
+    transition: color 0.2s ease;
+}
+
+.strength-item.passed {
+    color: #16a34a;
+    font-weight: 500;
+}
+
+.strength-item.passed::before {
+    content: '✓';
+    font-weight: 700;
+}
+
+.strength-item.failed::before {
+    content: '○';
+    color: #9ca3af;
+}
+
+/* ==========================================================================
+   Canonical Report Status Chips
+   ========================================================================== */
+.status-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    font-size: 0.72rem;
+    font-weight: 600;
+    padding: 0.2rem 0.65rem;
+    border-radius: var(--radius-full);
+    letter-spacing: 0.02em;
+}
+
+.status-chip.received {
+    background: var(--status-received-bg);
+    color: var(--status-received-text);
+    border: 1px solid var(--status-received-border);
+}
+
+.status-chip.under-review {
+    background: var(--status-under-review-bg);
+    color: var(--status-under-review-text);
+    border: 1px solid var(--status-under-review-border);
+}
+
+.status-chip.verified {
+    background: var(--status-verified-bg);
+    color: var(--status-verified-text);
+    border: 1px solid var(--status-verified-border);
+}
+
+.status-chip.resolved {
+    background: var(--status-resolved-bg);
+    color: var(--status-resolved-text);
+    border: 1px solid var(--status-resolved-border);
+}
+
+/* ==========================================================================
+   Multi-Detection Badge List
+   ========================================================================== */
+.multi-detection-badges {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.4rem;
+    margin-top: 0.65rem;
+}
+
+.defect-badge-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    padding: 0.25rem 0.65rem;
+    border-radius: var(--radius-full);
+    font-size: 0.75rem;
+    font-weight: 600;
+    border: 1px solid transparent;
+}
+
+.defect-badge-pill.crack {
+    background: #fef3c7;
+    color: #b45309;
+    border-color: #fde68a;
+}
+
+.defect-badge-pill.pothole {
+    background: #fee2e2;
+    color: #b91c1c;
+    border-color: #fca5a5;
+}
+
+.defect-badge-pill.surface {
+    background: #e0f2fe;
+    color: #0369a1;
+    border-color: #bae6fd;
+}
+
+/* ==========================================================================
+   Infrastructure Defect Map View
+   ========================================================================== */
+.map-view-card {
+    background: #ffffff;
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-lg);
+    overflow: hidden;
+    box-shadow: var(--shadow-card);
+}
+
+.map-filter-toolbar {
+    padding: 1rem 1.5rem;
+    background: #ffffff;
+    border-bottom: 1px solid var(--border-color);
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.75rem;
+    align-items: center;
+    justify-content: space-between;
+}
+
+.map-filter-group {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    align-items: center;
+}
+
+.map-filter-label {
+    font-size: 0.78rem;
+    font-weight: 600;
+    color: var(--text-secondary);
+}
+
+.map-container {
+    width: 100%;
+    height: 580px;
+    position: relative;
+    background: #e5e7eb;
+}
+
+.map-legend-bar {
+    padding: 0.75rem 1.5rem;
+    background: #fafafc;
+    border-top: 1px solid var(--border-color);
+    display: flex;
+    flex-wrap: wrap;
+    gap: 1.25rem;
+    font-size: 0.76rem;
+    color: var(--text-secondary);
+}
+
+.map-legend-item {
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+}
+
+.map-legend-dot {
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+}
+
+.map-popup-card {
+    padding: 0.75rem;
+    max-width: 280px;
+    font-family: var(--font-main);
+}
+
+.map-popup-title {
+    font-size: 0.9rem;
+    font-weight: 700;
+    color: #1d1d1f;
+    margin-bottom: 0.25rem;
+}
+
+.map-popup-meta {
+    font-size: 0.75rem;
+    color: #6b7280;
+    margin-bottom: 0.45rem;
+}
+
+/* ==========================================================================
+   Administrative Oversight Dashboard View
+   ========================================================================== */
+.admin-overview-header {
+    margin-bottom: 1.5rem;
+}
+
+.admin-alert-banner {
+    background: #eff6ff;
+    border: 1px solid #bfdbfe;
+    border-radius: var(--radius-md);
+    padding: 1rem 1.25rem;
+    margin-bottom: 1.5rem;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+}
+
+.admin-alert-content {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+}
+
+.admin-alert-icon {
+    font-size: 1.5rem;
+}
+
+.admin-health-section {
+    background: #ffffff;
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-lg);
+    padding: 1.25rem 1.5rem;
+    margin-top: 1.75rem;
+    box-shadow: var(--shadow-card);
+}
+
+.admin-health-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 1rem;
+    margin-top: 1rem;
+}
+
+.health-status-card {
+    background: #fafafc;
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--radius-md);
+    padding: 0.85rem 1rem;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+}
+
+.health-label {
+    font-size: 0.8rem;
+    font-weight: 600;
+    color: var(--text-secondary);
+}
+
+.health-pill {
+    font-size: 0.72rem;
+    font-weight: 600;
+    padding: 0.2rem 0.55rem;
+    border-radius: var(--radius-full);
+}
+
+.health-pill.healthy {
+    background: #f0fdf4;
+    color: #15803d;
+    border: 1px solid #86efac;
+}
+
+.health-pill.warning {
+    background: #fffbeb;
+    color: #b45309;
+    border: 1px solid #fcd34d;
+}
+
+/* ==========================================================================
+   Defect Review Casework Switcher & Action Controls
+   ========================================================================== */
+.casework-toolbar {
+    background: #ffffff;
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-md);
+    padding: 0.85rem 1.25rem;
+    margin-bottom: 1.25rem;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 1rem;
+    align-items: center;
+    justify-content: space-between;
+}
+
+.casework-select-group {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    flex: 1;
+    min-width: 260px;
+}
+
+.lifecycle-btn-group {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+}
+
+.btn-lifecycle {
+    padding: 0.45rem 0.95rem;
+    border-radius: var(--radius-full);
+    font-size: 0.78rem;
+    font-weight: 600;
+    cursor: pointer;
+    border: 1px solid var(--border-color);
+    background: #ffffff;
+    color: var(--text-primary);
+    transition: var(--transition-fast);
+}
+
+.btn-lifecycle:hover {
+    background: #f5f5f7;
+    border-color: #c7c7cc;
+}
+
+.btn-lifecycle.action-review {
+    background: #eff6ff;
+    color: #1d4ed8;
+    border-color: #93c5fd;
+}
+
+.btn-lifecycle.action-verify {
+    background: #f0fdf4;
+    color: #15803d;
+    border-color: #86efac;
+}
+
+.btn-lifecycle.action-resolve {
+    background: #ecfeff;
+    color: #0e7490;
+    border-color: #67e8f9;
+}
+
+/* ==========================================================================
+   Responsive Viewport Support (360px - 1440px+)
+   ========================================================================== */
+@media (max-width: 1024px) {
+    .dashboard-columns {
+        grid-template-columns: 1fr;
+    }
+    .terminal-split-view {
+        grid-template-columns: 1fr;
+    }
+}
+
+@media (max-width: 768px) {
+    .header-container {
+        padding: 0.75rem 1rem;
+    }
+    .main-content {
+        padding: 1rem;
+    }
+    .kpi-grid {
+        grid-template-columns: repeat(2, 1fr);
+        gap: 0.75rem;
+    }
+    .two-column-layout {
+        grid-template-columns: 1fr;
+        gap: 1rem;
+    }
+    .nav-links {
+        display: flex;
+        overflow-x: auto;
+        white-space: nowrap;
+        padding-bottom: 0.35rem;
+        width: 100%;
+        -webkit-overflow-scrolling: touch;
+    }
+    .map-container {
+        height: 420px;
+    }
+    .strength-checklist {
+        grid-template-columns: 1fr;
+    }
+}
+
+@media (max-width: 430px) {
+    .kpi-grid {
+        grid-template-columns: 1fr;
+    }
+    .btn-primary, .btn-secondary, .btn-success {
+        width: 100%;
+    }
+    .auth-card {
+        padding: 1.25rem 1rem;
+    }
+    .table-container {
+        font-size: 0.75rem;
+    }
+    .data-table th, .data-table td {
+        padding: 0.65rem 0.75rem;
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after {
+        animation-duration: 0.01ms !important;
+        animation-iteration-count: 1 !important;
+        transition-duration: 0.01ms !important;
+        scroll-behavior: auto !important;
+    }
 }

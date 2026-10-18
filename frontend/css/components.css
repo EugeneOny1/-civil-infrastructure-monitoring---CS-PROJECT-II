@@ -125,19 +125,23 @@
 .detection-canvas-container {
     position: relative;
     width: 100%;
-    height: 250px;
-    background: #f5f5f7;
-    border-radius: var(--radius-sm);
+    min-height: 380px;
+    max-height: 520px;
+    height: 440px;
+    background: #0f172a;
+    border-radius: var(--radius-md);
     display: flex;
     align-items: center;
     justify-content: center;
     overflow: hidden;
+    box-shadow: inset 0 2px 8px rgba(0, 0, 0, 0.25);
 }
 
 .detection-canvas {
     width: 100%;
     height: 100%;
     object-fit: contain;
+    display: block;
 }
 
 .canvas-placeholder {
@@ -145,11 +149,11 @@
     flex-direction: column;
     align-items: center;
     justify-content: center;
-    gap: 0.5rem;
-    color: var(--text-muted);
-    font-size: 0.82rem;
+    gap: 0.75rem;
+    color: #94a3b8;
+    font-size: 0.88rem;
     text-align: center;
-    padding: 1.5rem;
+    padding: 2rem;
 }
 
 .placeholder-icon {
@@ -600,14 +604,15 @@
 .terminal-canvas-wrapper {
     position: relative;
     width: 100%;
-    height: 320px;
-    background: #f5f5f7;
-    border: 1px solid var(--border-color);
+    height: 420px;
+    background: #0f172a;
+    border: 1px solid #1e293b;
     border-radius: var(--radius-md);
     overflow: hidden;
     display: flex;
     align-items: center;
     justify-content: center;
+    box-shadow: inset 0 2px 8px rgba(0, 0, 0, 0.3);
 }
 
 .review-canvas {
