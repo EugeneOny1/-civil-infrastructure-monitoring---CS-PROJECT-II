@@ -57,6 +57,8 @@ class InfrastructureReport:
 
         return cls.STATUS_RECEIVED
 
+    canonical_status = normalize_lifecycle_status
+
     @classmethod
     def can_transition(cls, current_status: str, target_status: str) -> bool:
         """Validates if transition between report statuses is permitted."""
