@@ -382,7 +382,7 @@ const Submission = {
                 ctx.strokeRect(xmin, ymin, boxW, boxH);
                 ctx.setLineDash([]);
 
-                // Label background pill
+                // Label background pill with smart edge-clamping and collision handling
                 const confVal = det.confidence !== undefined ? det.confidence : (det.confidence_score || 0.0);
                 const confText = Math.round(confVal * 100);
                 const sevVal = det.severity || det.relative_severity || '';
@@ -393,15 +393,34 @@ const Submission = {
                 const fontSize = Math.max(13, Math.round(origW * 0.022));
                 ctx.font = `bold ${fontSize}px "JetBrains Mono", monospace`;
                 const textWidth = ctx.measureText(labelText).width;
+                const pillW = textWidth + 16;
                 const pillH = fontSize + 12;
-                const pillY = Math.max(0, ymin - pillH);
 
-                ctx.fillStyle = 'rgba(0, 0, 0, 0.88)';
-                ctx.fillRect(xmin, pillY, textWidth + 16, pillH);
+                // Clamp horizontally within image bounds
+                const pillX = Math.max(2, Math.min(origW - pillW - 2, xmin));
+
+                // Position label above box if space permits, else inside top edge of box
+                let pillY = (ymin >= pillH + 4) ? (ymin - pillH - 2) : (ymin + lineWidth + 2);
+
+                // Anti-collision offset for multiple overlapping labels
+                if (!window._drawnPills) window._drawnPills = [];
+                for (const prev of window._drawnPills) {
+                    if (Math.abs(prev.x - pillX) < pillW * 0.7 && Math.abs(prev.y - pillY) < pillH) {
+                        pillY = prev.y + pillH + 4;
+                    }
+                }
+                window._drawnPills.push({ x: pillX, y: pillY, w: pillW, h: pillH });
+
+                ctx.fillStyle = 'rgba(15, 23, 42, 0.92)';
+                ctx.fillRect(pillX, pillY, pillW, pillH);
+                ctx.strokeStyle = color;
+                ctx.lineWidth = 1;
+                ctx.strokeRect(pillX, pillY, pillW, pillH);
 
                 ctx.fillStyle = color;
-                ctx.fillText(labelText, xmin + 8, pillY + fontSize + 2);
+                ctx.fillText(labelText, pillX + 8, pillY + fontSize + 2);
             });
+            window._drawnPills = [];
         };
         img.src = imageUrl;
     }

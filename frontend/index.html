@@ -334,8 +334,19 @@
                         <div class="detection-canvas-container" id="canvasContainer">
                             <canvas id="detectionCanvas" class="detection-canvas"></canvas>
                             <div class="canvas-placeholder" id="canvasPlaceholder">
-                                <span class="placeholder-icon">👁️</span>
-                                <p>Upload an infrastructure photograph and run analysis to view automated defect detection.</p>
+                                <div class="scan-icon-wrapper" aria-hidden="true">
+                                    <svg class="scan-search-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                        <path d="M3 7V5a2 2 0 0 1 2-2h2"></path>
+                                        <path d="M17 3h2a2 2 0 0 1 2 2v2"></path>
+                                        <path d="M21 17v2a2 2 0 0 1-2 2h-2"></path>
+                                        <path d="M7 21H5a2 2 0 0 1-2-2v-2"></path>
+                                        <circle cx="11" cy="11" r="3.5"></circle>
+                                        <line x1="13.5" y1="13.5" x2="17.5" y2="17.5"></line>
+                                        <line x1="3" y1="12" x2="21" y2="12" stroke-dasharray="2 2" stroke-opacity="0.5"></line>
+                                    </svg>
+                                </div>
+                                <h3 class="placeholder-heading">AI Defect Detection</h3>
+                                <p class="placeholder-subtext">Upload an infrastructure image to begin AI analysis.</p>
                             </div>
                         </div>
                         <!-- Multi-Detection Summary Badge Chips -->
