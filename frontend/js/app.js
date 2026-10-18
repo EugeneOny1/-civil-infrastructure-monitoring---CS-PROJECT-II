@@ -1,19 +1,23 @@
 /**
- * App Module - Routing, Authentication State, Role-Based UI Guarding & 2FA Flow
- * Apple-Inspired Clean Interaction Design
+ * App Module - Routing, Authentication State, Role-Based UI Guarding, 2FA Flow,
+ * Google Sign-In, Password Strength Validation, Map & Cohesive Admin Oversight.
  */
 const App = {
     currentUser: null,
     pending2FA: null,
+    resendCooldownTimer: null,
 
     init() {
         this.bindNavigation();
         this.bindAuthEvents();
+        this.bindPasswordStrengthMeter();
+        this.bindEbkCategorySelector();
         
         // Initialize submodules
         if (window.Submission) window.Submission.init();
         if (window.Dashboard) window.Dashboard.init();
         if (window.Review) window.Review.init();
+        if (window.DefectMap) window.DefectMap.init();
 
         // Restore session or default to citizen view
         this.restoreSession();
@@ -28,7 +32,7 @@ const App = {
             if (this.currentUser.role === 'engineer' && this.currentUser.verification_status === 'verified') {
                 this.navigateTo('view-dashboard');
             } else if (this.currentUser.role === 'admin') {
-                this.navigateTo('view-admin');
+                this.navigateTo('view-admin-dashboard');
             } else {
                 this.navigateTo('view-submit');
             }
@@ -83,7 +87,7 @@ const App = {
     bindNavigation() {
         const tabs = document.querySelectorAll('.nav-tab');
         tabs.forEach(tab => {
-            tab.addEventListener('click', (e) => {
+            tab.addEventListener('click', () => {
                 const viewId = tab.getAttribute('data-view');
                 this.navigateTo(viewId);
             });
@@ -101,6 +105,20 @@ const App = {
         const refreshBtn = document.getElementById('btnRefreshTracking');
         if (refreshBtn) {
             refreshBtn.addEventListener('click', () => this.loadTrackingData());
+        }
+
+        // Admin Dashboard refresh
+        const refreshAdminDashBtn = document.getElementById('btnRefreshAdminDashboard');
+        if (refreshAdminDashBtn) {
+            refreshAdminDashBtn.addEventListener('click', () => this.loadAdminDashboard());
+        }
+
+        // Pending verification shortcut
+        const btnGoVerification = document.getElementById('btnGoToVerification');
+        if (btnGoVerification) {
+            btnGoVerification.addEventListener('click', () => {
+                this.navigateTo('view-admin');
+            });
         }
 
         // Post-submit redirect button
@@ -125,14 +143,10 @@ const App = {
         const btnLogout = document.getElementById('btnLogout');
 
         if (btnOpenLogin) {
-            btnOpenLogin.addEventListener('click', () => {
-                this.showAuthView('login');
-            });
+            btnOpenLogin.addEventListener('click', () => this.showAuthView('login'));
         }
         if (btnOpenRegister) {
-            btnOpenRegister.addEventListener('click', () => {
-                this.showAuthView('register');
-            });
+            btnOpenRegister.addEventListener('click', () => this.showAuthView('register'));
         }
         if (btnLogout) {
             btnLogout.addEventListener('click', () => {
@@ -196,15 +210,38 @@ const App = {
             });
         }
 
-        // Dynamic registration role toggle for professional fields
+        // Continue with Google Button
+        const btnGoogle = document.getElementById('btnGoogleSignIn');
+        if (btnGoogle) {
+            btnGoogle.addEventListener('click', async () => {
+                try {
+                    this.showToast("Connecting to Google Identity Services...");
+                    const data = await window.Api.loginWithGoogle('demo_google_gis_credential_token');
+                    this.currentUser = data.user;
+                    this.updateSessionUI();
+                    this.showToast(`Signed in with Google as ${data.user.name || data.user.email}!`);
+                    this.routeUserAfterAuth(data.user);
+                } catch (err) {
+                    console.error("Google sign-in error:", err);
+                    this.showToast(err.message || "Google sign in was cancelled or failed.", true);
+                }
+            });
+        }
+
+        // Dynamic registration role toggle
         const regRoleSelect = document.getElementById('regRole');
         const engineerFieldsContainer = document.getElementById('engineerFieldsContainer');
-        if (regRoleSelect && engineerFieldsContainer) {
+        const regNameInput = document.getElementById('regName');
+
+        if (regRoleSelect) {
             regRoleSelect.addEventListener('change', (e) => {
-                if (e.target.value === 'engineer') {
-                    engineerFieldsContainer.classList.remove('hidden');
+                const role = e.target.value;
+                if (role === 'engineer') {
+                    if (engineerFieldsContainer) engineerFieldsContainer.classList.remove('hidden');
+                    if (regNameInput) regNameInput.placeholder = "e.g., Eng. Jane Doe";
                 } else {
-                    engineerFieldsContainer.classList.add('hidden');
+                    if (engineerFieldsContainer) engineerFieldsContainer.classList.add('hidden');
+                    if (regNameInput) regNameInput.placeholder = "Full name";
                 }
             });
         }
@@ -223,7 +260,7 @@ const App = {
                 try {
                     const data = await window.Api.login(email, password);
 
-                    // Check if Two-Factor Authentication challenge was returned
+                    // Check if 2FA challenge is returned
                     if (data.require_2fa) {
                         this.pending2FA = {
                             email: data.email,
@@ -231,7 +268,6 @@ const App = {
                             demo_otp: data.demo_otp
                         };
 
-                        // Switch to 2FA verification form
                         loginForm.classList.add('hidden');
                         if (authTabsRow) authTabsRow.classList.add('hidden');
                         if (twoFactorForm) {
@@ -245,11 +281,10 @@ const App = {
                         return;
                     }
 
-                    // Direct login success (e.g. citizens or accounts with 2FA off)
+                    // Direct login
                     this.currentUser = data.user;
                     this.updateSessionUI();
                     this.showToast(`Welcome, ${data.user.name || data.user.email}!`);
-                    
                     this.routeUserAfterAuth(data.user);
                 } catch (err) {
                     this.showToast(err.message || 'Login failed.', true);
@@ -271,6 +306,23 @@ const App = {
                 });
             }
 
+            const btnResend = document.getElementById('btnResendOtp');
+            if (btnResend) {
+                btnResend.addEventListener('click', async () => {
+                    if (!this.pending2FA || !this.pending2FA.email) return;
+                    btnResend.disabled = true;
+                    try {
+                        const res = await window.Api.resendOtp(this.pending2FA.email);
+                        if (res.demo_otp) this.pending2FA.demo_otp = res.demo_otp;
+                        this.showToast(res.message || "New 2FA security code dispatched.");
+                        this.startResendCooldown(60);
+                    } catch (err) {
+                        this.showToast(err.message || "Failed to resend code.", true);
+                        btnResend.disabled = false;
+                    }
+                });
+            }
+
             const btnCancel2FA = document.getElementById('btnCancelTwoFactor');
             if (btnCancel2FA) {
                 btnCancel2FA.addEventListener('click', () => {
@@ -284,7 +336,7 @@ const App = {
             twoFactorForm.addEventListener('submit', async (e) => {
                 e.preventDefault();
                 if (!this.pending2FA || !this.pending2FA.email) {
-                    this.showToast("No active 2FA verification session. Please sign in again.", true);
+                    this.showToast("No active 2FA session. Please sign in again.", true);
                     this.showAuthView('login');
                     return;
                 }
@@ -325,9 +377,10 @@ const App = {
                 const password = document.getElementById('regPassword').value.trim();
                 const role = document.getElementById('regRole').value;
                 const organization = document.getElementById('regOrg')?.value.trim() || '';
+                const professional_category = document.getElementById('regEbkCategory')?.value || '';
                 const professional_reg_no = document.getElementById('regLicense')?.value.trim() || '';
                 const phone = document.getElementById('regPhone')?.value.trim() || '';
-                const two_factor_enabled = document.getElementById('regTwoFactor')?.checked || false;
+                const two_factor_enabled = role === 'engineer' || role === 'admin' ? true : (document.getElementById('regTwoFactor')?.checked || false);
 
                 const submitBtn = document.getElementById('btnRegisterSubmit');
 
@@ -341,6 +394,7 @@ const App = {
                         password,
                         role,
                         organization,
+                        professional_category,
                         professional_reg_no,
                         phone,
                         two_factor_enabled
@@ -364,6 +418,88 @@ const App = {
         }
     },
 
+    bindPasswordStrengthMeter() {
+        const passInput = document.getElementById('regPassword');
+        if (!passInput) return;
+
+        passInput.addEventListener('input', (e) => {
+            const val = e.target.value;
+            const hasLen = val.length >= 8;
+            const hasUpper = /[A-Z]/.test(val);
+            const hasLower = /[a-z]/.test(val);
+            const hasSpecial = /[\d!@#$%^&*()_+\-=\[\]{}|;:,.<>?]/.test(val);
+
+            const ruleLenEl = document.getElementById('ruleLength');
+            const ruleUpEl = document.getElementById('ruleUpper');
+            const ruleLowEl = document.getElementById('ruleLower');
+            const ruleNumEl = document.getElementById('ruleNumber');
+
+            if (ruleLenEl) ruleLenEl.className = `strength-item ${hasLen ? 'passed' : 'failed'}`;
+            if (ruleUpEl) ruleUpEl.className = `strength-item ${hasUpper ? 'passed' : 'failed'}`;
+            if (ruleLowEl) ruleLowEl.className = `strength-item ${hasLower ? 'passed' : 'failed'}`;
+            if (ruleNumEl) ruleNumEl.className = `strength-item ${hasSpecial ? 'passed' : 'failed'}`;
+
+            const score = [hasLen, hasUpper, hasLower, hasSpecial].filter(Boolean).length;
+            const segs = [document.getElementById('seg1'), document.getElementById('seg2'), document.getElementById('seg3'), document.getElementById('seg4')];
+
+            segs.forEach((seg, i) => {
+                if (!seg) return;
+                seg.className = 'strength-bar-seg';
+                if (i < score) {
+                    if (score === 1) seg.classList.add('active-weak');
+                    else if (score === 2) seg.classList.add('active-fair');
+                    else if (score === 3) seg.classList.add('active-good');
+                    else if (score === 4) seg.classList.add('active-strong');
+                }
+            });
+        });
+    },
+
+    bindEbkCategorySelector() {
+        const catSelect = document.getElementById('regEbkCategory');
+        const licInput = document.getElementById('regLicense');
+        const helpText = document.getElementById('ebkHelpText');
+
+        if (!catSelect || !licInput) return;
+
+        catSelect.addEventListener('change', (e) => {
+            const cat = e.target.value;
+            if (cat === 'Graduate Engineer') {
+                licInput.placeholder = 'e.g., B24512';
+                if (helpText) helpText.textContent = 'Format: Letter B followed by digits (e.g. B24512)';
+            } else if (cat === 'Professional Engineer') {
+                licInput.placeholder = 'e.g., A3947';
+                if (helpText) helpText.textContent = 'Format: Letter A followed by digits (e.g. A3947)';
+            } else if (cat === 'Consulting Engineer') {
+                licInput.placeholder = 'e.g., E475';
+                if (helpText) helpText.textContent = 'Format: Letter E followed by digits (e.g. E475)';
+            }
+        });
+    },
+
+    startResendCooldown(seconds) {
+        const btn = document.getElementById('btnResendOtp');
+        const timerText = document.getElementById('resendTimerText');
+        if (!btn || !timerText) return;
+
+        let remaining = seconds;
+        btn.disabled = true;
+        timerText.textContent = `${remaining}s`;
+
+        if (this.resendCooldownTimer) clearInterval(this.resendCooldownTimer);
+
+        this.resendCooldownTimer = setInterval(() => {
+            remaining -= 1;
+            if (remaining <= 0) {
+                clearInterval(this.resendCooldownTimer);
+                btn.disabled = false;
+                timerText.textContent = 'Ready';
+            } else {
+                timerText.textContent = `${remaining}s`;
+            }
+        }, 1000);
+    },
+
     routeUserAfterAuth(user) {
         if (!user) return;
         if (user.role === 'engineer') {
@@ -374,7 +510,7 @@ const App = {
                 this.navigateTo('view-submit');
             }
         } else if (user.role === 'admin') {
-            this.navigateTo('view-admin');
+            this.navigateTo('view-admin-dashboard');
         } else {
             this.navigateTo('view-submit');
         }
@@ -411,8 +547,14 @@ const App = {
         // View-specific data loads
         if (viewId === 'view-tracking') {
             this.loadTrackingData();
+        } else if (viewId === 'view-map') {
+            if (window.DefectMap) window.DefectMap.loadMapData();
         } else if (viewId === 'view-dashboard') {
             if (window.Dashboard) window.Dashboard.loadDashboardData();
+        } else if (viewId === 'view-review') {
+            if (window.Review) window.Review.loadCaseworkList();
+        } else if (viewId === 'view-admin-dashboard') {
+            this.loadAdminDashboard();
         } else if (viewId === 'view-admin') {
             this.loadAdminData();
         }
@@ -460,26 +602,23 @@ const App = {
                 const rep = item.report;
                 const ai = item.assessment || {};
                 const sev = ai.relative_severity || rep.metadata?.relative_severity || 'Low';
-                const status = rep.status || 'Pending';
-                const isFlagged = status === 'Flagged for Review' || rep.metadata?.is_unusual === true;
+                const status = rep.status || 'Received';
+                const statusSlug = status.toLowerCase().replace(' ', '-');
+                const isUnusual = rep.metadata?.is_unusual === true || rep.validation_status === 'unusual';
                 const dateStr = rep.date_submitted ? new Date(rep.date_submitted).toLocaleDateString() : 'Recent';
                 const location = rep.metadata?.location_name || 'Corridor Asset';
+                const repId = rep.report_id || (rep._id ? rep._id.slice(0, 16) : 'REF');
 
                 return `
                     <tr>
-                        <td><code>#${rep._id ? rep._id.slice(0, 16) : 'REF'}</code></td>
+                        <td><code>#${repId}</code></td>
                         <td>${dateStr}</td>
                         <td>${location}</td>
                         <td><strong>${ai.defect_class || 'Pavement Distress'}</strong></td>
                         <td><span class="severity-pill ${sev.toLowerCase()}">${sev.toUpperCase()}</span></td>
                         <td>
-                            ${isFlagged ? `
-                                <span class="report-status-badge flagged" title="${rep.metadata?.advisory_notes || 'Flagged for engineer review'}">
-                                    ⚠️ Flagged for Review
-                                </span>
-                            ` : `
-                                <span class="report-status-badge ${status.toLowerCase()}">${status}</span>
-                            `}
+                            <span class="status-chip ${statusSlug}">${status}</span>
+                            ${isUnusual ? `<span class="badge-tag" style="background:#fff7ed;color:#c2410c;border:1px solid #fed7aa;margin-left:4px;">⚠️ Unusual Pairing</span>` : ''}
                         </td>
                     </tr>
                 `;
@@ -487,6 +626,91 @@ const App = {
         } catch (e) {
             console.error("Failed to load tracking data:", e);
             tbody.innerHTML = `<tr><td colspan="6" style="text-align:center; padding: 2rem; color: #dc2626;">Failed to load defect reports.</td></tr>`;
+        }
+    },
+
+    // Cohesive Administrative Oversight Dashboard View
+    async loadAdminDashboard() {
+        try {
+            const data = await window.Api.getAdminDashboard();
+
+            // KPI Overview Tiles
+            document.getElementById('dashTotalUsers').textContent = data.overview.total_users || 0;
+            document.getElementById('dashUserRoleBreakdown').textContent = 
+                `${data.overview.citizens_count} Citizens • ${data.overview.engineers_count} Engineers`;
+            document.getElementById('dashVerifiedEngineers').textContent = data.overview.verified_engineers_count || 0;
+            document.getElementById('dashTotalReports').textContent = data.reports.total_reports || 0;
+            document.getElementById('dashOpenReports').textContent = 
+                `${data.reports.open_reports} Open / Under Review`;
+            document.getElementById('dashResolutionRate').textContent = 
+                `${data.reports.resolution_rate_percent}%`;
+
+            // Pending Engineer Alert Banner
+            const alertBanner = document.getElementById('adminPendingAlertBanner');
+            const alertText = document.getElementById('adminPendingAlertText');
+            if (alertBanner && alertText) {
+                if (data.overview.pending_engineers_count > 0) {
+                    alertBanner.classList.remove('hidden');
+                    alertText.textContent = `${data.overview.pending_engineers_count} engineer(s) awaiting accreditation verification`;
+                } else {
+                    alertBanner.classList.add('hidden');
+                }
+            }
+
+            // Corridor Hotspots Table
+            const corridorTbody = document.getElementById('corridorTableBody');
+            if (corridorTbody) {
+                const hotspots = data.reports_by_location || [];
+                if (hotspots.length === 0) {
+                    corridorTbody.innerHTML = `<tr><td colspan="3" style="text-align:center; color:#86868b; padding:1.5rem;">No location records available.</td></tr>`;
+                } else {
+                    corridorTbody.innerHTML = hotspots.map(h => `
+                        <tr>
+                            <td><strong>${h.corridor}</strong></td>
+                            <td>${h.total_defects}</td>
+                            <td><span style="color:${h.critical_count > 0 ? '#dc2626' : '#16a34a'}; font-weight:600;">${h.critical_count}</span></td>
+                        </tr>
+                    `).join('');
+                }
+            }
+
+            // Engineer Workload Table
+            const workloadTbody = document.getElementById('workloadTableBody');
+            if (workloadTbody) {
+                const workload = data.engineer_workload || [];
+                if (workload.length === 0) {
+                    workloadTbody.innerHTML = `<tr><td colspan="3" style="text-align:center; color:#86868b; padding:1.5rem;">No engineer inspections completed yet.</td></tr>`;
+                } else {
+                    workloadTbody.innerHTML = workload.map(w => `
+                        <tr>
+                            <td><strong>${w.name}</strong></td>
+                            <td>${w.organization || 'Independent Inspector'}</td>
+                            <td><span class="badge-tag" style="background:#eff6ff; color:#1d4ed8; font-weight:600;">${w.inspections_completed} Reviews</span></td>
+                        </tr>
+                    `).join('');
+                }
+            }
+
+            // Platform Health Indicators
+            const health = data.system_health || {};
+            const setPill = (id, isHealthy, textHealthy = 'Healthy', textWarning = 'Not Configured') => {
+                const el = document.getElementById(id);
+                if (el) {
+                    el.className = `health-pill ${isHealthy ? 'healthy' : 'warning'}`;
+                    el.textContent = isHealthy ? textHealthy : textWarning;
+                }
+            };
+
+            setPill('healthBackend', health.backend_api?.status === 'online', 'Online', 'Offline');
+            setPill('healthMongo', health.mongodb?.status === 'connected', 'Connected', 'Disconnected');
+            setPill('healthAiModel', health.ai_model?.status === 'loaded', 'Loaded', 'Unloaded');
+            setPill('healthEmail', health.email_service?.configured === true, 'Configured', 'Demo Fallback');
+            setPill('healthGoogle', health.google_auth?.configured === true, 'Configured', 'Ready');
+            setPill('healthMaps', health.google_maps?.configured === true, 'Active', 'Vector Mode');
+
+        } catch (err) {
+            console.error("Failed to load admin dashboard:", err);
+            this.showToast("Failed to load admin dashboard data.", true);
         }
     },
 

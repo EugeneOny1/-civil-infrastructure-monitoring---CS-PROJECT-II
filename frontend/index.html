@@ -5,10 +5,10 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>InfraVision | Civil Infrastructure Defect Monitoring System</title>
     <meta name="description" content="Computer Vision-Based Civil Infrastructure Monitoring System for Automated Structural Defect Detection and Assessment using SSD-MobileNetV2.">
-    <!-- Google Fonts: Inter & JetBrains Mono -->
+    <!-- Google Fonts: Montserrat & JetBrains Mono -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="css/main.css">
     <link rel="stylesheet" href="css/components.css">
 </head>
@@ -33,7 +33,10 @@
                     <span class="tab-icon">📷</span> Report Defect
                 </button>
                 <button class="nav-tab" id="tabTracking" data-view="view-tracking">
-                    <span class="tab-icon">📍</span> My Reports
+                    <span class="tab-icon">📋</span> My Reports
+                </button>
+                <button class="nav-tab" id="tabMap" data-view="view-map">
+                    <span class="tab-icon">🗺️</span> Infrastructure Map
                 </button>
 
                 <!-- Engineer Navigation (Visible only to authenticated engineers) -->
@@ -45,6 +48,9 @@
                 </button>
 
                 <!-- Administrator Navigation (Visible only to authenticated admins) -->
+                <button class="nav-tab role-guarded role-admin hidden" id="tabAdminDashboard" data-view="view-admin-dashboard">
+                    <span class="tab-icon">📈</span> Admin Dashboard
+                </button>
                 <button class="nav-tab role-guarded role-admin hidden" id="tabAdmin" data-view="view-admin">
                     <span class="tab-icon">⚙️</span> User Governance
                 </button>
@@ -88,6 +94,17 @@
 
                     <!-- Login Form -->
                     <form id="loginForm" class="auth-form">
+                        <button type="button" class="btn-google" id="btnGoogleSignIn" title="Sign in with verified Google account">
+                            <svg class="google-icon" viewBox="0 0 24 24">
+                                <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
+                                <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/>
+                                <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.63z"/>
+                                <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z"/>
+                            </svg>
+                            Continue with Google
+                        </button>
+                        <div class="auth-divider"><span>or sign in with email</span></div>
+
                         <div class="form-group">
                             <label for="loginEmail" class="field-label">Email Address</label>
                             <input type="email" id="loginEmail" class="field-input" placeholder="e.g., user@strathmore.edu" required>
@@ -115,7 +132,7 @@
                             <div class="two-factor-icon">🔐</div>
                             <div>
                                 <h3 class="two-factor-title">Two-Factor Authentication</h3>
-                                <p class="two-factor-desc">A 6-digit verification code has been dispatched to your email address: <strong id="twoFactorEmailDisplay">user@example.com</strong></p>
+                                <p class="two-factor-desc">A 6-digit security code has been dispatched to your email address: <strong id="twoFactorEmailDisplay">user@example.com</strong></p>
                             </div>
                         </div>
                         <div class="form-group">
@@ -127,13 +144,18 @@
                                 </button>
                             </div>
                             <small class="field-help-text" id="twoFactorHelpText">
-                                Standard testing passcode: <strong>123456</strong> or the one-time code shown in the dispatch notice.
+                                Enter the 6-digit verification code sent to your email.
                             </small>
+                        </div>
+                        <div style="display: flex; gap: 0.5rem; margin-bottom: 0.75rem;">
+                            <button type="button" class="btn-secondary btn-sm" id="btnResendOtp" style="flex: 1;">
+                                ↻ Resend Code (<span id="resendTimerText">Ready</span>)
+                            </button>
                         </div>
                         <button type="submit" class="btn-primary btn-block" id="btnVerifyTwoFactor">
                             Verify & Complete Login
                         </button>
-                        <button type="button" class="btn-secondary btn-block" id="btnCancelTwoFactor">
+                        <button type="button" class="btn-secondary btn-block" id="btnCancelTwoFactor" style="margin-top: 0.5rem;">
                             ← Back to Sign In
                         </button>
                     </form>
@@ -150,26 +172,53 @@
                         </div>
                         <div class="form-group">
                             <label for="regName" class="field-label">Full Name *</label>
-                            <input type="text" id="regName" class="field-input" placeholder="e.g., Eng. Eugene Odhiambo" required>
+                            <input type="text" id="regName" class="field-input" placeholder="Full name" required>
                         </div>
                         <div class="form-group">
                             <label for="regEmail" class="field-label">Email Address *</label>
-                            <input type="email" id="regEmail" class="field-input" placeholder="e.g., eugene@kenha.go.ke" required>
+                            <input type="email" id="regEmail" class="field-input" placeholder="e.g., user@domain.com" required>
                         </div>
                         <div class="form-group">
-                            <label for="regPassword" class="field-label">Password * (minimum 6 characters)</label>
-                            <input type="password" id="regPassword" class="field-input" placeholder="••••••••" minlength="6" required>
+                            <label for="regPassword" class="field-label">Password *</label>
+                            <input type="password" id="regPassword" class="field-input" placeholder="••••••••" minlength="8" required>
+                            
+                            <!-- Live Password Requirement Feedback -->
+                            <div class="password-strength-box" id="passwordStrengthBox">
+                                <div class="strength-bar-track">
+                                    <div class="strength-bar-seg" id="seg1"></div>
+                                    <div class="strength-bar-seg" id="seg2"></div>
+                                    <div class="strength-bar-seg" id="seg3"></div>
+                                    <div class="strength-bar-seg" id="seg4"></div>
+                                </div>
+                                <ul class="strength-checklist">
+                                    <li class="strength-item" id="ruleLength">8+ characters</li>
+                                    <li class="strength-item" id="ruleUpper">Uppercase letter</li>
+                                    <li class="strength-item" id="ruleLower">Lowercase letter</li>
+                                    <li class="strength-item" id="ruleNumber">Number & symbol</li>
+                                </ul>
+                            </div>
                         </div>
 
                         <!-- Professional Fields for Engineers -->
                         <div id="engineerFieldsContainer" class="hidden">
                             <div class="form-group">
-                                <label for="regOrg" class="field-label">Organization / Authority *</label>
-                                <input type="text" id="regOrg" class="field-input" placeholder="e.g., KeNHA, KURA, KeRRA, County Govt, or Consultant">
+                                <label for="regEbkCategory" class="field-label">EBK Professional Category *</label>
+                                <select id="regEbkCategory" class="field-input">
+                                    <option value="Graduate Engineer" selected>Graduate Engineer (Prefix: B)</option>
+                                    <option value="Professional Engineer">Professional Engineer (Prefix: A)</option>
+                                    <option value="Consulting Engineer">Consulting Engineer (Prefix: E)</option>
+                                </select>
                             </div>
                             <div class="form-group">
-                                <label for="regLicense" class="field-label">Engineers Board Registration / EBK No. *</label>
-                                <input type="text" id="regLicense" class="field-input" placeholder="e.g., EBK/A.166333 or IEK Graduate Member">
+                                <label for="regLicense" class="field-label">EBK Registration Number *</label>
+                                <input type="text" id="regLicense" class="field-input" placeholder="e.g., B24512">
+                                <small class="field-help-text" id="ebkHelpText">
+                                    Format: Letter B followed by digits (e.g. B24512)
+                                </small>
+                            </div>
+                            <div class="form-group">
+                                <label for="regOrg" class="field-label">Organization / Authority</label>
+                                <input type="text" id="regOrg" class="field-input" placeholder="e.g., KeNHA, KURA, KeRRA, County Govt, or Consultant">
                             </div>
                             <div class="form-group">
                                 <label for="regPhone" class="field-label">Official Contact Phone</label>
@@ -177,12 +226,12 @@
                             </div>
                             <div class="form-group checkbox-group">
                                 <label class="checkbox-label">
-                                    <input type="checkbox" id="regTwoFactor" checked>
-                                    <span>Enable Email OTP Two-Factor Authentication (2FA) for this professional account</span>
+                                    <input type="checkbox" id="regTwoFactor" checked disabled>
+                                    <span>Mandatory Two-Factor Authentication (2FA) enforced for professional engineering roles</span>
                                 </label>
                             </div>
                             <div class="notice-callout">
-                                ℹ️ Note: Engineer accounts require administrative verification of accreditation before professional inspection tools are unlocked.
+                                ℹ️ Note: Engineer accounts require manual Administrator accreditation verification before inspection tools are unlocked.
                             </div>
                         </div>
 
@@ -256,8 +305,11 @@
                         </div>
 
                         <div class="form-group">
-                            <label for="defectNotes" class="field-label">DESCRIPTION / FIELD NOTES (OPTIONAL)</label>
-                            <textarea id="defectNotes" class="field-textarea" rows="3" placeholder="Provide context regarding road surface, visible cracks, or recent rainfall..."></textarea>
+                            <label for="defectNotes" class="field-label">DESCRIPTION / FIELD OBSERVATIONS (OPTIONAL)</label>
+                            <textarea id="defectNotes" class="field-textarea" rows="3" placeholder="Describe what you can see — e.g., approximate size/extent, whether the defect is getting worse, nearby landmarks, traffic or safety impact, how visible the defect is, or if it is actively being avoided by pedestrians/drivers..."></textarea>
+                            <small class="field-help-text">
+                                Visible context helps civil engineers prioritize inspection (e.g. vehicles swerving to avoid hazard, depth, or active weathering).
+                            </small>
                         </div>
 
                         <button type="button" class="btn-primary btn-block" id="btnSubmitAiAnalysis">
@@ -286,6 +338,8 @@
                                 <p>Upload an infrastructure photograph and run analysis to view automated defect detection.</p>
                             </div>
                         </div>
+                        <!-- Multi-Detection Summary Badge Chips -->
+                        <div class="multi-detection-badges" id="multiDetectionsList"></div>
                     </div>
 
                     <!-- Assessment Results Grid -->
@@ -318,7 +372,7 @@
                             Unusual combination detected: Pothole on Building structure.
                         </p>
                         <p class="flag-sub">
-                            This report is retained and assigned status <strong class="badge-tag flagged">Flagged for Review</strong> for certified civil engineer review.
+                            This report is retained under canonical status <strong>Received</strong> and flagged for civil engineer verification.
                         </p>
                     </div>
 
@@ -343,7 +397,7 @@
             <div class="view-header">
                 <div>
                     <h2 class="view-title">Citizen Defect Tracking Portal</h2>
-                    <p class="view-desc">Monitor the status and engineer review updates of your submitted infrastructure defect reports</p>
+                    <p class="view-desc">Monitor the lifecycle status and engineer review updates of your submitted infrastructure defect reports</p>
                 </div>
                 <button class="btn-secondary btn-sm" id="btnRefreshTracking">🔄 Refresh Status</button>
             </div>
@@ -356,15 +410,79 @@
                                 <th>Report ID</th>
                                 <th>Date Submitted</th>
                                 <th>Infrastructure Location</th>
-                                <th>Detected Defect</th>
+                                <th>Detected Defect(s)</th>
                                 <th>Relative Severity</th>
-                                <th>Report Status</th>
+                                <th>Lifecycle Status</th>
                             </tr>
                         </thead>
                         <tbody id="trackingTableBody">
                             <!-- Populated dynamically via JS -->
                         </tbody>
                     </table>
+                </div>
+            </div>
+        </section>
+
+        <!-- VIEW 2B: INFRASTRUCTURE DEFECT & HOTSPOT MAP -->
+        <section class="view-section" id="view-map">
+            <div class="view-header">
+                <div>
+                    <h2 class="view-title">Infrastructure Defect & Hotspot Map</h2>
+                    <p class="view-desc">Geographic distribution of reported infrastructure defects and civil inspection statuses</p>
+                </div>
+                <div style="display:flex; align-items:center; gap:0.75rem;">
+                    <span class="badge-tag" id="mapReportCount">0 Reports</span>
+                    <button class="btn-secondary btn-sm" id="btnRefreshMap">🔄 Refresh Map</button>
+                </div>
+            </div>
+
+            <div class="map-view-card">
+                <div class="map-filter-toolbar">
+                    <div class="map-filter-group">
+                        <span class="map-filter-label">Filter:</span>
+                        <select id="mapFilterClass" class="filter-select">
+                            <option value="">All Defect Classes</option>
+                            <option value="Crack">Crack</option>
+                            <option value="Pothole">Pothole</option>
+                            <option value="Surface Deterioration">Surface Deterioration</option>
+                        </select>
+                        <select id="mapFilterStatus" class="filter-select">
+                            <option value="">All Lifecycle Statuses</option>
+                            <option value="Received">Received</option>
+                            <option value="Under Review">Under Review</option>
+                            <option value="Verified">Verified</option>
+                            <option value="Resolved">Resolved</option>
+                        </select>
+                        <select id="mapFilterSeverity" class="filter-select">
+                            <option value="">All Visual Severities</option>
+                            <option value="Critical">Critical</option>
+                            <option value="Medium">Medium</option>
+                            <option value="Low">Low</option>
+                        </select>
+                        <select id="mapFilterAsset" class="filter-select">
+                            <option value="">All Asset Types</option>
+                            <option value="Road / Pavement">Road / Pavement</option>
+                            <option value="Bridge">Bridge / Viaduct</option>
+                            <option value="Building">Building / Wall</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="map-container" id="infrastructureMapContainer">
+                    <!-- Google Maps or interactive vector fallback canvas -->
+                </div>
+                <div class="map-legend-bar">
+                    <div class="map-legend-item">
+                        <span class="map-legend-dot" style="background: #ef4444;"></span> Critical Severity (≥ 15% extent)
+                    </div>
+                    <div class="map-legend-item">
+                        <span class="map-legend-dot" style="background: #f59e0b;"></span> Medium Severity (5% - 15%)
+                    </div>
+                    <div class="map-legend-item">
+                        <span class="map-legend-dot" style="background: #10b981;"></span> Low Severity (&lt; 5%)
+                    </div>
+                    <div class="map-legend-item" style="margin-left: auto; color: #86868b; font-size: 0.72rem;">
+                        🔒 Citizen Privacy Mode: Personal reporter identities are protected.
+                    </div>
                 </div>
             </div>
         </section>
@@ -471,16 +589,40 @@
                 </div>
             </div>
 
+            <!-- Casework Switcher & Direct Lifecycle Actions Toolbar -->
+            <div class="casework-toolbar">
+                <div class="casework-select-group">
+                    <label for="reviewReportSelect" class="map-filter-label" style="white-space:nowrap;">Select Report:</label>
+                    <select id="reviewReportSelect" class="field-input" style="font-size:0.85rem; padding:0.4rem 0.75rem;">
+                        <option value="">Loading defect casework...</option>
+                    </select>
+                    <button type="button" class="btn-secondary btn-sm" id="btnRefreshCasework">↻</button>
+                </div>
+
+                <div class="lifecycle-btn-group">
+                    <span class="map-filter-label" style="align-self:center; margin-right:4px;">Lifecycle:</span>
+                    <button type="button" class="btn-lifecycle action-review" id="btnMoveUnderReview" title="Mark inspection as Under Review">
+                        ⏳ Under Review
+                    </button>
+                    <button type="button" class="btn-lifecycle action-verify" id="btnMarkVerified" title="Verify reported defect">
+                        ✓ Verify Defect
+                    </button>
+                    <button type="button" class="btn-lifecycle action-resolve" id="btnMarkResolved" title="Close/Resolve infrastructure issue">
+                        ✓ Mark Resolved
+                    </button>
+                </div>
+            </div>
+
             <div class="terminal-container glass-card">
                 <!-- Top Meta Header -->
                 <div class="terminal-meta-bar">
                     <div class="meta-item">
                         <span class="meta-label">REPORT ID</span>
-                        <span class="meta-val" id="reviewFrameId">#REP-2026-0001</span>
+                        <span class="meta-val" id="reviewFrameId">#REP-0000</span>
                     </div>
                     <div class="meta-item">
                         <span class="meta-label">INFRASTRUCTURE LOCATION</span>
-                        <span class="meta-val" id="reviewGps">Uhuru Highway (Chainage 14+350)</span>
+                        <span class="meta-val" id="reviewGps">—</span>
                     </div>
                     <div class="meta-item">
                         <span class="meta-label">REVIEWER ROLE</span>
@@ -498,17 +640,17 @@
                         <div class="telemetry-bar">
                             <div class="telemetry-box">
                                 <span class="telem-label">MODEL CONFIDENCE</span>
-                                <span class="telem-val" id="telemConfidence">94.6%</span>
+                                <span class="telem-val" id="telemConfidence">—</span>
                                 <span class="telem-sub">SSD-MobileNetV2</span>
                             </div>
                             <div class="telemetry-box">
                                 <span class="telem-label">RELATIVE SEVERITY</span>
-                                <span class="telem-val" id="telemSeverity">Critical</span>
+                                <span class="telem-val" id="telemSeverity">—</span>
                                 <span class="telem-sub">Visual Bounding Extent</span>
                             </div>
                             <div class="telemetry-box">
                                 <span class="telem-label">IMAGE EXTENT AREA</span>
-                                <span class="telem-val" id="telemArea">26.5%</span>
+                                <span class="telem-val" id="telemArea">—</span>
                                 <span class="telem-sub">Defect Envelope Ratio</span>
                             </div>
                         </div>
@@ -519,13 +661,17 @@
                         <div class="output-block">
                             <div class="spec-row">
                                 <span class="spec-label">PREDICTED CLASS:</span>
-                                <span class="spec-value defect-bold" id="reviewPredictedClass">Pothole</span>
+                                <span class="spec-value defect-bold" id="reviewPredictedClass">—</span>
+                            </div>
+                            <div class="spec-row">
+                                <span class="spec-label">CITIZEN NOTES:</span>
+                                <span class="spec-value" id="reviewCitizenNotes" style="font-weight:400; color:#475569;">—</span>
                             </div>
 
                             <div class="action-matrix-card">
                                 <span class="matrix-tag">RELATIVE VISUAL SEVERITY</span>
-                                <p class="matrix-severity" id="reviewCalculatedSeverity">[ RELATIVE SEVERITY: CRITICAL ]</p>
-                                <p class="matrix-sla">Awaiting professional engineering assessment and validation notes</p>
+                                <p class="matrix-severity" id="reviewCalculatedSeverity">[ RELATIVE SEVERITY: — ]</p>
+                                <p class="matrix-sla">Subject to professional civil engineering validation & sign-off</p>
                             </div>
                         </div>
 
@@ -575,7 +721,7 @@
 
                             <div class="form-group">
                                 <label for="engineerNotes" class="field-label">ENGINEER REVIEW NOTES *</label>
-                                <textarea id="engineerNotes" class="field-textarea" rows="4" placeholder="Enter engineering review findings, maintenance recommendations, or field observations..."></textarea>
+                                <textarea id="engineerNotes" class="field-textarea" rows="3" placeholder="Enter professional engineering review findings, maintenance recommendations, or field observations..."></textarea>
                             </div>
 
                             <button type="button" class="btn-primary btn-signoff" id="btnSubmitSignOff">
@@ -587,12 +733,145 @@
             </div>
         </section>
 
-        <!-- VIEW 5: ADMIN MANAGEMENT (FR-10) -->
+        <!-- VIEW 5: COHESIVE ADMIN DASHBOARD FOR SYSTEM OVERSIGHT -->
+        <section class="view-section" id="view-admin-dashboard">
+            <div class="view-header">
+                <div>
+                    <h2 class="view-title">System Administration & Oversight Dashboard</h2>
+                    <p class="view-desc">High-level governance analytics, verification queues, and infrastructure platform health</p>
+                </div>
+                <button class="btn-secondary btn-sm" id="btnRefreshAdminDashboard">🔄 Refresh Metrics</button>
+            </div>
+
+            <!-- Pending Engineer Review Alert Shortcut -->
+            <div class="admin-alert-banner hidden" id="adminPendingAlertBanner">
+                <div class="admin-alert-content">
+                    <span class="admin-alert-icon">⚠️</span>
+                    <div>
+                        <strong style="color: #1e3a8a;">Pending Engineer Accreditation Reviews:</strong>
+                        <span id="adminPendingAlertText" style="color: #3b82f6; margin-left: 4px;">0 engineers awaiting verification</span>
+                    </div>
+                </div>
+                <button type="button" class="btn-primary btn-sm" id="btnGoToVerification">
+                    Open Verification Queue →
+                </button>
+            </div>
+
+            <!-- KPI Metric Tiles -->
+            <div class="kpi-grid">
+                <div class="kpi-card">
+                    <span class="kpi-label">TOTAL REGISTERED USERS</span>
+                    <div class="kpi-value-row">
+                        <span class="kpi-number" id="dashTotalUsers">0</span>
+                    </div>
+                    <span class="kpi-footer" id="dashUserRoleBreakdown">Citizens & Engineers</span>
+                </div>
+                <div class="kpi-card">
+                    <span class="kpi-label">VERIFIED ENGINEERS</span>
+                    <div class="kpi-value-row">
+                        <span class="kpi-number text-success" id="dashVerifiedEngineers">0</span>
+                    </div>
+                    <span class="kpi-footer">Accredited reviewers</span>
+                </div>
+                <div class="kpi-card">
+                    <span class="kpi-label">TOTAL DEFECT REPORTS</span>
+                    <div class="kpi-value-row">
+                        <span class="kpi-number" id="dashTotalReports">0</span>
+                    </div>
+                    <span class="kpi-footer" id="dashOpenReports">0 Open / Under Review</span>
+                </div>
+                <div class="kpi-card">
+                    <span class="kpi-label">RESOLUTION RATE</span>
+                    <div class="kpi-value-row">
+                        <span class="kpi-number text-primary" id="dashResolutionRate">0%</span>
+                    </div>
+                    <span class="kpi-footer">Reports Resolved</span>
+                </div>
+            </div>
+
+            <!-- Governance Analytics: Corridor Hotspots & Engineer Workload -->
+            <div class="dashboard-columns" style="margin-top: 1.5rem;">
+                <div class="glass-card table-card">
+                    <div class="card-header-bar">
+                        <span class="step-tag">REPORTS BY INFRASTRUCTURE CORRIDOR</span>
+                        <span class="mode-tag">Geographic Hotspots</span>
+                    </div>
+                    <div class="table-container">
+                        <table class="data-table" id="corridorTable">
+                            <thead>
+                                <tr>
+                                    <th>Corridor / Asset Location</th>
+                                    <th>Total Defects</th>
+                                    <th>Critical</th>
+                                </tr>
+                            </thead>
+                            <tbody id="corridorTableBody">
+                                <!-- Populated dynamically via JS -->
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <div class="glass-card table-card">
+                    <div class="card-header-bar">
+                        <span class="step-tag">PROFESSIONAL ENGINEER WORKLOAD</span>
+                        <span class="mode-tag">Review Distribution</span>
+                    </div>
+                    <div class="table-container">
+                        <table class="data-table" id="workloadTable">
+                            <thead>
+                                <tr>
+                                    <th>Engineer / Reviewer</th>
+                                    <th>Organization</th>
+                                    <th>Inspections Completed</th>
+                                </tr>
+                            </thead>
+                            <tbody id="workloadTableBody">
+                                <!-- Populated dynamically via JS -->
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Compact System & Platform Health Indicators -->
+            <div class="admin-health-section">
+                <span class="step-tag">SYSTEM & AI SERVICE HEALTH INDICATORS</span>
+                <div class="admin-health-grid">
+                    <div class="health-status-card">
+                        <span class="health-label">Backend REST API</span>
+                        <span class="health-pill healthy" id="healthBackend">Online</span>
+                    </div>
+                    <div class="health-status-card">
+                        <span class="health-label">MongoDB Database</span>
+                        <span class="health-pill healthy" id="healthMongo">Connected</span>
+                    </div>
+                    <div class="health-status-card">
+                        <span class="health-label">SSD-MobileNetV2 Model</span>
+                        <span class="health-pill healthy" id="healthAiModel">Loaded</span>
+                    </div>
+                    <div class="health-status-card">
+                        <span class="health-label">Email OTP (2FA) Service</span>
+                        <span class="health-pill" id="healthEmail">Configured</span>
+                    </div>
+                    <div class="health-status-card">
+                        <span class="health-label">Google Identity (OAuth)</span>
+                        <span class="health-pill" id="healthGoogle">Configured</span>
+                    </div>
+                    <div class="health-status-card">
+                        <span class="health-label">GIS / Google Maps</span>
+                        <span class="health-pill" id="healthMaps">Active</span>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- VIEW 6: ADMIN USER MANAGEMENT (FR-10) -->
         <section class="view-section" id="view-admin">
             <div class="view-header">
                 <div>
-                    <h2 class="view-title">System Administration & Account Governance</h2>
-                    <p class="view-desc">FR-10: Professional Engineer Licensing Verification & Role Authorization</p>
+                    <h2 class="view-title">Professional Verification & User Governance</h2>
+                    <p class="view-desc">FR-10: Professional Engineer Licensing Accreditation & Role Authorization</p>
                 </div>
             </div>
 
@@ -664,6 +943,7 @@
 
     <!-- Scripts -->
     <script src="js/api.js"></script>
+    <script src="js/map.js"></script>
     <script src="js/submission.js"></script>
     <script src="js/dashboard.js"></script>
     <script src="js/review.js"></script>
