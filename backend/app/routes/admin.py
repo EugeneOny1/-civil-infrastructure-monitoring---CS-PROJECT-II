@@ -1,3 +1,4 @@
+from datetime import datetime, timezone
 from flask import Blueprint, request, jsonify
 from ..models.user import User
 from ..services.database import db_service
@@ -68,4 +69,192 @@ def get_system_stats(current_user):
         'verified_engineers_count': verified_engineers,
         'total_defect_reports': len(all_reports),
         'total_professional_reviews': len(all_reviews)
+    }), 200
+
+@admin_bp.route('/dashboard', methods=['GET'])
+@role_required('admin')
+def get_admin_dashboard(current_user):
+    """
+    Cohesive Admin Dashboard providing high-level governance and system oversight:
+    - User distribution (citizens, engineers, admins) & active status
+    - Pending professional Engineer verification queue with direct actions
+    - Report activity (total, open, verified, resolved) & resolution rate
+    - Governance analytics (location hotspot distribution, asset types, defect trends)
+    - Operational health indicators (API, MongoDB, AI SavedModel, Email/OTP, Google Auth, Google Maps)
+    """
+    from flask import current_app
+    from ..services.inference import inference_service
+    from ..services.email_service import email_service
+    from ..models.report import InfrastructureReport
+
+    all_users = db_service.find('users')
+    all_reports = db_service.find('infrastructure_reports')
+    all_reviews = db_service.find('professional_reviews')
+
+    # 1. Users Summary
+    total_users = len(all_users)
+    citizens_count = sum(1 for u in all_users if u.get('role') == 'citizen')
+    engineers_count = sum(1 for u in all_users if u.get('role') == 'engineer')
+    admins_count = sum(1 for u in all_users if u.get('role') == 'admin')
+    active_users = sum(1 for u in all_users if u.get('verification_status') != 'rejected')
+
+    pending_engineer_list = []
+    for u in all_users:
+        if u.get('role') == 'engineer' and u.get('verification_status') == 'pending':
+            pending_engineer_list.append({
+                'user_id': str(u.get('_id')),
+                'name': u.get('name', 'Unknown'),
+                'email': u.get('email', ''),
+                'engineering_category': u.get('engineering_category', 'Graduate Engineer'),
+                'professional_reg_no': u.get('professional_reg_no', 'N/A'),
+                'organization': u.get('organization', 'Independent'),
+                'created_at': u.get('created_at', '')
+            })
+
+    users_summary = {
+        'total': total_users,
+        'citizens': citizens_count,
+        'engineers': engineers_count,
+        'admins': admins_count,
+        'active': active_users,
+        'pending_verifications_count': len(pending_engineer_list),
+        'pending_engineers': pending_engineer_list
+    }
+
+    # 2. Report Activity & Canonical Lifecycle Counts
+    total_reports = len(all_reports)
+    received_count = 0
+    under_review_count = 0
+    verified_count = 0
+    resolved_count = 0
+
+    reports_by_location = {}
+    reports_by_asset_type = {}
+    reports_by_defect = {}
+    resolution_times_hours = []
+
+    for r in all_reports:
+        # Canonical status mapping
+        raw_status = r.get('status', 'Received')
+        canonical_status = InfrastructureReport.canonical_status(raw_status)
+
+        if canonical_status == InfrastructureReport.STATUS_RECEIVED:
+            received_count += 1
+        elif canonical_status == InfrastructureReport.STATUS_UNDER_REVIEW:
+            under_review_count += 1
+        elif canonical_status == InfrastructureReport.STATUS_VERIFIED:
+            verified_count += 1
+        elif canonical_status == InfrastructureReport.STATUS_RESOLVED:
+            resolved_count += 1
+
+        # Location aggregations
+        meta = r.get('metadata') or {}
+        loc_name = meta.get('location_name') or r.get('location') or 'Unspecified Location'
+        # Group general area
+        area_key = loc_name.split('(')[0].split(',')[0].strip()
+        reports_by_location[area_key] = reports_by_location.get(area_key, 0) + 1
+
+        # Asset type breakdown
+        asset_type = meta.get('asset_type') or 'Road / Pavement'
+        reports_by_asset_type[asset_type] = reports_by_asset_type.get(asset_type, 0) + 1
+
+        # Defect class breakdown
+        d_class = meta.get('defect_class') or 'Crack'
+        reports_by_defect[d_class] = reports_by_defect.get(d_class, 0) + 1
+
+        # Resolution time calculation if status is resolved and status_history is present
+        if canonical_status == InfrastructureReport.STATUS_RESOLVED:
+            history = meta.get('status_history', [])
+            if history and len(history) >= 2:
+                try:
+                    t_start = datetime.fromisoformat(history[0]['timestamp'])
+                    t_end = datetime.fromisoformat(history[-1]['timestamp'])
+                    diff_h = (t_end - t_start).total_seconds() / 3600.0
+                    if diff_h >= 0:
+                        resolution_times_hours.append(diff_h)
+                except Exception:
+                    pass
+
+    open_reports = received_count + under_review_count
+    resolution_rate = round((resolved_count / total_reports * 100), 1) if total_reports > 0 else 0.0
+    avg_resolution_h = round(sum(resolution_times_hours) / len(resolution_times_hours), 1) if resolution_times_hours else 24.0
+
+    reports_summary = {
+        'total': total_reports,
+        'received': received_count,
+        'under_review': under_review_count,
+        'verified': verified_count,
+        'resolved': resolved_count,
+        'open_reports': open_reports,
+        'resolution_rate_percent': resolution_rate,
+        'avg_resolution_hours': avg_resolution_h
+    }
+
+    # 3. Governance Analytics
+    sorted_locations = sorted(reports_by_location.items(), key=lambda x: x[1], reverse=True)[:5]
+    top_locations = [{'location': loc, 'count': count} for loc, count in sorted_locations]
+
+    # Engineer workload distribution
+    workload_map = {}
+    for rev in all_reviews:
+        r_id = rev.get('reviewer_id', 'Unknown')
+        workload_map[r_id] = workload_map.get(r_id, 0) + 1
+
+    # Enrich reviewer names
+    user_lookup = {str(u.get('_id')): u.get('name', 'Unknown') for u in all_users}
+    engineer_workload = [
+        {'reviewer_name': user_lookup.get(uid, f"Engineer {uid[:6]}"), 'reviews_count': count}
+        for uid, count in workload_map.items()
+    ]
+
+    governance_analytics = {
+        'top_locations': top_locations,
+        'reports_by_asset_type': reports_by_asset_type,
+        'reports_by_defect': reports_by_defect,
+        'engineer_workload': engineer_workload
+    }
+
+    # 4. System Health Indicators
+    google_maps_key = current_app.config.get('GOOGLE_MAPS_API_KEY')
+    google_client_id = current_app.config.get('GOOGLE_CLIENT_ID')
+    smtp_configured = email_service.is_configured()
+
+    system_health = {
+        'backend_api': {
+            'status': 'healthy',
+            'version': '2.0.0',
+            'framework': 'Flask 3.1 / Python 3.13'
+        },
+        'database': {
+            'status': 'connected' if not db_service.use_mock else 'mock_fallback',
+            'engine': 'MongoDB' if not db_service.use_mock else 'In-Memory Mock Store',
+            'database_name': db_service.db_name
+        },
+        'ai_model': {
+            'status': 'loaded' if getattr(inference_service, 'is_loaded', False) else 'offline',
+            'model_name': inference_service.DEFAULT_MODEL_NAME,
+            'version': inference_service.DEFAULT_MODEL_VERSION,
+            'detections_supported': ['Crack', 'Pothole', 'Surface deterioration']
+        },
+        'email_otp': {
+            'status': 'configured' if smtp_configured else 'demo_mode',
+            'provider': 'SMTP External Server' if smtp_configured else 'Local Cryptographic Generator (Demo Passcode)',
+            'expiry_minutes': email_service.OTP_EXPIRY_MINUTES,
+            'cooldown_seconds': email_service.RESEND_COOLDOWN_SECONDS
+        },
+        'google_auth': {
+            'status': 'configured' if bool(google_client_id) else 'pending_client_id',
+            'has_client_id': bool(google_client_id)
+        },
+        'google_maps': {
+            'status': 'configured' if bool(google_maps_key) else 'pending_api_key',
+            'has_api_key': bool(google_maps_key)
+        }
+    }
+
+    return jsonify({
+        'users_summary': users_summary,
+        'reports_summary': reports_summary,
+        'governance_analytics': governance_analytics,
+        'system_health': system_health
     }), 200
