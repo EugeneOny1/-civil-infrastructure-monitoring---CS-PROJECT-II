@@ -22,6 +22,15 @@ class TestAuthAndMaps(unittest.TestCase):
     def setUpClass(cls):
         cls.app = create_app('testing')
         cls.client = cls.app.test_client()
+        cls.created_user_emails = []
+
+    @classmethod
+    def tearDownClass(cls):
+        for email in cls.created_user_emails:
+            try:
+                db_service.delete_one('users', {'email': email})
+            except Exception:
+                pass
 
     def test_01_strong_password_policy(self):
         """Verifies modern password complexity enforcement."""
@@ -106,6 +115,7 @@ class TestAuthAndMaps(unittest.TestCase):
             'password': 'SecureCitizen@2026',
             'role': 'citizen'
         }
+        self.__class__.created_user_emails.append(strong_payload['email'])
         res_ok = self.client.post('/api/auth/register', json=strong_payload)
         self.assertEqual(res_ok.status_code, 201)
         self.assertIn('token', res_ok.get_json())
@@ -132,6 +142,7 @@ class TestAuthAndMaps(unittest.TestCase):
             'engineering_category': 'Graduate Engineer',
             'professional_reg_no': 'B24512'
         }
+        self.__class__.created_user_emails.append(valid_ebk_payload['email'])
         res_ok = self.client.post('/api/auth/register', json=valid_ebk_payload)
         self.assertEqual(res_ok.status_code, 201)
         user = res_ok.get_json()['user']
@@ -142,6 +153,7 @@ class TestAuthAndMaps(unittest.TestCase):
     def test_05_otp_generation_and_2fa_workflow(self):
         """Verifies OTP generation, expiry calculation, attempt limit, and verification."""
         test_email = f'otp_user_{int(datetime.now().timestamp())}@test.com'
+        self.__class__.created_user_emails.append(test_email)
         reg_payload = {
             'name': 'Eng. OTP Test',
             'email': test_email,
@@ -181,6 +193,7 @@ class TestAuthAndMaps(unittest.TestCase):
     def test_06_google_sign_in_citizen_role_enforcement(self):
         """Verifies Google Sign-In creates Citizen accounts and never grants Engineer or Admin roles."""
         google_email = f'google_user_{int(datetime.now().timestamp())}@gmail.com'
+        self.__class__.created_user_emails.append(google_email)
         res = self.client.post('/api/auth/google', json={
             'email': google_email,
             'name': 'Google Citizen',

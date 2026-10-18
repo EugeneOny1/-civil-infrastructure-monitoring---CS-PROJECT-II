@@ -154,10 +154,14 @@ const App = {
             });
         }
 
-        // Admin role filter change
+        // Admin role filter & user search
         const adminRoleFilter = document.getElementById('adminRoleFilter');
         if (adminRoleFilter) {
             adminRoleFilter.addEventListener('change', () => this.loadAdminData());
+        }
+        const adminUserSearch = document.getElementById('adminUserSearch');
+        if (adminUserSearch) {
+            adminUserSearch.addEventListener('input', () => this.loadAdminData());
         }
     },
 
@@ -767,9 +771,20 @@ const App = {
             document.getElementById('adminVerifiedEngineers').textContent = statsData.verified_engineers_count || 0;
             document.getElementById('adminTotalReports').textContent = statsData.total_defect_reports || 0;
 
-            const users = usersData.users || [];
+            const searchInput = (document.getElementById('adminUserSearch')?.value || '').toLowerCase().trim();
+            let users = usersData.users || [];
+            if (searchInput) {
+                users = users.filter(u => {
+                    const name = (u.name || '').toLowerCase();
+                    const email = (u.email || '').toLowerCase();
+                    const org = (u.organization || '').toLowerCase();
+                    const reg = (u.professional_reg_no || '').toLowerCase();
+                    return name.includes(searchInput) || email.includes(searchInput) || org.includes(searchInput) || reg.includes(searchInput);
+                });
+            }
+
             if (users.length === 0) {
-                tbody.innerHTML = `<tr><td colspan="7" style="text-align:center; padding: 2rem; color: #86868b;">No user records found.</td></tr>`;
+                tbody.innerHTML = `<tr><td colspan="7" style="text-align:center; padding: 2rem; color: #86868b;">No matching user records found.</td></tr>`;
                 return;
             }
 
