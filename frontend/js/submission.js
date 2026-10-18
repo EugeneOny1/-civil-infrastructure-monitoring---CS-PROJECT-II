@@ -58,8 +58,27 @@ const Submission = {
         if (gpsBtn) {
             gpsBtn.addEventListener('click', () => {
                 const locInput = document.getElementById('defectLocation');
-                locInput.value = "Uhuru Highway (Chainage 14+350) [-1.2921° S, 36.8219° E]";
-                window.App.showToast("GPS coordinates attached to defect location.");
+                if (navigator.geolocation) {
+                    window.App.showToast("Acquiring GPS location from device...");
+                    navigator.geolocation.getCurrentPosition(
+                        (position) => {
+                            const lat = position.coords.latitude;
+                            const lng = position.coords.longitude;
+                            this.selectedCoordinates = { latitude: lat, longitude: lng };
+                            const currentVal = locInput.value ? locInput.value.split('[')[0].trim() : '';
+                            locInput.value = currentVal ? `${currentVal} [${lat.toFixed(5)}°, ${lng.toFixed(5)}°]` : `Location Tag [${lat.toFixed(5)}°, ${lng.toFixed(5)}°]`;
+                            window.App.showToast(`Coordinates tagged: ${lat.toFixed(4)}°, ${lng.toFixed(4)}°`);
+                        },
+                        (err) => {
+                            console.warn("Geolocation warning:", err);
+                            this.selectedCoordinates = null;
+                            window.App.showToast("Could not access device GPS. Please type the location manually.", true);
+                        },
+                        { timeout: 8000, enableHighAccuracy: true }
+                    );
+                } else {
+                    window.App.showToast("Geolocation not supported by browser. Enter location manually.", true);
+                }
             });
         }
 
@@ -70,6 +89,7 @@ const Submission = {
         if (resetBtn) {
             resetBtn.addEventListener('click', () => {
                 this.clearFile();
+                this.selectedCoordinates = null;
                 document.getElementById('defectNotes').value = '';
                 document.getElementById('resDefectClass').textContent = '—';
                 document.getElementById('resConfidence').textContent = '—';
@@ -77,6 +97,9 @@ const Submission = {
                 document.getElementById('resSeverity').className = 'severity-pill';
                 document.getElementById('resAreaRatio').textContent = '—';
                 
+                const badgeList = document.getElementById('multiDetectionsList');
+                if (badgeList) badgeList.innerHTML = '';
+
                 const placeholder = document.getElementById('canvasPlaceholder');
                 if (placeholder) placeholder.classList.remove('hidden');
                 
@@ -191,6 +214,11 @@ const Submission = {
         formData.append('location', location);
         formData.append('description', notes);
 
+        if (this.selectedCoordinates) {
+            formData.append('latitude', this.selectedCoordinates.latitude);
+            formData.append('longitude', this.selectedCoordinates.longitude);
+        }
+
         const btn = document.getElementById('btnSubmitAiAnalysis');
         const originalText = btn.innerHTML;
         btn.innerHTML = `<span>⏳</span> Analyzing with SSD-MobileNetV2...`;
@@ -239,6 +267,23 @@ const Submission = {
             ? `${ai.area_percentage}% of image extent`
             : '0.0% of image extent';
 
+        // Multi-detection summary badge chips
+        const badgeList = document.getElementById('multiDetectionsList');
+        if (badgeList) {
+            if (detections.length > 0) {
+                badgeList.innerHTML = detections.map(d => {
+                    const cls = d.class_name || d.defect_class || 'Defect';
+                    const confVal = d.confidence !== undefined ? d.confidence : (d.confidence_score || 0);
+                    const conf = Math.round(confVal * 100);
+                    const dSev = d.severity || d.relative_severity || 'Low';
+                    const slug = cls.toLowerCase().includes('crack') ? 'crack' : (cls.toLowerCase().includes('pothole') ? 'pothole' : 'surface');
+                    return `<span class="defect-badge-pill ${slug}">${cls} • ${conf}% Conf • [${dSev} Severity]</span>`;
+                }).join('');
+            } else {
+                badgeList.innerHTML = `<span class="badge-tag" style="background:#f1f5f9; color:#64748b;">No defect detections above threshold</span>`;
+            }
+        }
+
         const noticeEl = document.getElementById('noticeText');
         if (noticeEl && ai.disclaimer) {
             noticeEl.textContent = ai.disclaimer;
@@ -252,7 +297,7 @@ const Submission = {
                 flagBanner.classList.remove('hidden');
                 flagMsgEl.textContent = data.validation.validation_message
                     || (data.validation.flag_reasons && data.validation.flag_reasons.length > 0 ? data.validation.flag_reasons.join(' • ') : '')
-                    || 'Unusual defect-infrastructure pairing detected. Retained and flagged for certified civil engineer review.';
+                    || 'Unusual defect-infrastructure pairing detected. Retained under canonical status Received for certified civil engineer review.';
             } else {
                 flagBanner.classList.add('hidden');
             }
