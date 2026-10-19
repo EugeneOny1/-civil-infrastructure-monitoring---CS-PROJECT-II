@@ -75,37 +75,51 @@ const App = {
                 dotEl.className = `user-dot ${isVerified ? 'verified' : 'pending'}`;
             }
 
-            // Strict Role-Based Navigation:
+            // Exact, explicit Role-Based Navigation:
             if (user.role === 'admin') {
                 // Admin ONLY sees Admin Dashboard and User Governance
-                citizenTabs.forEach(el => el.classList.add('hidden'));
-                engineerTabs.forEach(el => el.classList.add('hidden'));
-                adminTabs.forEach(el => el.classList.remove('hidden'));
-            } else if (user.role === 'engineer') {
-                // Engineer sees Monitoring Dashboard, Defect Review, and Infrastructure Map
-                adminTabs.forEach(el => el.classList.add('hidden'));
                 document.getElementById('tabSubmit')?.classList.add('hidden');
                 document.getElementById('tabTracking')?.classList.add('hidden');
+                document.getElementById('tabMap')?.classList.add('hidden');
+                document.getElementById('tabDashboard')?.classList.add('hidden');
+                document.getElementById('tabReview')?.classList.add('hidden');
+                document.getElementById('tabAdminDashboard')?.classList.remove('hidden');
+                document.getElementById('tabAdmin')?.classList.remove('hidden');
+            } else if (user.role === 'engineer') {
+                // Engineer sees: Report Defect, My Reports, Infrastructure Map, Monitoring Dashboard, Defect Review
+                document.getElementById('tabSubmit')?.classList.remove('hidden');
+                document.getElementById('tabTracking')?.classList.remove('hidden');
                 document.getElementById('tabMap')?.classList.remove('hidden');
+                document.getElementById('tabAdminDashboard')?.classList.add('hidden');
+                document.getElementById('tabAdmin')?.classList.add('hidden');
                 if (isVerified) {
-                    engineerTabs.forEach(el => el.classList.remove('hidden'));
+                    document.getElementById('tabDashboard')?.classList.remove('hidden');
+                    document.getElementById('tabReview')?.classList.remove('hidden');
                 } else {
                     document.getElementById('tabDashboard')?.classList.add('hidden');
                     document.getElementById('tabReview')?.classList.add('hidden');
                 }
             } else {
-                // Citizen sees Report Defect, My Reports, and Infrastructure Map
-                citizenTabs.forEach(el => el.classList.remove('hidden'));
-                engineerTabs.forEach(el => el.classList.add('hidden'));
-                adminTabs.forEach(el => el.classList.add('hidden'));
+                // Citizen sees: Report Defect, My Reports, and Infrastructure Map
+                document.getElementById('tabSubmit')?.classList.remove('hidden');
+                document.getElementById('tabTracking')?.classList.remove('hidden');
+                document.getElementById('tabMap')?.classList.remove('hidden');
+                document.getElementById('tabDashboard')?.classList.add('hidden');
+                document.getElementById('tabReview')?.classList.add('hidden');
+                document.getElementById('tabAdminDashboard')?.classList.add('hidden');
+                document.getElementById('tabAdmin')?.classList.add('hidden');
             }
         } else {
             // Unauthenticated Guest: public Citizen views
             if (profileBadge) profileBadge.classList.add('hidden');
             if (authButtons) authButtons.classList.remove('hidden');
-            citizenTabs.forEach(el => el.classList.remove('hidden'));
-            engineerTabs.forEach(el => el.classList.add('hidden'));
-            adminTabs.forEach(el => el.classList.add('hidden'));
+            document.getElementById('tabSubmit')?.classList.remove('hidden');
+            document.getElementById('tabTracking')?.classList.remove('hidden');
+            document.getElementById('tabMap')?.classList.remove('hidden');
+            document.getElementById('tabDashboard')?.classList.add('hidden');
+            document.getElementById('tabReview')?.classList.add('hidden');
+            document.getElementById('tabAdminDashboard')?.classList.add('hidden');
+            document.getElementById('tabAdmin')?.classList.add('hidden');
         }
     },
 
