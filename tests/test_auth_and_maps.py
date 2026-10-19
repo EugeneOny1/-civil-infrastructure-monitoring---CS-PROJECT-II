@@ -281,7 +281,7 @@ class TestAuthAndMaps(unittest.TestCase):
         self.assertEqual(res_verify.get_json()['status'], 'Verified')
 
     def test_10_map_config_nairobi_defaults(self):
-        """Verifies GET /api/reports/map/config defaults strictly to Nairobi, Kenya."""
+        """Verifies GET /api/reports/map/config defaults strictly to Nairobi, Kenya with Leaflet provider."""
         res = self.client.get('/api/reports/map/config')
         self.assertEqual(res.status_code, 200)
         data = res.get_json()
@@ -291,7 +291,11 @@ class TestAuthAndMaps(unittest.TestCase):
         self.assertIn('default_zoom', data)
         self.assertEqual(data['default_zoom'], 12)
         self.assertIn('provider', data)
-        self.assertEqual(data['provider'], 'google_maps')
+        self.assertEqual(data['provider'], 'leaflet')
+        self.assertIn('tile_layer', data)
+        self.assertIn('tile.openstreetmap.org', data['tile_layer'])
+        self.assertIn('attribution', data)
+        self.assertIn('OpenStreetMap', data['attribution'])
 
     def test_11_admin_role_authorization_and_overview_metrics(self):
         """Verifies non-admins are blocked with 403, and admins receive real metric overviews."""
@@ -313,6 +317,135 @@ class TestAuthAndMaps(unittest.TestCase):
         self.assertIn('reports', data)
         self.assertIn('reports_by_location', data)
         self.assertIn('engineer_workload', data)
+
+    def test_12_submitter_and_reviewer_identity_preservation(self):
+        """Verifies distinct preservation of report submitter vs reviewer identities in metadata and audit trail."""
+        author_user_id = 'usr_eng_test_author'
+        peer_user_id = 'usr_eng_test_peer'
+
+        db_service.insert('users', {
+            '_id': author_user_id,
+            'user_id': author_user_id,
+            'name': 'Eng. Submitter Author',
+            'email': 'author_eng@infravision.ke',
+            'role': 'engineer',
+            'engineering_category': 'Professional Engineer',
+            'professional_reg_no': 'A5512',
+            'verification_status': 'verified',
+            'created_at': datetime.now(timezone.utc).isoformat()
+        })
+        db_service.insert('users', {
+            '_id': peer_user_id,
+            'user_id': peer_user_id,
+            'name': 'Eng. Peer Reviewer',
+            'email': 'peer_eng@infravision.ke',
+            'role': 'engineer',
+            'engineering_category': 'Professional Engineer',
+            'professional_reg_no': 'A5513',
+            'verification_status': 'verified',
+            'created_at': datetime.now(timezone.utc).isoformat()
+        })
+        self.__class__.created_user_emails.extend(['author_eng@infravision.ke', 'peer_eng@infravision.ke'])
+
+        from app.utils.auth_helpers import create_access_token
+        with self.app.app_context():
+            eng_author_token = create_access_token({
+                'user_id': author_user_id,
+                'role': 'engineer',
+                'name': 'Eng. Submitter Author',
+                'email': 'author_eng@infravision.ke'
+            })
+            eng_reviewer_token = create_access_token({
+                'user_id': peer_user_id,
+                'role': 'engineer',
+                'name': 'Eng. Peer Reviewer',
+                'email': 'peer_eng@infravision.ke'
+            })
+
+        # Engineer submits a report
+        import io
+        seed_path = os.path.abspath(os.path.join(
+            os.path.dirname(__file__), '..', 'backend', 'uploads', 'seed_pothole.jpg'
+        ))
+        with open(seed_path, 'rb') as f:
+            img_bytes = f.read()
+
+        submit_payload = {
+            'image': (io.BytesIO(img_bytes), 'recon_defect.jpg'),
+            'latitude': '-1.286389',
+            'longitude': '36.817223',
+            'location': 'Haile Selassie Avenue, Nairobi',
+            'asset_type': 'Road / Pavement',
+            'description': 'Pothole observed during routine civil engineering field reconnaissance.'
+        }
+        res_submit = self.client.post(
+            '/api/reports',
+            data=submit_payload,
+            content_type='multipart/form-data',
+            headers={'Authorization': f'Bearer {eng_author_token}'}
+        )
+        self.assertEqual(res_submit.status_code, 201)
+        report_id = res_submit.get_json()['report_id']
+
+        # Verify report detail shows distinct submitter identity
+        res_detail = self.client.get(
+            f'/api/reports/{report_id}',
+            headers={'Authorization': f'Bearer {eng_reviewer_token}'}
+        )
+        self.assertEqual(res_detail.status_code, 200)
+        detail = res_detail.get_json()
+        self.assertIn('submitter', detail)
+        self.assertEqual(detail['submitter']['user_id'], author_user_id)
+        self.assertEqual(detail['submitter']['role'], 'engineer')
+        self.assertEqual(detail['submitter']['name'], 'Eng. Submitter Author')
+
+        # Peer engineer reviews the report (not self-review)
+        res_peer_review = self.client.post(
+            f'/api/reviews/report/{report_id}',
+            json={
+                'decision': 'Confirmed',
+                'target_status': 'Verified',
+                'notes': 'Independent peer review confirmed severity and defect categorization.'
+            },
+            headers={'Authorization': f'Bearer {eng_reviewer_token}'}
+        )
+        self.assertEqual(res_peer_review.status_code, 200)
+
+        # Inspect updated document in database
+        updated_doc = db_service.find_one('infrastructure_reports', {'_id': report_id})
+        self.assertIsNotNone(updated_doc)
+        meta = updated_doc.get('metadata', {})
+        self.assertEqual(meta.get('submitted_by_id'), author_user_id)
+        self.assertEqual(meta.get('reviewer_id'), peer_user_id)
+        self.assertFalse(meta.get('is_self_review', True))
+
+        # Check audit trail records distinct identities
+        audit_trail = meta.get('status_history', [])
+        self.assertGreater(len(audit_trail), 0)
+        last_entry = audit_trail[-1]
+        self.assertEqual(last_entry.get('reviewer_id'), peer_user_id)
+        self.assertEqual(last_entry.get('submitter_id'), author_user_id)
+        self.assertFalse(last_entry.get('is_self_review', True))
+
+        # Test self-review flag when author reviews their own report
+        res_self_review = self.client.post(
+            f'/api/reviews/report/{report_id}',
+            json={
+                'decision': 'Site Cleared',
+                'target_status': 'Resolved',
+                'notes': 'Field repair confirmed completed during follow-up inspection.'
+            },
+            headers={'Authorization': f'Bearer {eng_author_token}'}
+        )
+        self.assertEqual(res_self_review.status_code, 200)
+        self_doc = db_service.find_one('infrastructure_reports', {'_id': report_id})
+        self_meta = self_doc.get('metadata', {})
+        self.assertTrue(self_meta.get('is_self_review'))
+        self.assertEqual(self_meta.get('reviewer_id'), author_user_id)
+        self.assertEqual(self_meta.get('submitted_by_id'), author_user_id)
+        self_last_audit = self_meta.get('status_history', [])[-1]
+        self.assertTrue(self_last_audit.get('is_self_review'))
+        self.assertIn('Self-submitted report', self_last_audit.get('note', ''))
 
 
 if __name__ == '__main__':
