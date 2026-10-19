@@ -388,18 +388,18 @@ def get_report_detail(current_user, report_id):
 
 @reports_bp.route('/map/config', methods=['GET'])
 def get_map_config():
-    """Returns Google Maps configuration including Nairobi center defaults and API key."""
-    api_key = current_app.config.get('GOOGLE_MAPS_API_KEY', '').strip()
+    """Returns Infrastructure Map configuration including Nairobi center defaults and Leaflet provider."""
     return jsonify({
-        'api_key': api_key,
-        'has_api_key': bool(api_key),
+        'provider': 'leaflet',
+        'tile_layer': 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+        'attribution': '&copy; <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a> contributors',
         'default_center': {
             'lat': -1.286389,
             'lng': 36.817223
         },
         'default_zoom': 12,
-        'provider': 'google_maps',
-        'map_id': 'DEMO_MAP_ID'
+        'min_zoom': 5,
+        'max_zoom': 19
     }), 200
 
 

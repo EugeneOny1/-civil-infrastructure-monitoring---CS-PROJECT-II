@@ -1,6 +1,6 @@
 /**
  * InfraVision Map Module - Interactive Civil Infrastructure Defect Map
- * Powered by Google Maps JavaScript API with Advanced Markers / Clustering (@googlemaps/markerclusterer).
+ * Powered by Leaflet + OpenStreetMap with Leaflet.markercluster.
  *
  * Defaults:
  *   Center: Nairobi, Kenya (Latitude: -1.286389, Longitude: 36.817223)
@@ -10,27 +10,31 @@
  *   Strips private citizen identities (names, emails, phone numbers) to safeguard privacy.
  */
 
-// Source: Google Maps Platform Code Assist
 const DefectMap = {
-    mapInstance: null,
-    markers: [],
-    clusterer: null,
-    infoWindow: null,
+    map: null,
+    markerCluster: null,
+    tileLayer: null,
     reportsData: [],
-    apiKey: '',
-    defaultCenter: { lat: -1.286389, lng: 36.817223 },
-    defaultZoom: 12,
+    config: {
+        default_center: { lat: -1.286389, lng: 36.817223 },
+        default_zoom: 12,
+        min_zoom: 5,
+        max_zoom: 19,
+        tile_layer: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+        attribution: '&copy; <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a> contributors'
+    },
     activeFilters: {
         defect_class: '',
         status: '',
         severity: '',
         asset_type: ''
     },
-    isScriptLoading: false,
+    isInitialized: false,
 
     async init() {
         this.bindEvents();
         await this.loadConfig();
+        await this.initLeafletMap();
         await this.loadMapData();
     },
 
@@ -69,7 +73,7 @@ const DefectMap = {
         if (refreshBtn) {
             refreshBtn.addEventListener('click', () => {
                 this.loadMapData();
-                window.App.showToast("Refreshed infrastructure map data.");
+                window.App?.showToast("Refreshed infrastructure map data.");
             });
         }
         if (resetBtn) {
@@ -77,6 +81,10 @@ const DefectMap = {
                 this.resetFilters();
             });
         }
+
+        window.addEventListener('resize', () => {
+            this.invalidateSize();
+        });
     },
 
     resetFilters() {
@@ -102,296 +110,236 @@ const DefectMap = {
     async loadConfig() {
         try {
             const config = await window.Api.getMapConfig();
-            if (config && config.api_key) {
-                this.apiKey = config.api_key;
-            }
-            if (config && config.default_center) {
-                this.defaultCenter = config.default_center;
-            }
-            if (config && config.default_zoom) {
-                this.defaultZoom = config.default_zoom;
+            if (config) {
+                if (config.default_center) this.config.default_center = config.default_center;
+                if (config.default_zoom) this.config.default_zoom = config.default_zoom;
+                if (config.tile_layer) this.config.tile_layer = config.tile_layer;
+                if (config.attribution) this.config.attribution = config.attribution;
             }
         } catch (e) {
-            console.warn("[DefectMap] Could not fetch map config from backend:", e);
-        }
-
-        // Check local override or demo key saved by user in session
-        const localKey = localStorage.getItem('GOOGLE_MAPS_API_KEY') || sessionStorage.getItem('GOOGLE_MAPS_API_KEY');
-        if (localKey) {
-            this.apiKey = localKey.trim();
+            console.warn("[DefectMap] Using default Nairobi map configuration:", e);
         }
     },
 
-    ensureGoogleMapsLoaded() {
-        if (window.google && window.google.maps) {
-            return Promise.resolve(true);
+    async initLeafletMap() {
+        const container = document.getElementById('infrastructureMapContainer');
+        if (!container) return;
+
+        // Ensure Leaflet library is loaded
+        if (typeof L === 'undefined') {
+            console.error("[DefectMap] Leaflet library not loaded.");
+            return;
         }
 
-        if (!this.apiKey) {
-            return Promise.resolve(false);
+        // Avoid repeated initialization of the same container
+        if (this.map) {
+            this.invalidateSize();
+            return;
         }
 
-        if (this.isScriptLoading) {
-            return new Promise((resolve) => {
-                const interval = setInterval(() => {
-                    if (window.google && window.google.maps) {
-                        clearInterval(interval);
-                        resolve(true);
-                    }
-                }, 100);
-                setTimeout(() => {
-                    clearInterval(interval);
-                    resolve(Boolean(window.google && window.google.maps));
-                }, 10000);
+        const centerLat = this.config.default_center.lat || -1.286389;
+        const centerLng = this.config.default_center.lng || 36.817223;
+        const zoom = this.config.default_zoom || 12;
+
+        try {
+            this.map = L.map(container, {
+                center: [centerLat, centerLng],
+                zoom: zoom,
+                minZoom: this.config.min_zoom || 5,
+                maxZoom: this.config.max_zoom || 19,
+                zoomAnimation: true,
+                fadeAnimation: true,
+                markerZoomAnimation: true,
+                preferCanvas: true
             });
+
+            this.tileLayer = L.tileLayer(this.config.tile_layer, {
+                maxZoom: 19,
+                attribution: this.config.attribution
+            }).addTo(this.map);
+
+            // Initialize marker cluster group
+            if (typeof L.markerClusterGroup === 'function') {
+                this.markerCluster = L.markerClusterGroup({
+                    chunkedLoading: true,
+                    maxClusterRadius: 40,
+                    spiderfyOnMaxZoom: true,
+                    showCoverageOnHover: false,
+                    zoomToBoundsOnClick: true
+                });
+                this.map.addLayer(this.markerCluster);
+            } else {
+                console.warn("[DefectMap] Leaflet.markercluster not found. Falling back to standard LayerGroup.");
+                this.markerCluster = L.layerGroup().addTo(this.map);
+            }
+
+            this.isInitialized = true;
+            this.invalidateSize();
+        } catch (err) {
+            console.error("[DefectMap] Error initializing Leaflet map:", err);
         }
+    },
 
-        this.isScriptLoading = true;
-
-        return new Promise((resolve) => {
-            // Global auth failure hook
-            window.gm_authFailure = () => {
-                console.error("[DefectMap] Google Maps authentication failed. Key may be restricted, expired, or lack Maps JavaScript API permissions.");
-                const container = document.getElementById('infrastructureMapContainer');
-                if (container) {
-                    this.renderConfigurationState(container, "Google Maps Authentication Failed: The API key entered was rejected by Google Cloud. Please verify key restrictions and enable the 'Maps JavaScript API'.");
+    invalidateSize() {
+        if (this.map) {
+            setTimeout(() => {
+                try {
+                    this.map.invalidateSize();
+                } catch (e) {
+                    // Suppress if map is not rendered
                 }
-            };
+            }, 100);
+        }
+    },
 
-            const script = document.createElement('script');
-            script.src = `https://maps.googleapis.com/maps/api/js?key=${encodeURIComponent(this.apiKey)}&v=weekly&libraries=marker`;
-            script.async = true;
-            script.defer = true;
-            script.onload = () => {
-                this.isScriptLoading = false;
-                resolve(true);
-            };
-            script.onerror = () => {
-                this.isScriptLoading = false;
-                console.error("[DefectMap] Failed loading Google Maps JavaScript API script.");
-                resolve(false);
-            };
-            document.head.appendChild(script);
+    createMarkerIcon(severity, isUnusual) {
+        let pinColor = '#10b981'; // Low: Green
+        if (severity === 'Critical') pinColor = '#ef4444'; // Critical: Red
+        else if (severity === 'Medium') pinColor = '#f59e0b'; // Medium: Amber
+
+        const iconHtml = `
+            <div class="custom-leaflet-pin" style="position:relative; width:28px; height:36px; cursor:pointer;">
+                <svg viewBox="0 0 30 38" width="28" height="36" style="filter: drop-shadow(0 2px 4px rgba(0,0,0,0.35));">
+                    <path d="M15 0C6.7 0 0 6.7 0 15c0 10.5 15 23 15 23s15-12.5 15-23c0-8.3-6.7-15-15-15z" fill="${pinColor}"/>
+                    <circle cx="15" cy="14" r="5.5" fill="#ffffff"/>
+                </svg>
+                ${isUnusual ? '<span style="position:absolute; top:-3px; right:-3px; font-size:11px;" title="Unusual Pairing Flagged">⚠️</span>' : ''}
+            </div>
+        `;
+
+        return L.divIcon({
+            className: 'leaflet-pin-wrapper',
+            html: iconHtml,
+            iconSize: [28, 36],
+            iconAnchor: [14, 36],
+            popupAnchor: [0, -34]
         });
+    },
+
+    createPopupContent(point) {
+        const repId = point.report_id ? point.report_id.slice(-6).toUpperCase() : '0000';
+        const defect = point.defect_class || 'Pavement Distress';
+        const sev = (point.relative_severity || 'Low').toUpperCase();
+        const sevClass = (point.relative_severity || 'low').toLowerCase();
+        const status = point.status || 'Received';
+        const statusSlug = status.toLowerCase().replace(/\s+/g, '-');
+        const asset = point.asset_type || 'Road / Pavement';
+        const location = point.location_name || 'Monitored Infrastructure';
+        const dateStr = point.date_submitted ? new Date(point.date_submitted).toLocaleDateString('en-KE', { dateStyle: 'medium' }) : 'Recently Submitted';
+        const isEngineer = window.App?.currentUser?.role === 'engineer';
+
+        return `
+            <div class="map-popup-card" style="font-family: inherit; min-width: 240px; padding: 2px;">
+                <div style="display:flex; justify-content:space-between; align-items:center; border-bottom:1px solid #e2e8f0; padding-bottom:6px; margin-bottom:8px;">
+                    <code style="font-weight:700; color:#1e293b; font-size:0.85rem;">#REP-${repId}</code>
+                    <span class="severity-pill ${sevClass}" style="font-size:0.7rem; padding:2px 8px;">${sev}</span>
+                </div>
+                ${point.image_url ? `<div style="width:100%; height:110px; border-radius:6px; overflow:hidden; margin-bottom:8px; background:#0f172a;"><img src="${point.image_url}" alt="Defect" style="width:100%; height:100%; object-fit:cover;" onerror="this.parentElement.style.display='none'"></div>` : ''}
+                <div style="font-size:0.9rem; font-weight:700; color:#0f172a; margin-bottom:3px;">${defect}</div>
+                <div style="font-size:0.78rem; color:#475569; margin-bottom:6px;">📍 ${location}</div>
+                <div style="display:flex; justify-content:space-between; align-items:center; font-size:0.75rem; color:#64748b; margin-bottom:8px;">
+                    <span>Asset: <strong>${asset}</strong></span>
+                    <span class="status-chip ${statusSlug}" style="font-size:0.7rem; padding:2px 8px;">${status}</span>
+                </div>
+                <div style="font-size:0.72rem; color:#94a3b8; border-top:1px solid #f1f5f9; padding-top:6px; display:flex; justify-content:space-between; align-items:center;">
+                    <span>📅 ${dateStr}</span>
+                    <span style="color:#059669; font-weight:600;">🔒 Reporter Protected</span>
+                </div>
+                ${isEngineer ? `
+                    <div style="margin-top:8px; border-top:1px solid #f1f5f9; padding-top:6px;">
+                        <button type="button" class="btn-primary btn-sm" style="width:100%; font-size:0.78rem; padding:4px 8px; border-radius:4px;" onclick="window.App.navigateTo('view-review', { reportId: '${point.report_id}' })">
+                            Inspect in Defect Review →
+                        </button>
+                    </div>
+                ` : ''}
+            </div>
+        `;
     },
 
     async loadMapData() {
         const container = document.getElementById('infrastructureMapContainer');
         if (!container) return;
 
+        if (!this.map) {
+            await this.initLeafletMap();
+        }
+
         try {
-            // Fetch real reports with valid geographic coordinates from backend MongoDB
+            // Fetch real reports with valid geographic coordinates from MongoDB
             const data = await window.Api.getMapPoints(this.activeFilters);
             this.reportsData = data.points || [];
 
             const countEl = document.getElementById('mapReportCount');
             if (countEl) countEl.textContent = `${this.reportsData.length} Pinpoints`;
 
-            // Try loading Google Maps JS API
-            const hasGoogle = await this.ensureGoogleMapsLoaded();
-
-            if (hasGoogle && window.google && window.google.maps) {
-                this.renderGoogleMap(container, this.reportsData);
-            } else {
-                this.renderConfigurationState(container);
-            }
+            this.renderMarkers(this.reportsData);
+            this.invalidateSize();
         } catch (err) {
             console.error("[DefectMap] Failed loading map points:", err);
-            container.innerHTML = `
-                <div class="map-config-card">
-                    <div class="map-config-icon" style="color:#ef4444;">⚠️</div>
-                    <h3 class="map-config-title">Infrastructure Map Offline</h3>
-                    <p class="map-config-desc">Failed to connect to the backend defect reports service. Please verify server connectivity.</p>
-                </div>`;
+            window.App?.showToast("Failed to load map points.", true);
         }
     },
 
-    renderConfigurationState(container, customError = '') {
-        container.innerHTML = `
-            <div class="map-config-card">
-                <div class="map-config-icon">🗺️</div>
-                <h3 class="map-config-title">Google Maps Platform Configuration</h3>
-                <p class="map-config-desc">
-                    The InfraVision defect monitoring map renders an interactive geographic view of Nairobi infrastructure corridors 
-                    using the <strong>Google Maps JavaScript API</strong> with marker clustering and real-time defect inspection.
-                </p>
+    renderMarkers(points) {
+        if (!this.markerCluster) return;
 
-                ${customError ? `<div style="background:#fef2f2; border:1px solid #fecaca; color:#b91c1c; padding:0.75rem 1rem; border-radius:6px; font-size:0.8rem; margin-bottom:1rem; max-width:540px; text-align:left;"><strong>Configuration Alert:</strong> ${customError}</div>` : ''}
+        // Clear existing markers
+        this.markerCluster.clearLayers();
 
-                <div class="map-config-box">
-                    <h4>⚙️ External Setup Instructions:</h4>
-                    <ol>
-                        <li>In your project root, open <code>backend/.env</code> and configure: <br><code>GOOGLE_MAPS_API_KEY=YOUR_ACTUAL_KEY</code></li>
-                        <li>Enable the <strong>Maps JavaScript API</strong> in your <a href="https://console.cloud.google.com/google/maps-apis/overview" target="_blank" style="color:#0284c7; text-decoration:underline;">Google Cloud Console</a>.</li>
-                        <li><strong>For Prototyping / Development:</strong> You may also use a free <a href="https://mapsplatform.google.com/maps-demo-key" target="_blank" style="color:#0284c7; text-decoration:underline;">Google Maps Demo Key</a> without billing setup.</li>
-                    </ol>
-                </div>
+        // Remove any existing empty overlay
+        const existingOverlay = document.querySelector('.map-empty-overlay');
+        if (existingOverlay) existingOverlay.remove();
 
-                <div class="map-key-form">
-                    <input type="text" id="inlineMapKeyInput" class="map-key-input" placeholder="Paste Google Maps API key or Demo Key here..." value="${this.apiKey || ''}">
-                    <button type="button" class="btn-primary btn-sm" id="btnApplyInlineKey">Apply Key & Load Map</button>
-                </div>
+        const container = document.getElementById('infrastructureMapContainer');
 
-                <div style="font-size: 0.75rem; color: #64748b; margin-top: 1rem;">
-                    Default Center: <strong>Nairobi, Kenya</strong> (Latitude: -1.286389, Longitude: 36.817223) • Zoom: 12
-                </div>
-            </div>
-        `;
-
-        const applyBtn = document.getElementById('btnApplyInlineKey');
-        const keyInput = document.getElementById('inlineMapKeyInput');
-        if (applyBtn && keyInput) {
-            applyBtn.addEventListener('click', async () => {
-                const enteredKey = keyInput.value.trim();
-                if (!enteredKey) {
-                    window.App.showToast("Please enter a valid Google Maps API Key or Demo Key.", true);
-                    return;
-                }
-                this.apiKey = enteredKey;
-                localStorage.setItem('GOOGLE_MAPS_API_KEY', enteredKey);
-                window.App.showToast("Loading Google Maps JavaScript API...");
-                applyBtn.disabled = true;
-                applyBtn.textContent = "Loading Map...";
-                this.isScriptLoading = false;
-                await this.loadMapData();
-            });
-        }
-    },
-
-    renderGoogleMap(container, points) {
-        // Clear any previous configuration card from container
-        if (!container.querySelector('.gm-style')) {
-            container.innerHTML = '';
-        }
-
-        // Initialize Google Map with Nairobi default center
-        if (!this.mapInstance || !container.querySelector('.gm-style')) {
-            this.mapInstance = new google.maps.Map(container, {
-                zoom: this.defaultZoom,
-                center: this.defaultCenter,
-                mapTypeId: google.maps.MapTypeId.ROADMAP,
-                mapTypeControl: true,
-                mapTypeControlOptions: {
-                    style: google.maps.MapTypeControlStyle.HORIZONTAL_BAR,
-                    position: google.maps.ControlPosition.TOP_RIGHT
-                },
-                streetViewControl: true,
-                fullscreenControl: true,
-                zoomControl: true,
-                styles: [
-                    { featureType: 'poi.business', stylers: [{ visibility: 'off' }] },
-                    { featureType: 'transit', stylers: [{ visibility: 'simplified' }] }
-                ]
-            });
-
-            this.infoWindow = new google.maps.InfoWindow();
-        }
-
-        // Clear existing markers and clusterer
-        if (this.clusterer) {
-            this.clusterer.clearMarkers();
-        }
-        this.markers.forEach(m => m.setMap(null));
-        this.markers = [];
-
-        // Check if there are no matching reports
-        const hasFilters = Boolean(
-            this.activeFilters.defect_class ||
-            this.activeFilters.status ||
-            this.activeFilters.severity ||
-            this.activeFilters.asset_type
-        );
-
-        let emptyNotice = document.getElementById('mapEmptyNotice');
         if (points.length === 0) {
-            if (!emptyNotice) {
-                emptyNotice = document.createElement('div');
-                emptyNotice.id = 'mapEmptyNotice';
-                emptyNotice.className = 'map-empty-overlay';
-                container.appendChild(emptyNotice);
+            const hasFilters = Boolean(
+                this.activeFilters.defect_class ||
+                this.activeFilters.status ||
+                this.activeFilters.severity ||
+                this.activeFilters.asset_type
+            );
+
+            if (container) {
+                const overlay = document.createElement('div');
+                overlay.className = 'map-empty-overlay';
+                if (hasFilters) {
+                    overlay.innerHTML = `No defect reports match the selected filters. <button type="button" onclick="DefectMap.resetFilters()" style="margin-left:8px; background:#ffffff; color:#0f172a; border:none; padding:2px 8px; border-radius:4px; font-weight:600; cursor:pointer;">Reset Filters</button>`;
+                } else {
+                    overlay.textContent = "No infrastructure reports recorded in the database yet.";
+                }
+                container.appendChild(overlay);
             }
-            emptyNotice.style.display = 'block';
-            emptyNotice.textContent = hasFilters
-                ? 'No defect reports match the selected filters.'
-                : 'No infrastructure defect reports exist yet. Use "Report Defect" to submit one.';
             return;
-        } else if (emptyNotice) {
-            emptyNotice.style.display = 'none';
         }
 
-        // Create markers from real backend report points
-        const bounds = new google.maps.LatLngBounds();
+        const markers = [];
+        points.forEach((point) => {
+            const lat = Number(point.latitude);
+            const lng = Number(point.longitude);
 
-        points.forEach(pt => {
-            const sev = (pt.relative_severity || 'Low').toLowerCase();
-            const color = sev === 'critical' ? '#ef4444' : (sev === 'medium' ? '#f59e0b' : '#10b981');
+            if (isNaN(lat) || isNaN(lng) || lat === 0 || lng === 0) return;
 
-            const marker = new google.maps.Marker({
-                position: { lat: pt.latitude, lng: pt.longitude },
-                title: `${pt.defect_class || 'Distress'} [${(pt.relative_severity || 'Low').toUpperCase()}]`,
-                icon: {
-                    path: google.maps.SymbolPath.CIRCLE,
-                    scale: 9,
-                    fillColor: color,
-                    fillOpacity: 0.95,
-                    strokeWeight: 2,
-                    strokeColor: '#ffffff'
-                }
-            });
+            const icon = this.createMarkerIcon(point.relative_severity, point.is_unusual);
+            const marker = L.marker([lat, lng], { icon: icon });
 
-            // Marker click handler: displays sanitized defect inspection card (NO citizen PII)
-            marker.addListener('click', () => {
-                const dateStr = pt.date_submitted ? new Date(pt.date_submitted).toLocaleDateString() : 'Recent';
-                const statusSlug = (pt.status || 'Received').toLowerCase().replace(/\s+/g, '-');
-                const frameId = (pt.report_id || '').slice(0, 16);
+            const popupContent = this.createPopupContent(point);
+            marker.bindPopup(popupContent, { maxWidth: 300, className: 'leaflet-custom-popup' });
 
-                const contentHtml = `
-                    <div class="map-popup-card">
-                        <div class="map-popup-title">${pt.defect_class || 'Infrastructure Defect'}</div>
-                        <div class="map-popup-meta">${pt.asset_type || 'Civil Asset'} • ${pt.location_name || 'Corridor'}</div>
-                        <div style="margin: 0.4rem 0; display: flex; gap: 0.35rem; align-items: center; flex-wrap: wrap;">
-                            <span class="status-chip ${statusSlug}">${pt.status || 'Received'}</span>
-                            <span class="severity-pill ${sev}">${(pt.relative_severity || 'Low').toUpperCase()}</span>
-                            ${pt.is_unusual ? `<span class="badge-tag" style="background:#fff7ed;color:#c2410c;border:1px solid #fed7aa;font-size:0.7rem;">⚠️ Unusual</span>` : ''}
-                        </div>
-                        <div style="font-size:0.75rem; color:#64748b; line-height: 1.4; margin-top:0.35rem;">
-                            <strong>Case:</strong> #${frameId}<br>
-                            <strong>GPS:</strong> ${pt.latitude.toFixed(5)}°, ${pt.longitude.toFixed(5)}°<br>
-                            <strong>Date:</strong> ${dateStr}
-                        </div>
-                        <div style="margin-top:0.5rem; font-size:0.68rem; color:#94a3b8; border-top:1px solid #f1f5f9; padding-top:0.3rem;">
-                            🔒 Reporter Privacy Protected • Verified Public Record
-                        </div>
-                    </div>
-                `;
-
-                this.infoWindow.setContent(contentHtml);
-                this.infoWindow.open(this.mapInstance, marker);
-            });
-
-            this.markers.push(marker);
-            bounds.extend({ lat: pt.latitude, lng: pt.longitude });
+            markers.push(marker);
         });
 
-        // Initialize Marker Clustering via @googlemaps/markerclusterer
-        if (window.markerClusterer && window.markerClusterer.MarkerClusterer) {
-            this.clusterer = new window.markerClusterer.MarkerClusterer({
-                map: this.mapInstance,
-                markers: this.markers
-            });
+        if (typeof this.markerCluster.addLayers === 'function') {
+            this.markerCluster.addLayers(markers);
         } else {
-            // Fallback: place markers directly on map if clusterer library was not available
-            this.markers.forEach(m => m.setMap(this.mapInstance));
-        }
-
-        // Keep view reasonable
-        if (points.length === 1) {
-            this.mapInstance.setCenter({ lat: points[0].latitude, lng: points[0].longitude });
-            this.mapInstance.setZoom(14);
-        } else if (points.length > 1) {
-            this.mapInstance.fitBounds(bounds, { top: 40, right: 40, bottom: 40, left: 40 });
+            markers.forEach(m => this.markerCluster.addLayer(m));
         }
     }
 };
 
 window.DefectMap = DefectMap;
+
+// Initialize on DOM ready
+document.addEventListener('DOMContentLoaded', () => {
+    window.DefectMap.init();
+});

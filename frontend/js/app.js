@@ -591,7 +591,10 @@ const App = {
         if (viewId === 'view-tracking') {
             this.loadTrackingData();
         } else if (viewId === 'view-map') {
-            if (window.DefectMap) window.DefectMap.loadMapData();
+            if (window.DefectMap) {
+                window.DefectMap.loadMapData();
+                window.DefectMap.invalidateSize();
+            }
         } else if (viewId === 'view-dashboard') {
             if (window.Dashboard) window.Dashboard.loadDashboardData();
         } else if (viewId === 'view-review') {
