@@ -59,18 +59,29 @@ def submit_review(current_user, assessment_id):
         rep = db_service.find_one('infrastructure_reports', {'_id': report_id})
         if rep:
             meta = rep.get('metadata') or {}
+            submitter_id = str(rep.get('user_id') or meta.get('submitted_by_id') or '')
+            is_self_review = bool(submitter_id and submitter_id == reviewer_id)
+            reviewer_name = current_user.get('name', 'Civil Engineer')
+
             history = meta.get('status_history', [])
+            note_prefix = "Engineer (Self-submitted inspection)" if is_self_review else "Engineer"
             history.append({
                 'status': InfrastructureReport.STATUS_VERIFIED,
                 'timestamp': now_iso,
-                'updated_by': reviewer_id,
-                'note': f"Engineer {decision}: {comments or 'Concurred with automated assessment.'}"
+                'updated_by': f"{reviewer_name} (Reviewer)",
+                'submitter_id': submitter_id,
+                'reviewer_id': reviewer_id,
+                'is_self_review': is_self_review,
+                'note': f"{note_prefix} {decision}: {comments or 'Concurred with automated assessment.'}"
             })
             meta['status_history'] = history
             meta['engineer_decision'] = decision
             meta['engineer_notes'] = comments
-            meta['reviewed_by'] = reviewer_id
+            meta['submitted_by_id'] = submitter_id
+            meta['reviewer_id'] = reviewer_id
+            meta['reviewed_by'] = reviewer_name
             meta['reviewed_at'] = now_iso
+            meta['is_self_review'] = is_self_review
             meta['requires_engineer_review'] = False
             db_service.update_one('infrastructure_reports', {'_id': report_id}, {
                 'status': InfrastructureReport.STATUS_VERIFIED,
@@ -111,18 +122,28 @@ def review_by_report(current_user, report_id):
 
     now_iso = datetime.now(timezone.utc).isoformat()
     meta = report.get('metadata') or {}
+    submitter_id = str(report.get('user_id') or meta.get('submitted_by_id') or '')
+    is_self_review = bool(submitter_id and submitter_id == reviewer_id)
+
     history = meta.get('status_history', [])
+    note_prefix = "Review (Self-submitted report)" if is_self_review else "Review"
     history.append({
         'status': target_status,
         'timestamp': now_iso,
-        'updated_by': reviewer_name,
-        'note': f"Review {decision}: {notes or 'Status updated by reviewing engineer.'}"
+        'updated_by': f"{reviewer_name} (Reviewer)",
+        'submitter_id': submitter_id,
+        'reviewer_id': reviewer_id,
+        'is_self_review': is_self_review,
+        'note': f"{note_prefix} {decision}: {notes or 'Status updated by reviewing engineer.'}"
     })
     meta['status_history'] = history
     meta['engineer_decision'] = decision
     meta['engineer_notes'] = notes
+    meta['submitted_by_id'] = submitter_id
+    meta['reviewer_id'] = reviewer_id
     meta['reviewed_by'] = reviewer_name
     meta['reviewed_at'] = now_iso
+    meta['is_self_review'] = is_self_review
     if target_status in [InfrastructureReport.STATUS_VERIFIED, InfrastructureReport.STATUS_RESOLVED]:
         meta['requires_engineer_review'] = False
 

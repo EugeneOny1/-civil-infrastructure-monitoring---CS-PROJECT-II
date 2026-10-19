@@ -261,6 +261,25 @@ const Review = {
             const locEl = document.getElementById('reviewGps');
             if (locEl) locEl.textContent = `${locName}${coordsStr}`;
 
+            // Submitter & Authorship distinction
+            const submitter = data.submitter || {};
+            const submitterName = submitter.name || data.report.metadata?.submitted_by_name || 'Reporter';
+            const submitterRole = (submitter.role || data.report.metadata?.submitted_by_role || 'citizen').toUpperCase();
+            const submitterEl = document.getElementById('reviewSubmitter');
+            if (submitterEl) {
+                submitterEl.textContent = `${submitterName} (${submitterRole})`;
+            }
+
+            // Self-Review / Authorship Notice
+            const currentUser = window.App?.currentUser;
+            const currentUserId = currentUser ? String(currentUser.user_id || currentUser._id) : '';
+            const reportUserId = String(data.report.user_id || data.report.metadata?.submitted_by_id || '');
+            const isSelfSubmit = Boolean(currentUserId && reportUserId && currentUserId === reportUserId);
+            const selfReviewBanner = document.getElementById('selfReviewBanner');
+            if (selfReviewBanner) {
+                selfReviewBanner.classList.toggle('hidden', !isSelfSubmit);
+            }
+
             const citizenNotesEl = document.getElementById('reviewCitizenNotes');
             if (citizenNotesEl) {
                 citizenNotesEl.textContent = data.report.description || data.report.metadata?.citizen_notes || 'No citizen field observations recorded.';

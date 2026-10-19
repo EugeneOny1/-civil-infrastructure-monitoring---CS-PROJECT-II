@@ -106,6 +106,9 @@ def submit_report(current_user):
         latitude=latitude,
         longitude=longitude,
         metadata={
+            'submitted_by_id': str(user_id),
+            'submitted_by_name': current_user.get('name', 'Reporter'),
+            'submitted_by_role': current_user.get('role', 'citizen'),
             'location_name': location,
             'asset_type': asset_type,
             'defect_class': detection_result['defect_class'],
@@ -361,8 +364,17 @@ def get_report_detail(current_user, report_id):
     if assessment:
         review = db_service.find_one('professional_reviews', {'assessment_id': assessment['_id']})
 
+    submitter_user = db_service.find_one('users', {'_id': report.get('user_id')})
+    meta = report.get('metadata') or {}
+    submitter_info = {
+        'user_id': str(report.get('user_id', '')),
+        'name': submitter_user.get('name') if submitter_user else (meta.get('submitted_by_name') or 'Field Reporter'),
+        'role': submitter_user.get('role') if submitter_user else (meta.get('submitted_by_role') or 'citizen')
+    }
+
     return jsonify({
         'report': report,
+        'submitter': submitter_info,
         'asset': asset,
         'image': {
             'image_id': image['_id'],
