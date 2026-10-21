@@ -482,11 +482,105 @@ def toggle_2fa(current_user):
         'two_factor_enabled': new_state
     }), 200
 
+@auth_bp.route('/profile', methods=['GET'])
 @auth_bp.route('/me', methods=['GET'])
 @login_required
 def get_profile(current_user):
-    """Returns the authenticated user profile."""
-    return jsonify({'user': User.from_dict(current_user).to_dict()}), 200
+    """Returns the authenticated user profile with professional engineering and security details."""
+    user_id = str(current_user.get('_id') or current_user.get('user_id'))
+    user_record = db_service.find_one('users', {'_id': user_id}) or current_user
+
+    role = user_record.get('role', 'citizen')
+    has_weak_password = bool(user_record.get('must_change_password'))
+    
+    eng_details = None
+    if role == 'engineer':
+        eng_details = {
+            'engineering_category': user_record.get('engineering_category', 'Graduate Engineer'),
+            'professional_reg_no': user_record.get('professional_reg_no', 'N/A'),
+            'verification_status': user_record.get('verification_status', 'pending'),
+            'organization': user_record.get('organization', '')
+        }
+
+    user_dict = User.from_dict(user_record).to_dict()
+    user_dict['phone'] = user_record.get('phone', '')
+
+    return jsonify({
+        'user': user_dict,
+        'two_factor_enabled': bool(user_record.get('two_factor_enabled', False)),
+        'has_weak_password': has_weak_password,
+        'engineering_details': eng_details
+    }), 200
+
+@auth_bp.route('/profile', methods=['PUT'])
+@login_required
+def update_profile(current_user):
+    """
+    Updates editable personal user profile information with backend validation.
+    Protects role assignment and verified professional engineering credentials.
+    """
+    user_id = str(current_user.get('_id') or current_user.get('user_id'))
+    user_record = db_service.find_one('users', {'_id': user_id})
+    if not user_record:
+        return jsonify({'error': 'User account not found.'}), 404
+
+    data = request.get_json() or {}
+
+    # Security: Role can NEVER be self-assigned or edited
+    if 'role' in data and data['role'] != user_record.get('role'):
+        return jsonify({'error': 'Account role cannot be modified.'}), 400
+
+    if 'is_admin' in data or ('role' in data and data['role'] == 'admin'):
+        return jsonify({'error': 'Administrator privileges cannot be self-assigned.'}), 403
+
+    updates = {}
+
+    # Full name update
+    if 'name' in data:
+        name = str(data['name']).strip()
+        if not name:
+            return jsonify({'error': 'Full name cannot be empty.'}), 400
+        updates['name'] = name
+
+    # Phone number update
+    if 'phone' in data:
+        updates['phone'] = str(data['phone']).strip()
+
+    # Organization update
+    if 'organization' in data:
+        updates['organization'] = str(data['organization']).strip()
+
+    # Protected Engineer fields
+    if user_record.get('role') == 'engineer':
+        is_verified = user_record.get('verification_status') == 'verified'
+        if is_verified:
+            if 'professional_reg_no' in data and data['professional_reg_no'] != user_record.get('professional_reg_no'):
+                return jsonify({'error': 'Verified EBK registration number is legally protected and cannot be modified.'}), 400
+            if 'engineering_category' in data and data['engineering_category'] != user_record.get('engineering_category'):
+                return jsonify({'error': 'Verified engineering category cannot be modified.'}), 400
+        else:
+            # Pending engineer updating registration details
+            if 'engineering_category' in data or 'professional_reg_no' in data:
+                cat = data.get('engineering_category', user_record.get('engineering_category'))
+                reg = data.get('professional_reg_no', user_record.get('professional_reg_no'))
+                valid, norm_reg, err = validate_ebk_registration(cat, reg)
+                if not valid:
+                    return jsonify({'error': err}), 400
+                updates['engineering_category'] = cat
+                updates['professional_reg_no'] = norm_reg
+
+    if updates:
+        updates['updated_at'] = datetime.now(timezone.utc).isoformat()
+        db_service.update_one('users', {'_id': user_id}, updates)
+
+    updated_user = db_service.find_one('users', {'_id': user_id})
+    user_dict = User.from_dict(updated_user).to_dict()
+    user_dict['phone'] = updated_user.get('phone', '')
+
+    return jsonify({
+        'message': 'Profile information updated successfully.',
+        'user': user_dict
+    }), 200
 
 @auth_bp.route('/config', methods=['GET'])
 def get_auth_config():
