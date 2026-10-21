@@ -852,6 +852,35 @@ const App = {
         }
     },
 
+    startOtpCountdown(seconds) {
+        if (this.otpCountdownTimer) clearInterval(this.otpCountdownTimer);
+        let remaining = seconds;
+        const textEl = document.getElementById('otpCountdownText');
+        const btnVerify = document.getElementById('btnVerifyTwoFactor');
+
+        const updateDisplay = () => {
+            if (!textEl) return;
+            if (remaining <= 0) {
+                textEl.textContent = '⏱ Code expired. Please request a new code.';
+                textEl.style.color = '#dc2626';
+                if (btnVerify) btnVerify.disabled = true;
+                if (this.otpCountdownTimer) clearInterval(this.otpCountdownTimer);
+            } else {
+                const m = Math.floor(remaining / 60);
+                const s = remaining % 60;
+                textEl.textContent = `⏱ Code expires in ${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
+                textEl.style.color = remaining < 60 ? '#dc2626' : '#475569';
+                if (btnVerify) btnVerify.disabled = false;
+            }
+        };
+
+        updateDisplay();
+        this.otpCountdownTimer = setInterval(() => {
+            remaining -= 1;
+            updateDisplay();
+        }, 1000);
+    },
+
     showToast(message, isError = false) {
         const container = document.getElementById('toastContainer');
         if (!container) return;

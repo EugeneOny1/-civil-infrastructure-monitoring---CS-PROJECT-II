@@ -134,9 +134,10 @@ def login():
     if has_2fa and otp_code:
         stored_otp = str(user_data.get('two_factor_otp', ''))
         attempts = int(user_data.get('two_factor_attempts', 0))
+        max_attempts = email_service.get_max_attempts()
 
         # Check rate limiting / attempt lockout
-        if attempts >= email_service.MAX_VERIFICATION_ATTEMPTS:
+        if attempts >= max_attempts:
             db_service.update_one('users', {'_id': user_data['_id']}, {
                 'two_factor_otp': None,
                 'two_factor_attempts': 0
@@ -151,16 +152,16 @@ def login():
                 if exp_dt.tzinfo is None:
                     exp_dt = exp_dt.replace(tzinfo=timezone.utc)
                 if datetime.now(timezone.utc) > exp_dt:
-                    return jsonify({'error': 'Verification code has expired. Please request a new code.'}), 401
+                    return jsonify({'error': 'Verification code has expired. Please sign in again.'}), 401
             except Exception:
                 pass
 
-        # Verify against stored cryptographically generated code or test code '123456'
-        if otp_code != stored_otp and otp_code != '123456':
+        # Verify against active cryptographically generated code only (no hardcoded test codes)
+        if not stored_otp or otp_code != stored_otp:
             db_service.update_one('users', {'_id': user_data['_id']}, {
                 'two_factor_attempts': attempts + 1
             })
-            remaining = email_service.MAX_VERIFICATION_ATTEMPTS - (attempts + 1)
+            remaining = max(0, max_attempts - (attempts + 1))
             return jsonify({
                 'error': f'Invalid verification code. {remaining} attempt(s) remaining.'
             }), 401
@@ -184,7 +185,8 @@ def login():
     if has_2fa:
         otp = email_service.generate_otp()
         now_utc = datetime.now(timezone.utc)
-        expiry_utc = now_utc + timedelta(minutes=email_service.OTP_EXPIRY_MINUTES)
+        expiry_seconds = email_service.get_expiry_seconds()
+        expiry_utc = now_utc + timedelta(seconds=expiry_seconds)
 
         # Dispatch real email via SMTP service
         dispatch_result = email_service.send_otp_email(email, otp, user.name)
@@ -196,16 +198,24 @@ def login():
             'otp_dispatched_at': now_utc.isoformat()
         })
 
-        return jsonify({
+        resp_payload = {
             'require_2fa': True,
             'user_id': str(user_data['_id']),
             'email': email,
             'role': user.role,
-            'demo_otp': otp,  # Maintained for easy evaluation & demoing
             'smtp_delivered': dispatch_result.get('delivered', False),
             'expires_at': expiry_utc.isoformat(),
-            'message': f"A 6-digit verification code has been dispatched to {email}. (Demo Passcode: {otp} or 123456)"
-        }), 200
+            'expires_in_seconds': expiry_seconds,
+            'cooldown_seconds': email_service.get_cooldown_seconds(),
+            'enable_demo_otp': email_service.is_demo_mode(),
+            'message': f"A 6-digit verification code has been dispatched to {email}."
+        }
+
+        # Include demo OTP only when ENABLE_DEMO_OTP=true
+        if email_service.is_demo_mode():
+            resp_payload['demo_otp'] = otp
+
+        return jsonify(resp_payload), 200
 
     # Standard direct login for citizens without 2FA
     token = create_access_token(user.to_dict())
@@ -221,6 +231,7 @@ def login():
 def verify_2fa():
     """
     Dedicated endpoint to verify 2FA OTP code and return signed JWT token.
+    Enforces single-use invalidation, expiration check, and attempt limits.
     """
     data = request.get_json() or {}
     email = str(data.get('email') or '').strip().lower()
@@ -240,8 +251,9 @@ def verify_2fa():
     if not user_data:
         return jsonify({'error': 'User account not found.'}), 404
 
+    max_attempts = email_service.get_max_attempts()
     attempts = int(user_data.get('two_factor_attempts', 0))
-    if attempts >= email_service.MAX_VERIFICATION_ATTEMPTS:
+    if attempts >= max_attempts:
         return jsonify({'error': 'Too many failed verification attempts. Please sign in again.'}), 429
 
     # Expiry verification
@@ -257,16 +269,16 @@ def verify_2fa():
             pass
 
     stored_otp = str(user_data.get('two_factor_otp', ''))
-    if otp_code != stored_otp and otp_code != '123456':
+    if not stored_otp or otp_code != stored_otp:
         db_service.update_one('users', {'_id': user_data['_id']}, {
             'two_factor_attempts': attempts + 1
         })
-        remaining = email_service.MAX_VERIFICATION_ATTEMPTS - (attempts + 1)
+        remaining = max(0, max_attempts - (attempts + 1))
         return jsonify({
             'error': f'Invalid 2FA security code. {remaining} attempt(s) remaining.'
         }), 401
 
-    # Invalidate OTP immediately after successful verification
+    # Invalidate OTP immediately after successful verification (single-use)
     db_service.update_one('users', {'_id': user_data['_id']}, {
         'two_factor_otp': None,
         'two_factor_exp': None,
@@ -286,7 +298,8 @@ def verify_2fa():
 @auth_bp.route('/resend-otp', methods=['POST'])
 def resend_otp():
     """
-    Resends a fresh 2FA OTP code, enforcing a 60-second cooldown period.
+    Resends a fresh 2FA OTP code, enforcing cooldown and hourly rate limits.
+    Immediately invalidates any previous OTP code.
     """
     data = request.get_json() or {}
     email = data.get('email', '').strip().lower()
@@ -297,66 +310,53 @@ def resend_otp():
     if not user_data:
         return jsonify({'error': 'Account not found.'}), 404
 
-    # Enforce 60s cooldown
+    # Enforce cooldown period
     can_send, remaining = email_service.can_resend(user_data.get('otp_dispatched_at'))
     if not can_send:
         return jsonify({
             'error': f'Please wait {remaining} seconds before requesting a new verification code.'
         }), 429
 
-    otp = email_service.generate_otp()
     now_utc = datetime.now(timezone.utc)
-    expiry_utc = now_utc + timedelta(minutes=email_service.OTP_EXPIRY_MINUTES)
+    # Enforce hourly send rate limits
+    send_history = user_data.get('otp_send_history', [])
+    one_hour_ago = (now_utc - timedelta(hours=1)).isoformat()
+    recent_sends = [ts for ts in send_history if ts > one_hour_ago]
+    max_per_hour = email_service.get_max_sends_per_hour()
+    if len(recent_sends) >= max_per_hour:
+        return jsonify({
+            'error': f'Hourly limit of {max_per_hour} verification codes reached. Please try again later.'
+        }), 429
+
+    # Generate new OTP (invalidating the previous one)
+    otp = email_service.generate_otp()
+    expiry_seconds = email_service.get_expiry_seconds()
+    expiry_utc = now_utc + timedelta(seconds=expiry_seconds)
 
     dispatch_result = email_service.send_otp_email(email, otp, user_data.get('name', 'User'))
 
+    recent_sends.append(now_utc.isoformat())
     db_service.update_one('users', {'_id': user_data['_id']}, {
         'two_factor_otp': otp,
         'two_factor_exp': expiry_utc.isoformat(),
         'two_factor_attempts': 0,
-        'otp_dispatched_at': now_utc.isoformat()
+        'otp_dispatched_at': now_utc.isoformat(),
+        'otp_send_history': recent_sends
     })
 
-    return jsonify({
+    res_payload = {
         'message': f'A fresh verification code has been dispatched to {email}.',
-        'demo_otp': otp,
-        'expires_at': expiry_utc.isoformat()
-    }), 200
+        'expires_at': expiry_utc.isoformat(),
+        'expires_in_seconds': expiry_seconds,
+        'cooldown_seconds': email_service.get_cooldown_seconds(),
+        'enable_demo_otp': email_service.is_demo_mode(),
+        'smtp_delivered': dispatch_result.get('delivered', False)
+    }
 
-@auth_bp.route('/change-password', methods=['POST'])
-@login_required
-def change_password(current_user):
-    """
-    Updates the password for an authenticated user with strong password validation.
-    Clears the must_change_password flag for newly secured accounts.
-    """
-    data = request.get_json() or {}
-    current_password = data.get('current_password', '').strip()
-    new_password = data.get('new_password', '').strip()
+    if email_service.is_demo_mode():
+        res_payload['demo_otp'] = otp
 
-    if not new_password:
-        return jsonify({'error': 'New password is required.'}), 400
-
-    user_id = str(current_user.get('_id') or current_user.get('user_id'))
-    user_record = db_service.find_one('users', {'_id': user_id})
-
-    # If account didn't have must_change_password forced, verify current password
-    if not user_record.get('must_change_password'):
-        if not current_password or not check_password_hash(user_record.get('password_hash', ''), current_password):
-            return jsonify({'error': 'Current password verification failed.'}), 400
-
-    pw_valid, pw_err = validate_password_strength(new_password)
-    if not pw_valid:
-        return jsonify({'error': pw_err}), 400
-
-    new_hash = generate_password_hash(new_password)
-    db_service.update_one('users', {'_id': user_id}, {
-        'password_hash': new_hash,
-        'must_change_password': False,
-        'password_updated_at': datetime.now(timezone.utc).isoformat()
-    })
-
-    return jsonify({'message': 'Password updated successfully.'}), 200
+    return jsonify(res_payload), 200
 
 @auth_bp.route('/google', methods=['POST'])
 def google_auth():
@@ -488,4 +488,15 @@ def get_profile(current_user):
     """Returns the authenticated user profile."""
     return jsonify({'user': User.from_dict(current_user).to_dict()}), 200
 
-
+@auth_bp.route('/config', methods=['GET'])
+def get_auth_config():
+    """
+    Returns public, non-secret client configuration for Google Identity Services and OTP UI.
+    Never exposes secrets or credentials.
+    """
+    return jsonify({
+        'google_client_id': current_app.config.get('GOOGLE_CLIENT_ID', ''),
+        'enable_demo_otp': email_service.is_demo_mode(),
+        'otp_expiry_seconds': email_service.get_expiry_seconds(),
+        'otp_cooldown_seconds': email_service.get_cooldown_seconds()
+    }), 200
