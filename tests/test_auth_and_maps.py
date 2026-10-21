@@ -447,7 +447,80 @@ class TestAuthAndMaps(unittest.TestCase):
         self.assertTrue(self_last_audit.get('is_self_review'))
         self.assertIn('Self-submitted report', self_last_audit.get('note', ''))
 
+    def test_13_report_location_tagging_and_map_point(self):
+        """Verifies report location tagging with custom coordinates and map point consumption."""
+        from app.utils.auth_helpers import create_access_token
+        import io
+
+        citizen_user_id = 'test_tag_loc_citizen_id'
+        citizen_email = 'tag_cit@infravision.ke'
+        db_service.delete_one('users', {'_id': citizen_user_id})
+        db_service.insert('users', {
+            '_id': citizen_user_id,
+            'name': 'Tagging Citizen Tester',
+            'email': citizen_email,
+            'role': 'citizen',
+            'verification_status': 'verified',
+            'created_at': datetime.now(timezone.utc).isoformat()
+        })
+        self.__class__.created_user_emails.append(citizen_email)
+
+        with self.app.app_context():
+            token = create_access_token({
+                'user_id': citizen_user_id,
+                'role': 'citizen',
+                'name': 'Tagging Citizen Tester',
+                'email': citizen_email
+            })
+
+        seed_path = os.path.abspath(os.path.join(
+            os.path.dirname(__file__), '..', 'backend', 'uploads', 'seed_pothole.jpg'
+        ))
+        with open(seed_path, 'rb') as f:
+            img_bytes = f.read()
+
+        custom_lat = -1.29210
+        custom_lng = 36.82190
+        submit_payload = {
+            'image': (io.BytesIO(img_bytes), 'tagged_defect.jpg'),
+            'latitude': str(custom_lat),
+            'longitude': str(custom_lng),
+            'location': 'Moi Avenue near Railway Station, Nairobi',
+            'asset_type': 'Road / Pavement',
+            'description': 'Road pavement surface distress tagged via location picker.'
+        }
+        res_submit = self.client.post(
+            '/api/reports',
+            data=submit_payload,
+            content_type='multipart/form-data',
+            headers={'Authorization': f'Bearer {token}'}
+        )
+        self.assertEqual(res_submit.status_code, 201)
+        rep_data = res_submit.get_json()
+        report_id = rep_data['report_id']
+
+        # Verify stored record in database has coordinates
+        rep_doc = db_service.find_one('infrastructure_reports', {'_id': report_id})
+        self.assertIsNotNone(rep_doc)
+        self.assertAlmostEqual(float(rep_doc.get('latitude')), custom_lat, places=4)
+        self.assertAlmostEqual(float(rep_doc.get('longitude')), custom_lng, places=4)
+
+        # Verify map API returns the exact coordinates
+        res_map = self.client.get('/api/reports/map')
+        self.assertEqual(res_map.status_code, 200)
+        map_points = res_map.get_json().get('points', [])
+        found_point = next((p for p in map_points if p.get('report_id') == report_id), None)
+        self.assertIsNotNone(found_point)
+        self.assertAlmostEqual(found_point['latitude'], custom_lat, places=4)
+        self.assertAlmostEqual(found_point['longitude'], custom_lng, places=4)
+        self.assertNotIn('email', found_point)
+        self.assertNotIn('phone', found_point)
+
+        # Clean up
+        db_service.delete_one('infrastructure_reports', {'_id': report_id})
+
 
 if __name__ == '__main__':
     unittest.main()
+
 
