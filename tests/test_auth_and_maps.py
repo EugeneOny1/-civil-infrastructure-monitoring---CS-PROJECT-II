@@ -563,6 +563,115 @@ class TestAuthAndMaps(unittest.TestCase):
         if uhuru_pts:
             self.assertIn('nearby_report_count', uhuru_pts[0])
 
+    def test_15_multi_image_submission_and_aggregation(self):
+        """Verifies multi-image defect reporting (1-3 images), class union, and severity aggregation."""
+        import io
+        from app.utils.auth_helpers import create_access_token
+
+        cit_user_id = 'usr_cit_multi_test'
+        db_service.insert('users', {
+            '_id': cit_user_id,
+            'user_id': cit_user_id,
+            'name': 'Citizen Photo Contributor',
+            'email': 'contributor@infravision.ke',
+            'role': 'citizen',
+            'created_at': datetime.now(timezone.utc).isoformat()
+        })
+        self.__class__.created_user_emails.append('contributor@infravision.ke')
+
+        with self.app.app_context():
+            token = create_access_token({
+                'user_id': cit_user_id,
+                'role': 'citizen',
+                'name': 'Citizen Photo Contributor',
+                'email': 'contributor@infravision.ke'
+            })
+
+        seed_path = os.path.abspath(os.path.join(
+            os.path.dirname(__file__), '..', 'backend', 'uploads', 'seed_pothole.jpg'
+        ))
+        with open(seed_path, 'rb') as f:
+            seed_bytes = f.read()
+
+        # 1. Rejecting more than 3 images
+        four_images_payload = {
+            'images': [
+                (io.BytesIO(seed_bytes), 'photo1.jpg'),
+                (io.BytesIO(seed_bytes), 'photo2.jpg'),
+                (io.BytesIO(seed_bytes), 'photo3.jpg'),
+                (io.BytesIO(seed_bytes), 'photo4.jpg'),
+            ],
+            'latitude': '-1.286389',
+            'longitude': '36.817223',
+            'location': 'Kenyatta Avenue, Nairobi',
+            'asset_type': 'Road / Pavement',
+            'description': 'Attempting upload with four images.'
+        }
+        res_excess = self.client.post(
+            '/api/reports',
+            data=four_images_payload,
+            content_type='multipart/form-data',
+            headers={'Authorization': f'Bearer {token}'}
+        )
+        self.assertEqual(res_excess.status_code, 400)
+        self.assertIn('maximum of 3 photographs', res_excess.get_json().get('error', '').lower())
+
+        # 2. Submitting report with 2 images
+        two_images_payload = {
+            'images': [
+                (io.BytesIO(seed_bytes), 'defect_angle_wide.jpg'),
+                (io.BytesIO(seed_bytes), 'defect_angle_close.jpg'),
+            ],
+            'latitude': '-1.292100',
+            'longitude': '36.821900',
+            'location': 'Haile Selassie Avenue, Nairobi',
+            'asset_type': 'Road / Pavement',
+            'description': 'Multi-angle defect report with 2 photographs.'
+        }
+        res_two = self.client.post(
+            '/api/reports',
+            data=two_images_payload,
+            content_type='multipart/form-data',
+            headers={'Authorization': f'Bearer {token}'}
+        )
+        self.assertEqual(res_two.status_code, 201)
+        two_data = res_two.get_json()
+        report_id_two = two_data['report_id']
+
+        self.assertIn('images', two_data)
+        self.assertEqual(len(two_data['images']), 2)
+        self.assertIn('ai_assessments', two_data)
+        self.assertEqual(len(two_data['ai_assessments']), 2)
+        self.assertIn('detected_classes', two_data)
+        self.assertIn('overall_visual_severity', two_data)
+
+        # 3. Verify database persistence
+        db_images = db_service.find('submitted_images', {'report_id': report_id_two})
+        self.assertEqual(len(db_images), 2)
+        for img_doc in db_images:
+            ass_doc = db_service.find_one('ai_assessments', {'image_id': img_doc['_id']})
+            self.assertIsNotNone(ass_doc)
+
+        # 4. Verify get_report_detail returns both multi and backwards compatible single fields
+        res_detail = self.client.get(
+            f'/api/reports/{report_id_two}',
+            headers={'Authorization': f'Bearer {token}'}
+        )
+        self.assertEqual(res_detail.status_code, 200)
+        detail_data = res_detail.get_json()
+        self.assertIn('images', detail_data)
+        self.assertEqual(len(detail_data['images']), 2)
+        self.assertIn('assessments', detail_data)
+        self.assertEqual(len(detail_data['assessments']), 2)
+        self.assertIsNotNone(detail_data['image'])
+        self.assertIsNotNone(detail_data['assessment'])
+
+        # 5. Clean up
+        db_service.delete_one('infrastructure_reports', {'_id': report_id_two})
+        for img_doc in db_images:
+            db_service.delete_one('submitted_images', {'_id': img_doc['_id']})
+            db_service.delete_one('ai_assessments', {'image_id': img_doc['_id']})
+
 
 if __name__ == '__main__':
     unittest.main()

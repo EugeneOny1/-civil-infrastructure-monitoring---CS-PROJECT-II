@@ -22,15 +22,25 @@ def submit_report(current_user):
     performs backend integrity validation (flagging unusual combinations like Building + Pothole),
     evaluates FR-04 relative visual severity, and persists records into MongoDB.
     """
-    if 'image' not in request.files:
-        return jsonify({'error': 'An infrastructure photograph is required.'}), 400
+    uploaded_files = []
+    if 'images' in request.files:
+        uploaded_files = request.files.getlist('images')
+    elif 'images[]' in request.files:
+        uploaded_files = request.files.getlist('images[]')
+    elif 'image' in request.files:
+        uploaded_files = request.files.getlist('image')
 
-    file = request.files['image']
-    if file.filename == '':
-        return jsonify({'error': 'No image file selected.'}), 400
+    uploaded_files = [f for f in uploaded_files if f and f.filename != '']
 
-    if not allowed_file(file.filename):
-        return jsonify({'error': 'Invalid file format. Permitted formats: PNG, JPG, JPEG, WEBP.'}), 400
+    if not uploaded_files:
+        return jsonify({'error': 'At least one infrastructure photograph is required.'}), 400
+
+    if len(uploaded_files) > 3:
+        return jsonify({'error': 'A maximum of 3 photographs may be submitted per defect report.'}), 400
+
+    for f in uploaded_files:
+        if not allowed_file(f.filename):
+            return jsonify({'error': f'Invalid file format for {f.filename}. Permitted formats: PNG, JPG, JPEG, WEBP.'}), 400
 
     # Retrieve form metadata
     location = request.form.get('location', '').strip()
@@ -58,20 +68,72 @@ def submit_report(current_user):
 
     user_id = str(current_user.get('_id') or current_user.get('user_id'))
 
-    # Save uploaded image safely with content verification
-    try:
-        unique_filename, dest_path, orig_name, file_size = save_uploaded_image(file)
-    except ValueError as val_err:
-        return jsonify({'error': str(val_err)}), 400
-    except Exception as e:
-        return jsonify({'error': f'Failed to process image upload: {str(e)}'}), 500
+    # Run independent inference on each submitted photograph
+    processed_images = []
+    for file in uploaded_files:
+        try:
+            unique_filename, dest_path, orig_name, file_size = save_uploaded_image(file)
+        except ValueError as val_err:
+            return jsonify({'error': str(val_err)}), 400
+        except Exception as e:
+            return jsonify({'error': f'Failed to process image upload: {str(e)}'}), 500
 
-    # Execute Computer Vision SSD-MobileNetV2 defect detection
-    try:
-        detection_result = inference_service.detect_defects(dest_path)
-    except Exception as e:
-        current_app.logger.error(f"[Inference Error] Failed executing SavedModel inference: {e}")
-        return jsonify({'error': 'Automated defect analysis service failed. Please contact system administrator.'}), 500
+        try:
+            det_res = inference_service.detect_defects(dest_path)
+        except Exception as e:
+            current_app.logger.error(f"[Inference Error] Failed executing SavedModel inference on {unique_filename}: {e}")
+            return jsonify({'error': 'Automated defect analysis service failed. Please contact system administrator.'}), 500
+
+        processed_images.append({
+            'unique_filename': unique_filename,
+            'dest_path': dest_path,
+            'orig_name': orig_name,
+            'file_size': file_size,
+            'detection': det_res
+        })
+
+    # Multi-Image Aggregation:
+    # 1. Detected defect classes union across all images
+    aggregated_classes_set = set()
+    all_detections_flat = []
+
+    for item in processed_images:
+        det = item['detection']
+        classes = det.get('detected_classes') or []
+        primary = det.get('defect_class')
+        if primary and primary != 'None Detected':
+            aggregated_classes_set.add(primary)
+        for c in classes:
+            if c and c != 'None Detected':
+                aggregated_classes_set.add(c)
+        all_detections_flat.extend(det.get('detections', []))
+
+    if not aggregated_classes_set:
+        report_detected_classes = ['None Detected']
+        primary_defect_class = 'None Detected'
+    else:
+        report_detected_classes = sorted(list(aggregated_classes_set))
+        primary_defect_class = report_detected_classes[0]
+
+    # 2. Overall Visual Severity: highest credible Visual Severity observed across submitted images
+    # Critical (3) > Medium / Moderate (2) > Low (1)
+    SEV_WEIGHTS = {'critical': 3, 'moderate': 2, 'medium': 2, 'low': 1}
+    highest_sev_rank = 1
+    overall_visual_severity = 'Low'
+
+    for item in processed_images:
+        s = item['detection'].get('relative_severity', 'Low')
+        rank = SEV_WEIGHTS.get(s.lower(), 1)
+        if rank > highest_sev_rank:
+            highest_sev_rank = rank
+            overall_visual_severity = 'Critical' if rank == 3 else ('Medium' if rank == 2 else 'Low')
+
+    # 3. Confidence: highest confidence score across detections
+    highest_confidence = 0.0
+    for item in processed_images:
+        c = float(item['detection'].get('confidence_score') or 0.0)
+        if c > highest_confidence:
+            highest_confidence = c
 
     # Associate with Infrastructure Asset record
     matched_asset = db_service.find_one('infrastructure_assets', {'location': location})
@@ -80,12 +142,11 @@ def submit_report(current_user):
             asset_type=asset_type,
             location=location,
             description=f"Monitored asset at {location}",
-            current_condition='Critical' if detection_result.get('relative_severity') == 'Critical' else 'Poor'
+            current_condition='Critical' if overall_visual_severity == 'Critical' else 'Poor'
         )
         asset_id = db_service.insert('infrastructure_assets', asset_obj.to_dict())
     else:
         asset_id = matched_asset['_id']
-        # If coordinates were not explicitly provided, inherit from matched asset
         if latitude is None and 'coordinates' in matched_asset:
             latitude = matched_asset['coordinates'].get('lat')
             longitude = matched_asset['coordinates'].get('lng')
@@ -95,20 +156,29 @@ def submit_report(current_user):
         latitude, longitude, current_user_id=user_id, radius_meters=50.0
     )
 
-    # Backend domain integrity validation (Defect vs Infrastructure pairing)
+    aggregated_detection_summary = {
+        'defect_class': primary_defect_class,
+        'detected_classes': report_detected_classes,
+        'relative_severity': overall_visual_severity,
+        'confidence_score': highest_confidence,
+        'detections': all_detections_flat,
+        'model_name': processed_images[0]['detection'].get('model_name', 'SSD-MobileNetV2'),
+        'model_version': processed_images[0]['detection'].get('model_version'),
+        'image_dimensions': processed_images[0]['detection'].get('image_dimensions', {'width': 300, 'height': 300})
+    }
+
+    # Backend domain integrity validation across combined defect findings
     validation_result = validation_service.validate_report(
-        asset_type, location, detection_result, nearby_metrics=nearby_metrics
+        asset_type, location, aggregated_detection_summary, nearby_metrics=nearby_metrics
     )
 
-    # Canonical initial report lifecycle status is ALWAYS 'Received'
-    # 'requires_engineer_review' and 'validation_status' are tracked separately in metadata
     initial_status = InfrastructureReport.STATUS_RECEIVED
 
-    # Create InfrastructureReport with canonical lifecycle and validation metadata
+    # Persist report in MongoDB
     report = InfrastructureReport(
         user_id=user_id,
         asset_id=asset_id,
-        description=description or f"Observed {detection_result['defect_class']} defect on {asset_type}.",
+        description=description or f"Observed {primary_defect_class} defect on {asset_type}.",
         status=initial_status,
         latitude=latitude,
         longitude=longitude,
@@ -118,12 +188,11 @@ def submit_report(current_user):
             'submitted_by_role': current_user.get('role', 'citizen'),
             'location_name': location,
             'asset_type': asset_type,
-            'defect_class': detection_result['defect_class'],
-            'detected_classes': detection_result.get('detected_classes', [detection_result['defect_class']]),
-            'class_id': detection_result.get('class_id'),
-            'confidence': detection_result['confidence_score'],
-            'relative_severity': detection_result['relative_severity'],
-            'relative_area': detection_result.get('relative_area', 0.0),
+            'defect_class': primary_defect_class,
+            'detected_classes': report_detected_classes,
+            'confidence': highest_confidence,
+            'relative_severity': overall_visual_severity,
+            'image_count': len(processed_images),
             'is_unusual': validation_result['is_unusual'],
             'requires_engineer_review': validation_result.get('requires_engineer_review', True),
             'validation_status': validation_result.get('validation_status', 'valid'),
@@ -136,15 +205,15 @@ def submit_report(current_user):
             'nearby_unresolved_count': validation_result.get('nearby_unresolved_count', 0),
             'is_location_cluster': validation_result.get('is_location_cluster', False),
             'location_priority_signal': 'Cluster Elevated' if validation_result.get('is_location_cluster') else 'Standard',
-            'model_version': detection_result.get('model_version'),
+            'model_version': aggregated_detection_summary.get('model_version'),
             'latitude': latitude,
             'longitude': longitude,
             'status_history': [
                 {
                     'status': initial_status,
-                    'timestamp': report_submitted_at if 'report_submitted_at' in locals() else datetime.now(timezone.utc).isoformat(),
+                    'timestamp': datetime.now(timezone.utc).isoformat(),
                     'updated_by': 'system',
-                    'note': 'Report received and registered in infrastructure defect monitoring pipeline.'
+                    'note': f"Report received with {len(processed_images)} photo evidence item(s) and registered in defect monitoring pipeline."
                 }
             ]
         }
@@ -152,66 +221,79 @@ def submit_report(current_user):
     report_id = db_service.insert('infrastructure_reports', report.to_dict())
     report.report_id = report_id
 
-    # Create SubmittedImage record
-    submitted_img = SubmittedImage(
-        report_id=report_id,
-        image_path=unique_filename,
-        original_filename=orig_name,
-        file_size=file_size,
-        dimensions=detection_result.get('image_dimensions', {'width': 300, 'height': 300})
-    )
-    image_id = db_service.insert('submitted_images', submitted_img.to_dict())
-    submitted_img.image_id = image_id
+    # Persist individual SubmittedImage and AIAssessment records
+    image_records = []
+    assessment_records = []
 
-    # Create AIAssessment record
-    ai_assessment = AIAssessment(
-        image_id=image_id,
-        defect_class=detection_result.get('defect_class', 'None Detected'),
-        confidence_score=detection_result.get('confidence_score', 0.0),
-        bounding_box=detection_result.get('bounding_box', [0.0, 0.0, 0.0, 0.0]),
-        relative_severity=detection_result.get('relative_severity', 'Low'),
-        detections=detection_result.get('detections', []),
-        model_name=detection_result.get('model_name', 'SSD-MobileNetV2'),
-        model_version=detection_result.get('model_version'),
-        class_id=detection_result.get('class_id'),
-        relative_area=detection_result.get('relative_area', 0.0),
-        area_percentage=detection_result.get('area_percentage', 0.0),
-        bounding_box_pixels=detection_result.get('bounding_box_pixels'),
-        validation_status=validation_result.get('validation_status', 'valid'),
-        validation_message=validation_result.get('validation_message', '')
-    )
-    assessment_id = db_service.insert('ai_assessments', ai_assessment.to_dict())
-    ai_assessment.assessment_id = assessment_id
+    for item in processed_images:
+        det = item['detection']
+        sub_img = SubmittedImage(
+            report_id=report_id,
+            image_path=item['unique_filename'],
+            original_filename=item['orig_name'],
+            file_size=item['file_size'],
+            dimensions=det.get('image_dimensions', {'width': 300, 'height': 300})
+        )
+        img_id = db_service.insert('submitted_images', sub_img.to_dict())
+        sub_img.image_id = img_id
+
+        ai_ass = AIAssessment(
+            image_id=img_id,
+            defect_class=det.get('defect_class', 'None Detected'),
+            confidence_score=det.get('confidence_score', 0.0),
+            bounding_box=det.get('bounding_box', [0.0, 0.0, 0.0, 0.0]),
+            relative_severity=det.get('relative_severity', 'Low'),
+            detections=det.get('detections', []),
+            model_name=det.get('model_name', 'SSD-MobileNetV2'),
+            model_version=det.get('model_version'),
+            class_id=det.get('class_id'),
+            relative_area=det.get('relative_area', 0.0),
+            area_percentage=det.get('area_percentage', 0.0),
+            bounding_box_pixels=det.get('bounding_box_pixels'),
+            validation_status='valid',
+            validation_message=''
+        )
+        ass_id = db_service.insert('ai_assessments', ai_ass.to_dict())
+        ai_ass.assessment_id = ass_id
+
+        image_records.append({
+            'image_id': img_id,
+            'filename': item['unique_filename'],
+            'url': f"/api/reports/images/{item['unique_filename']}",
+            'original_filename': item['orig_name'],
+            'dimensions': det.get('image_dimensions', {'width': 300, 'height': 300})
+        })
+        assessment_records.append({
+            **ai_ass.to_dict(),
+            'image_url': f"/api/reports/images/{item['unique_filename']}"
+        })
 
     # Human-readable response message
     if validation_result['is_unusual']:
         response_message = (
             'Report recorded. Note: An unusual defect-infrastructure combination was detected and flagged for certified engineer review.'
         )
-    elif not detection_result.get('detections'):
+    elif not all_detections_flat:
         response_message = (
             'Report recorded. No structural defects were detected exceeding the confidence threshold.'
         )
     else:
-        response_message = 'Infrastructure defect report submitted and analyzed successfully.'
+        response_message = f"Infrastructure defect report with {len(processed_images)} photograph(s) submitted and analyzed successfully."
 
-    assessment_payload = {
-        **ai_assessment.to_dict(),
-        'disclaimer': detection_result.get('disclaimer')
-    }
+    primary_image = image_records[0]
+    primary_assessment = assessment_records[0]
 
     return jsonify({
         'message': response_message,
         'report_id': report_id,
         'status': report.status,
         'report': report.to_dict(),
-        'image': {
-            'image_id': image_id,
-            'filename': unique_filename,
-            'url': f"/api/reports/images/{unique_filename}",
-            'dimensions': detection_result['image_dimensions']
-        },
-        'ai_assessment': assessment_payload,
+        'image': primary_image,
+        'images': image_records,
+        'ai_assessment': primary_assessment,
+        'ai_assessments': assessment_records,
+        'detected_classes': report_detected_classes,
+        'overall_visual_severity': overall_visual_severity,
         'validation': validation_result
     }), 201
 
@@ -365,15 +447,31 @@ def get_report_detail(current_user, report_id):
     if user_role == 'citizen' and str(report.get('user_id')) != user_id:
         return jsonify({'error': 'Access denied to this report.'}), 403
 
-    image = db_service.find_one('submitted_images', {'report_id': report_id})
-    assessment = None
-    if image:
-        assessment = db_service.find_one('ai_assessments', {'image_id': image['_id']})
+    images = db_service.find('submitted_images', {'report_id': report_id})
+    image_list = []
+    assessment_list = []
+
+    for img in images:
+        ass = db_service.find_one('ai_assessments', {'image_id': img['_id']})
+        img_dict = {
+            'image_id': img['_id'],
+            'url': f"/api/reports/images/{img['image_path']}",
+            'filename': img['image_path'],
+            'original_filename': img.get('original_filename', ''),
+            'file_size': img.get('file_size', 0),
+            'dimensions': img.get('dimensions', {})
+        }
+        image_list.append(img_dict)
+        if ass:
+            assessment_list.append(ass)
+
+    primary_image = image_list[0] if image_list else None
+    primary_assessment = assessment_list[0] if assessment_list else None
 
     asset = db_service.find_one('infrastructure_assets', {'_id': report.get('asset_id')})
     review = None
-    if assessment:
-        review = db_service.find_one('professional_reviews', {'assessment_id': assessment['_id']})
+    if primary_assessment:
+        review = db_service.find_one('professional_reviews', {'assessment_id': primary_assessment['_id']})
 
     submitter_user = db_service.find_one('users', {'_id': report.get('user_id')})
     meta = report.get('metadata') or {}
@@ -387,12 +485,10 @@ def get_report_detail(current_user, report_id):
         'report': report,
         'submitter': submitter_info,
         'asset': asset,
-        'image': {
-            'image_id': image['_id'],
-            'url': f"/api/reports/images/{image['image_path']}",
-            'filename': image['image_path']
-        } if image else None,
-        'assessment': assessment,
+        'image': primary_image,
+        'images': image_list,
+        'assessment': primary_assessment,
+        'assessments': assessment_list,
         'review': review
     }), 200
 
