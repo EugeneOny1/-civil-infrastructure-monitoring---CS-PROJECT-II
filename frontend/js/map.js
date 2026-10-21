@@ -30,6 +30,8 @@ const DefectMap = {
         asset_type: ''
     },
     isInitialized: false,
+    heatLayer: null,
+    showHotspotLayer: false,
 
     async init() {
         this.bindEvents();
@@ -45,6 +47,7 @@ const DefectMap = {
         const assetFilter = document.getElementById('mapFilterAsset');
         const refreshBtn = document.getElementById('btnRefreshMap');
         const resetBtn = document.getElementById('btnResetMapFilters');
+        const hotspotBtn = document.getElementById('btnToggleHotspot');
 
         if (classFilter) {
             classFilter.addEventListener('change', (e) => {
@@ -79,6 +82,11 @@ const DefectMap = {
         if (resetBtn) {
             resetBtn.addEventListener('click', () => {
                 this.resetFilters();
+            });
+        }
+        if (hotspotBtn) {
+            hotspotBtn.addEventListener('click', () => {
+                this.toggleHotspotLayer();
             });
         }
 
@@ -241,6 +249,11 @@ const DefectMap = {
                     <span>Asset: <strong>${asset}</strong></span>
                     <span class="status-chip ${statusSlug}" style="font-size:0.7rem; padding:2px 8px;">${status}</span>
                 </div>
+                ${point.nearby_report_count > 0 ? `
+                    <div style="font-size:0.75rem; color:#0284c7; font-weight:600; margin-bottom:6px; background:#f0f9ff; padding:3px 6px; border-radius:4px; border:1px solid #bae6fd;">
+                        📍 Density: ${point.nearby_report_count} nearby defect report(s) within 50m
+                    </div>
+                ` : ''}
                 <div style="font-size:0.72rem; color:#94a3b8; border-top:1px solid #f1f5f9; padding-top:6px; display:flex; justify-content:space-between; align-items:center;">
                     <span>📅 ${dateStr}</span>
                     <span style="color:#059669; font-weight:600;">🔒 Reporter Protected</span>
@@ -254,6 +267,34 @@ const DefectMap = {
                 ` : ''}
             </div>
         `;
+    },
+
+    toggleHotspotLayer() {
+        this.showHotspotLayer = !this.showHotspotLayer;
+        const btn = document.getElementById('btnToggleHotspot');
+        const legend = document.getElementById('hotspotLegendItem');
+
+        if (this.showHotspotLayer) {
+            if (btn) {
+                btn.classList.add('active-hotspot');
+                btn.textContent = '🔥 Hotspot Active';
+            }
+            if (legend) legend.style.display = 'flex';
+            if (this.heatLayer && this.map && !this.map.hasLayer(this.heatLayer)) {
+                this.heatLayer.addTo(this.map);
+            }
+            window.App?.showToast("Hotspot layer active: Visualizing defect report density & priority.");
+        } else {
+            if (btn) {
+                btn.classList.remove('active-hotspot');
+                btn.textContent = '🔥 Hotspot Layer';
+            }
+            if (legend) legend.style.display = 'none';
+            if (this.heatLayer && this.map && this.map.hasLayer(this.heatLayer)) {
+                this.map.removeLayer(this.heatLayer);
+            }
+            window.App?.showToast("Hotspot layer hidden.");
+        }
     },
 
     async loadMapData() {
@@ -293,6 +334,9 @@ const DefectMap = {
         const container = document.getElementById('infrastructureMapContainer');
 
         if (points.length === 0) {
+            if (this.heatLayer && this.map && this.map.hasLayer(this.heatLayer)) {
+                this.heatLayer.setLatLngs([]);
+            }
             const hasFilters = Boolean(
                 this.activeFilters.defect_class ||
                 this.activeFilters.status ||
@@ -314,6 +358,8 @@ const DefectMap = {
         }
 
         const markers = [];
+        const heatPoints = [];
+
         points.forEach((point) => {
             const lat = Number(point.latitude);
             const lng = Number(point.longitude);
@@ -327,12 +373,51 @@ const DefectMap = {
             marker.bindPopup(popupContent, { maxWidth: 300, className: 'leaflet-custom-popup' });
 
             markers.push(marker);
+
+            // Calculate transparent hotspot density intensity [0.1 - 1.0]
+            let weight = 0.35; // Low severity baseline
+            if (point.relative_severity === 'Critical') weight = 0.85;
+            else if (point.relative_severity === 'Medium') weight = 0.55;
+
+            // Unresolved defects require active monitoring
+            if (point.status !== 'Resolved') {
+                weight += 0.1;
+            }
+
+            // High concentration of nearby reports increases monitoring priority
+            if (point.nearby_report_count && point.nearby_report_count >= 1) {
+                weight += Math.min(point.nearby_report_count * 0.12, 0.4);
+            }
+
+            heatPoints.push([lat, lng, Math.min(weight, 1.0)]);
         });
 
         if (typeof this.markerCluster.addLayers === 'function') {
             this.markerCluster.addLayers(markers);
         } else {
             markers.forEach(m => this.markerCluster.addLayer(m));
+        }
+
+        // Update or initialize Leaflet heat/density layer
+        if (typeof L.heatLayer === 'function') {
+            if (!this.heatLayer) {
+                this.heatLayer = L.heatLayer(heatPoints, {
+                    radius: 28,
+                    blur: 16,
+                    maxZoom: 18,
+                    max: 1.0,
+                    gradient: {
+                        0.2: '#10b981', // Lower density: Green
+                        0.55: '#f59e0b', // Moderate density: Amber
+                        0.85: '#ef4444'  // High density: Red
+                    }
+                });
+                if (this.showHotspotLayer && this.map) {
+                    this.heatLayer.addTo(this.map);
+                }
+            } else {
+                this.heatLayer.setLatLngs(heatPoints);
+            }
         }
     }
 };

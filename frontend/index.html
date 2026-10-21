@@ -481,10 +481,11 @@
                             <option value="Building">Building / Wall</option>
                         </select>
                         <button type="button" class="btn-micro" id="btnResetMapFilters" title="Clear all filters">Reset</button>
+                        <button type="button" class="btn-micro" id="btnToggleHotspot" title="Toggle Report-Density Hotspot Visualization">🔥 Hotspot Layer</button>
                     </div>
                 </div>
                 <div class="map-container" id="infrastructureMapContainer">
-                    <!-- Google Maps or interactive vector fallback canvas -->
+                    <!-- Leaflet + OpenStreetMap interactive infrastructure map -->
                 </div>
                 <div class="map-legend-bar">
                     <div class="map-legend-item">
@@ -495,6 +496,12 @@
                     </div>
                     <div class="map-legend-item">
                         <span class="map-legend-dot" style="background: #10b981;"></span> Low Severity (&lt; 5%)
+                    </div>
+                    <div class="map-legend-item" id="hotspotLegendItem" style="display: none; align-items: center; gap: 4px; padding-left: 8px; border-left: 1px solid var(--border-color);">
+                        <span style="font-size: 0.72rem; font-weight: 600; color: #475569;">Density / Priority:</span>
+                        <span class="map-legend-dot" style="background: #10b981;"></span> Low
+                        <span class="map-legend-dot" style="background: #f59e0b;"></span> Amber
+                        <span class="map-legend-dot" style="background: #ef4444;"></span> High
                     </div>
                     <div class="map-legend-item" style="margin-left: auto; color: #86868b; font-size: 0.72rem;">
                         🔒 Citizen Privacy Mode: Personal reporter identities are protected.
@@ -1017,6 +1024,7 @@
     <!-- Leaflet & Leaflet.markercluster JS -->
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
     <script src="https://unpkg.com/leaflet.markercluster@1.5.3/dist/leaflet.markercluster.js"></script>
+    <script src="js/leaflet-heat.js"></script>
     <script src="js/api.js"></script>
     <script src="js/map.js"></script>
     <script src="js/submission.js"></script>
