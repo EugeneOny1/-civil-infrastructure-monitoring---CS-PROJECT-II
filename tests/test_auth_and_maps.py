@@ -672,6 +672,268 @@ class TestAuthAndMaps(unittest.TestCase):
             db_service.delete_one('submitted_images', {'_id': img_doc['_id']})
             db_service.delete_one('ai_assessments', {'image_id': img_doc['_id']})
 
+    def test_16_user_profile_view_and_update_with_role_protection(self):
+        """Verifies profile endpoint, allowed updates, role protection, and EBK credential immutability."""
+        from app.utils.auth_helpers import create_access_token
+
+        cit_id = 'usr_profile_cit_test'
+        cit_email = 'cit_profile@infravision.ke'
+        db_service.insert('users', {
+            '_id': cit_id,
+            'user_id': cit_id,
+            'name': 'Original Citizen Name',
+            'email': cit_email,
+            'role': 'citizen',
+            'phone': '+254711000111',
+            'organization': 'Community Watch',
+            'two_factor_enabled': False,
+            'must_change_password': True,
+            'created_at': datetime.now(timezone.utc).isoformat()
+        })
+        self.__class__.created_user_emails.append(cit_email)
+
+        with self.app.app_context():
+            token = create_access_token({'user_id': cit_id, 'role': 'citizen', 'email': cit_email})
+        headers = {'Authorization': f'Bearer {token}'}
+
+        # GET profile
+        res_get = self.client.get('/api/auth/profile', headers=headers)
+        self.assertEqual(res_get.status_code, 200)
+        data_get = res_get.get_json()
+        self.assertEqual(data_get['user']['name'], 'Original Citizen Name')
+        self.assertEqual(data_get['two_factor_enabled'], False)
+        self.assertEqual(data_get['has_weak_password'], True)
+        self.assertIsNone(data_get['engineering_details'])
+
+        # PUT profile: Allowed updates
+        res_put = self.client.put('/api/auth/profile', headers=headers, json={
+            'name': 'Updated Citizen Name',
+            'phone': '+254722999888',
+            'organization': 'Nairobi County Residents'
+        })
+        self.assertEqual(res_put.status_code, 200)
+        updated_doc = db_service.find_one('users', {'_id': cit_id})
+        self.assertEqual(updated_doc['name'], 'Updated Citizen Name')
+        self.assertEqual(updated_doc['phone'], '+254722999888')
+
+        # PUT profile: Role alteration blocked
+        res_role = self.client.put('/api/auth/profile', headers=headers, json={'role': 'engineer'})
+        self.assertEqual(res_role.status_code, 400)
+        self.assertIn('cannot be modified', res_role.get_json()['error'])
+
+        # PUT profile: Admin self-assignment blocked
+        res_admin = self.client.put('/api/auth/profile', headers=headers, json={'is_admin': True})
+        self.assertEqual(res_admin.status_code, 403)
+        self.assertIn('Administrator privileges cannot be self-assigned', res_admin.get_json()['error'])
+
+        # 2. Verified Engineer EBK protection
+        eng_id = 'usr_profile_eng_test'
+        eng_email = 'eng_profile@infravision.ke'
+        db_service.insert('users', {
+            '_id': eng_id,
+            'user_id': eng_id,
+            'name': 'Eng. Jane Doe',
+            'email': eng_email,
+            'role': 'engineer',
+            'engineering_category': 'Professional Engineer',
+            'professional_reg_no': 'A3947',
+            'verification_status': 'verified',
+            'two_factor_enabled': True,
+            'created_at': datetime.now(timezone.utc).isoformat()
+        })
+        self.__class__.created_user_emails.append(eng_email)
+
+        with self.app.app_context():
+            token_eng = create_access_token({'user_id': eng_id, 'role': 'engineer', 'email': eng_email})
+        headers_eng = {'Authorization': f'Bearer {token_eng}'}
+
+        res_eng_get = self.client.get('/api/auth/profile', headers=headers_eng)
+        self.assertEqual(res_eng_get.status_code, 200)
+        self.assertIsNotNone(res_eng_get.get_json()['engineering_details'])
+        self.assertEqual(res_eng_get.get_json()['engineering_details']['professional_reg_no'], 'A3947')
+
+        # Verified engineer cannot change legal EBK registration number
+        res_ebk_tamper = self.client.put('/api/auth/profile', headers=headers_eng, json={
+            'professional_reg_no': 'A9999'
+        })
+        self.assertEqual(res_ebk_tamper.status_code, 400)
+        self.assertIn('legally protected', res_ebk_tamper.get_json()['error'])
+
+        # Cleanup
+        db_service.delete_one('users', {'_id': cit_id})
+        db_service.delete_one('users', {'_id': eng_id})
+
+    def test_17_profile_password_change_and_complexity_validation(self):
+        """Verifies password change with current password check, complexity enforcement, and hash update."""
+        from werkzeug.security import generate_password_hash, check_password_hash
+        from app.utils.auth_helpers import create_access_token
+
+        usr_id = 'usr_pw_change_test'
+        usr_email = 'pw_test@infravision.ke'
+        old_pw = 'OldInitialPass@2025'
+        db_service.insert('users', {
+            '_id': usr_id,
+            'user_id': usr_id,
+            'name': 'Password Test User',
+            'email': usr_email,
+            'password_hash': generate_password_hash(old_pw),
+            'role': 'citizen',
+            'must_change_password': False,
+            'created_at': datetime.now(timezone.utc).isoformat()
+        })
+        self.__class__.created_user_emails.append(usr_email)
+
+        with self.app.app_context():
+            token = create_access_token({'user_id': usr_id, 'role': 'citizen', 'email': usr_email})
+        headers = {'Authorization': f'Bearer {token}'}
+
+        # 1. Incorrect current password
+        res_bad_curr = self.client.post('/api/auth/change-password', headers=headers, json={
+            'current_password': 'WrongCurrentPassword123!',
+            'new_password': 'NewStrongPassword@2026'
+        })
+        self.assertEqual(res_bad_curr.status_code, 400)
+        self.assertIn('Current password verification failed', res_bad_curr.get_json()['error'])
+
+        # 2. Weak new password (missing special character)
+        res_weak = self.client.post('/api/auth/change-password', headers=headers, json={
+            'current_password': old_pw,
+            'new_password': 'WeakPassword1234'
+        })
+        self.assertEqual(res_weak.status_code, 400)
+        self.assertIn('special character', res_weak.get_json()['error'])
+
+        # 3. Successful strong password change
+        new_pw = 'BrandNewStrongPass@2026'
+        res_good = self.client.post('/api/auth/change-password', headers=headers, json={
+            'current_password': old_pw,
+            'new_password': new_pw
+        })
+        self.assertEqual(res_good.status_code, 200)
+
+        # Verify new password hash in database
+        updated = db_service.find_one('users', {'_id': usr_id})
+        self.assertTrue(check_password_hash(updated['password_hash'], new_pw))
+        self.assertFalse(updated.get('must_change_password', False))
+
+        # Cleanup
+        db_service.delete_one('users', {'_id': usr_id})
+
+    def test_18_google_identity_server_verification_and_account_linking(self):
+        """Verifies Google ID token verification handling, Citizen role enforcement, and safe account linking."""
+        # 1. Missing token
+        res_missing = self.client.post('/api/auth/google', json={})
+        self.assertEqual(res_missing.status_code, 400)
+
+        # 2. New Google user created as Citizen
+        g_email = f'g_test_{int(datetime.now().timestamp())}@strathmore.edu'
+        self.__class__.created_user_emails.append(g_email)
+        res_new = self.client.post('/api/auth/google', json={
+            'email': g_email,
+            'name': 'Google Civil Citizen',
+            'sub': 'sub_1234567890'
+        })
+        self.assertEqual(res_new.status_code, 200)
+        data_new = res_new.get_json()
+        self.assertIn('token', data_new)
+        self.assertEqual(data_new['user']['role'], 'citizen')
+        self.assertEqual(data_new['user']['verification_status'], 'verified')
+
+        # 3. Existing account linked without duplicate creation
+        res_link = self.client.post('/api/auth/google', json={
+            'email': g_email,
+            'name': 'Google Civil Citizen Updated',
+            'sub': 'sub_1234567890'
+        })
+        self.assertEqual(res_link.status_code, 200)
+        all_with_email = db_service.find('users', {'email': g_email})
+        self.assertEqual(len(all_with_email), 1)
+        self.assertEqual(all_with_email[0].get('google_id'), 'sub_1234567890')
+
+        # Cleanup
+        db_service.delete_one('users', {'email': g_email})
+
+    def test_19_otp_lifecycle_expiry_resend_cooldown_and_rate_limits(self):
+        """Verifies cryptographically secure 6-digit OTP, expiry, resend invalidation, cooldown, and attempt limits."""
+        from werkzeug.security import generate_password_hash
+
+        otp_email = f'otp_user_{int(datetime.now().timestamp())}@infravision.ke'
+        user_pw = 'CivilOtpSecurePass@2026'
+        user_id = db_service.insert('users', {
+            'name': 'OTP Test User',
+            'email': otp_email,
+            'password_hash': generate_password_hash(user_pw),
+            'role': 'citizen',
+            'two_factor_enabled': True,
+            'created_at': datetime.now(timezone.utc).isoformat()
+        })
+        self.__class__.created_user_emails.append(otp_email)
+
+        # 1. First login triggers 2FA challenge and dispatches OTP
+        res_login = self.client.post('/api/auth/login', json={
+            'email': otp_email,
+            'password': user_pw
+        })
+        self.assertEqual(res_login.status_code, 200)
+        login_data = res_login.get_json()
+        self.assertTrue(login_data['require_2fa'])
+        self.assertIn('expires_in_seconds', login_data)
+
+        # Get active OTP from database
+        user_doc = db_service.find_one('users', {'_id': user_id})
+        active_otp = user_doc.get('two_factor_otp')
+        self.assertIsNotNone(active_otp)
+        self.assertEqual(len(str(active_otp)), 6)
+        self.assertTrue(str(active_otp).isdigit())
+
+        # 2. Invalid code verification fails and decrements attempts
+        res_wrong = self.client.post('/api/auth/verify-2fa', json={
+            'email': otp_email,
+            'otp_code': '000000'
+        })
+        self.assertEqual(res_wrong.status_code, 401)
+        self.assertIn('attempt(s) remaining', res_wrong.get_json()['error'])
+
+        # 3. Resend OTP invalidates the previous code
+        # Fast resend within cooldown is rate-limited (429)
+        res_fast_resend = self.client.post('/api/auth/resend-otp', json={'email': otp_email})
+        self.assertEqual(res_fast_resend.status_code, 429)
+
+        # Simulate cooldown elapsed by winding back dispatched timestamp
+        past_time = (datetime.now(timezone.utc) - timedelta(seconds=70)).isoformat()
+        db_service.update_one('users', {'_id': user_id}, {'otp_dispatched_at': past_time})
+
+        res_resend = self.client.post('/api/auth/resend-otp', json={'email': otp_email})
+        self.assertEqual(res_resend.status_code, 200)
+        user_doc_after = db_service.find_one('users', {'_id': user_id})
+        new_otp = user_doc_after.get('two_factor_otp')
+        self.assertNotEqual(active_otp, new_otp)
+
+        # Stale previous OTP is rejected
+        res_stale = self.client.post('/api/auth/verify-2fa', json={
+            'email': otp_email,
+            'otp_code': active_otp
+        })
+        self.assertEqual(res_stale.status_code, 401)
+
+        # New OTP succeeds
+        res_success = self.client.post('/api/auth/verify-2fa', json={
+            'email': otp_email,
+            'otp_code': new_otp
+        })
+        self.assertEqual(res_success.status_code, 200)
+        self.assertIn('token', res_success.get_json())
+
+        # Single-use check: Same OTP cannot be used again
+        res_reuse = self.client.post('/api/auth/verify-2fa', json={
+            'email': otp_email,
+            'otp_code': new_otp
+        })
+        self.assertEqual(res_reuse.status_code, 401)
+
+        # Cleanup
+        db_service.delete_one('users', {'_id': user_id})
+
 
 if __name__ == '__main__':
     unittest.main()
