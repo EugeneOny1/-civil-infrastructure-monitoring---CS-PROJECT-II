@@ -1321,10 +1321,264 @@
     box-shadow: 0 0 0 2px rgba(239, 68, 68, 0.2);
 }
 
+/* --------------------------------------------------------------------------
+   Interactive Account Dropdown Menu (Section 8)
+   -------------------------------------------------------------------------- */
+.user-profile-wrapper {
+    position: relative;
+    display: inline-block;
+}
 
+.user-profile-badge {
+    cursor: pointer;
+    user-select: none;
+    transition: var(--transition-fast);
+}
 
+.user-profile-badge:hover {
+    background: #e2e8f0;
+}
 
+.account-dropdown-menu {
+    position: absolute;
+    top: calc(100% + 8px);
+    right: 0;
+    width: 250px;
+    background: #ffffff;
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-md);
+    box-shadow: var(--shadow-card);
+    z-index: 1000;
+    padding: 0.5rem 0;
+    display: flex;
+    flex-direction: column;
+    animation: fadeInDown 0.18s ease-out;
+}
 
+@keyframes fadeInDown {
+    from {
+        opacity: 0;
+        transform: translateY(-6px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+.account-menu-header {
+    padding: 0.65rem 1rem;
+    border-bottom: 1px solid #f1f5f9;
+}
+
+.menu-user-name {
+    font-weight: 700;
+    font-size: 0.88rem;
+    color: #0f172a;
+    line-height: 1.25;
+}
+
+.menu-user-email {
+    font-size: 0.78rem;
+    color: #64748b;
+    margin-top: 2px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.dropdown-divider {
+    height: 1px;
+    background: #e2e8f0;
+    margin: 0.35rem 0;
+}
+
+.dropdown-item {
+    display: flex;
+    align-items: center;
+    gap: 0.65rem;
+    padding: 0.6rem 1rem;
+    background: transparent;
+    border: none;
+    color: #334155;
+    font-size: 0.84rem;
+    font-weight: 500;
+    font-family: var(--font-main);
+    text-align: left;
+    width: 100%;
+    cursor: pointer;
+    transition: var(--transition-fast);
+}
+
+.dropdown-item:hover {
+    background: #f8fafc;
+    color: var(--accent-primary);
+}
+
+.dropdown-item .item-icon {
+    font-size: 0.95rem;
+}
+
+.dropdown-item.dropdown-logout {
+    color: #dc2626;
+}
+
+.dropdown-item.dropdown-logout:hover {
+    background: #fef2f2;
+    color: #b91c1c;
+}
+
+/* --------------------------------------------------------------------------
+   User Profile & Settings Layout (Sections 8, 9, 10)
+   -------------------------------------------------------------------------- */
+.settings-layout {
+    display: grid;
+    grid-template-columns: 280px 1fr;
+    gap: 1.75rem;
+    align-items: start;
+    margin-top: 1rem;
+}
+
+@media (max-width: 860px) {
+    .settings-layout {
+        grid-template-columns: 1fr;
+        gap: 1.25rem;
+    }
+}
+
+.settings-sidebar {
+    padding: 1.25rem;
+}
+
+.settings-user-card {
+    display: flex;
+    align-items: center;
+    gap: 0.85rem;
+    padding-bottom: 1.25rem;
+    border-bottom: 1px solid var(--border-color);
+    margin-bottom: 1rem;
+}
+
+.settings-avatar {
+    width: 48px;
+    height: 48px;
+    border-radius: var(--radius-full);
+    background: #0f172a;
+    color: #ffffff;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1.25rem;
+    font-weight: 700;
+    font-family: var(--font-mono);
+}
+
+.settings-avatar-info {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    overflow: hidden;
+}
+
+.settings-user-name {
+    font-size: 0.98rem;
+    font-weight: 700;
+    color: #0f172a;
+    margin: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.settings-nav {
+    display: flex;
+    flex-direction: column;
+    gap: 0.35rem;
+}
+
+.settings-nav-btn {
+    display: flex;
+    align-items: center;
+    gap: 0.65rem;
+    padding: 0.65rem 0.85rem;
+    background: transparent;
+    border: none;
+    border-radius: var(--radius-sm);
+    color: #475569;
+    font-size: 0.88rem;
+    font-weight: 600;
+    font-family: var(--font-main);
+    cursor: pointer;
+    text-align: left;
+    transition: var(--transition-fast);
+}
+
+.settings-nav-btn:hover {
+    background: #f1f5f9;
+    color: #0f172a;
+}
+
+.settings-nav-btn.active {
+    background: #0f172a;
+    color: #ffffff;
+}
+
+.settings-content-wrapper {
+    display: flex;
+    flex-direction: column;
+}
+
+.settings-panel {
+    padding: 1.75rem;
+}
+
+.settings-panel-header {
+    border-bottom: 1px solid var(--border-color);
+    padding-bottom: 1rem;
+    margin-bottom: 1.5rem;
+}
+
+.panel-title {
+    font-size: 1.2rem;
+    font-weight: 700;
+    color: #0f172a;
+    margin: 0 0 0.25rem 0;
+}
+
+.panel-subtitle {
+    font-size: 0.85rem;
+    color: #64748b;
+    margin: 0;
+}
+
+.readonly-input {
+    background: #f8fafc !important;
+    color: #64748b !important;
+    cursor: not-allowed;
+    border-color: #e2e8f0 !important;
+}
+
+/* Password Criteria Checklist (Section 10) */
+.password-criteria-list {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 0.35rem;
+}
+
+.criterion {
+    font-size: 0.78rem;
+    font-weight: 500;
+    transition: var(--transition-fast);
+}
+
+.criterion.failed {
+    color: #dc2626;
+}
+
+.criterion.passed {
+    color: #16a34a;
+    font-weight: 600;
+}
 
 
 

@@ -62,17 +62,38 @@
 
             <!-- User Session State & Auth Controls -->
             <div class="user-session-panel" id="userSessionPanel">
-                <!-- Authenticated User Display -->
-                <div class="user-profile-badge hidden" id="userProfileBadge">
-                    <span class="user-dot" id="userStatusDot"></span>
-                    <div class="user-info-text">
-                        <span class="user-name" id="currentUserName">User</span>
-                        <div class="user-role-line">
-                            <span class="role-badge" id="currentUserRole">Citizen</span>
-                            <span class="verification-badge" id="currentVerificationBadge">Verified</span>
+                <!-- Authenticated User Display with Interactive Account Dropdown (Section 8) -->
+                <div class="user-profile-wrapper" id="userProfileWrapper">
+                    <div class="user-profile-badge hidden" id="userProfileBadge" tabindex="0" role="button" aria-haspopup="true" aria-expanded="false" title="Click to open account menu">
+                        <span class="user-dot" id="userStatusDot"></span>
+                        <div class="user-info-text">
+                            <span class="user-name" id="currentUserName">User</span>
+                            <div class="user-role-line">
+                                <span class="role-badge" id="currentUserRole">Citizen</span>
+                                <span class="verification-badge" id="currentVerificationBadge">Verified</span>
+                            </div>
                         </div>
+                        <span class="dropdown-caret" style="font-size: 0.65rem; color: #64748b; margin-left: 3px;">▾</span>
                     </div>
-                    <button type="button" class="btn-logout" id="btnLogout" title="Log Out">⎋ Logout</button>
+
+                    <!-- Clean Compact Account Dropdown Menu (Section 8) -->
+                    <div class="account-dropdown-menu hidden" id="accountDropdownMenu">
+                        <div class="account-menu-header">
+                            <div class="menu-user-name" id="menuUserName">User Name</div>
+                            <div class="menu-user-email" id="menuUserEmail">user@strathmore.edu</div>
+                        </div>
+                        <div class="dropdown-divider"></div>
+                        <button type="button" class="dropdown-item" id="btnNavProfile">
+                            <span class="item-icon">👤</span> Profile Information
+                        </button>
+                        <button type="button" class="dropdown-item" id="btnNavSecurity">
+                            <span class="item-icon">🔒</span> Security & Password
+                        </button>
+                        <div class="dropdown-divider"></div>
+                        <button type="button" class="dropdown-item dropdown-logout" id="btnLogout">
+                            <span class="item-icon">⎋</span> Log Out
+                        </button>
+                    </div>
                 </div>
 
                 <!-- Unauthenticated Login/Register Trigger Buttons -->
@@ -143,9 +164,16 @@
                             <label for="twoFactorOtpInput" class="field-label">Security Verification Code (6 digits)</label>
                             <div class="input-with-button">
                                 <input type="text" id="twoFactorOtpInput" class="field-input text-center font-mono" maxlength="6" placeholder="000000" required>
-                                <button type="button" class="btn-secondary btn-sm" id="btnFillDemoOtp" title="Autofill standard test code">
+                                <button type="button" class="btn-secondary btn-sm" id="btnFillDemoOtp" title="Autofill active security code">
                                     Fill Demo Code
                                 </button>
+                            </div>
+                            <!-- Live Expiry Countdown Display (Section 12) -->
+                            <div class="otp-expiry-container" id="otpExpiryContainer" style="display: flex; justify-content: space-between; align-items: center; margin-top: 0.45rem;">
+                                <span class="otp-countdown-text" id="otpCountdownText" style="font-weight: 700; color: #dc2626; font-size: 0.85rem; font-family: var(--font-mono);">
+                                    ⏱ Code expires in 05:00
+                                </span>
+                                <span style="font-size: 0.75rem; color: #64748b;">Single-use verification</span>
                             </div>
                             <small class="field-help-text" id="twoFactorHelpText">
                                 Enter the 6-digit verification code sent to your email.
@@ -515,6 +543,166 @@
                     </div>
                     <div class="map-legend-item" style="margin-left: auto; color: #86868b; font-size: 0.72rem;">
                         🔒 Citizen Privacy Mode: Personal reporter identities are protected.
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- VIEW: USER PROFILE & ACCOUNT SETTINGS (Sections 8, 9, 10) -->
+        <section class="view-section" id="view-profile">
+            <div class="view-header">
+                <div>
+                    <h2 class="view-title">User Account & Settings</h2>
+                    <p class="view-desc">Manage your personal infrastructure monitoring profile, professional credentials, and account security</p>
+                </div>
+            </div>
+
+            <div class="settings-layout">
+                <!-- Left-side vertical account menu (Section 8) -->
+                <aside class="settings-sidebar glass-card">
+                    <div class="settings-user-card">
+                        <div class="settings-avatar" id="profileAvatarInitial">U</div>
+                        <div class="settings-avatar-info">
+                            <h3 class="settings-user-name" id="profileSidebarName">User</h3>
+                            <span class="role-badge" id="profileSidebarRole">Citizen</span>
+                        </div>
+                    </div>
+                    <nav class="settings-nav">
+                        <button type="button" class="settings-nav-btn active" id="tabProfileInfo" data-target="panelProfileInfo">
+                            <span>👤</span> Profile Information
+                        </button>
+                        <button type="button" class="settings-nav-btn" id="tabProfileSecurity" data-target="panelProfileSecurity">
+                            <span>🔒</span> Security & Credentials
+                        </button>
+                    </nav>
+                </aside>
+
+                <!-- Right-side main content panel -->
+                <div class="settings-content-wrapper">
+                    <!-- Panel 1: Profile Information (Section 9) -->
+                    <div class="settings-panel glass-card active" id="panelProfileInfo">
+                        <div class="settings-panel-header">
+                            <h3 class="panel-title">Profile Information</h3>
+                            <p class="panel-subtitle">Personal registration and identification details</p>
+                        </div>
+
+                        <form id="formUpdateProfile" class="settings-form">
+                            <div class="form-row-2">
+                                <div class="form-group">
+                                    <label for="profFullName" class="field-label">Full Name *</label>
+                                    <input type="text" id="profFullName" class="field-input" required>
+                                </div>
+                                <div class="form-group">
+                                    <label for="profEmail" class="field-label">Email Address (Read-only)</label>
+                                    <input type="email" id="profEmail" class="field-input readonly-input" readonly>
+                                </div>
+                            </div>
+
+                            <div class="form-row-2">
+                                <div class="form-group">
+                                    <label for="profPhone" class="field-label">Phone Number</label>
+                                    <input type="tel" id="profPhone" class="field-input" placeholder="+254 700 000000">
+                                </div>
+                                <div class="form-group">
+                                    <label for="profRole" class="field-label">Account Role (Protected)</label>
+                                    <input type="text" id="profRole" class="field-input readonly-input" readonly>
+                                </div>
+                            </div>
+
+                            <!-- Professional Engineer Details (Visible for Engineers) -->
+                            <div id="profEngineerDetails" class="professional-details-box hidden" style="margin-top: 1rem; padding: 1.25rem; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: var(--radius-sm);">
+                                <h4 style="margin: 0 0 0.75rem 0; font-size: 0.95rem; color: #0f172a;">EBK Professional Accreditation</h4>
+                                <div class="form-row-2">
+                                    <div class="form-group">
+                                        <label class="field-label">EBK Category</label>
+                                        <input type="text" id="profEngCategory" class="field-input readonly-input" readonly>
+                                    </div>
+                                    <div class="form-group">
+                                        <label class="field-label">EBK Registration Number</label>
+                                        <input type="text" id="profEngRegNo" class="field-input readonly-input" readonly>
+                                    </div>
+                                </div>
+                                <div class="form-row-2">
+                                    <div class="form-group">
+                                        <label class="field-label">Professional Verification Status</label>
+                                        <input type="text" id="profEngStatus" class="field-input readonly-input" readonly>
+                                    </div>
+                                    <div class="form-group">
+                                        <label for="profOrganization" class="field-label">Organisation / Ministry</label>
+                                        <input type="text" id="profOrganization" class="field-input" placeholder="e.g., KeNHA / KeRRA / MoTI">
+                                    </div>
+                                </div>
+                                <p class="field-help-text" style="margin-top: 0.5rem;">
+                                    Protected engineering credentials cannot be casually altered without administrative re-verification.
+                                </p>
+                            </div>
+
+                            <div class="form-actions" style="margin-top: 1.5rem;">
+                                <button type="submit" class="btn-primary" id="btnSaveProfile">Save Profile Changes</button>
+                            </div>
+                        </form>
+                    </div>
+
+                    <!-- Panel 2: Profile Security (Section 10) -->
+                    <div class="settings-panel glass-card hidden" id="panelProfileSecurity">
+                        <div class="settings-panel-header">
+                            <h3 class="panel-title">Security & Credentials</h3>
+                            <p class="panel-subtitle">Manage your password, authentication requirements, and two-factor protection</p>
+                        </div>
+
+                        <!-- Security Alert / Weak Password Recommendation Banner (Section 10) -->
+                        <div id="weakPasswordWarningBanner" class="security-alert-box hidden" style="margin-bottom: 1.5rem; padding: 1rem 1.25rem; background: #fffbeb; border: 1px solid #fde68a; border-radius: var(--radius-sm); display: flex; gap: 0.75rem; align-items: flex-start;">
+                            <span style="font-size: 1.25rem;">⚠️</span>
+                            <div>
+                                <strong style="color: #92400e; display: block; font-size: 0.9rem;">Security Recommendation</strong>
+                                <p style="color: #b45309; margin: 0.25rem 0 0; font-size: 0.85rem;">
+                                    Your current password does not meet the latest security recommendations. Update your password below.
+                                </p>
+                            </div>
+                        </div>
+
+                        <!-- 2FA Status Card -->
+                        <div style="padding: 1.25rem; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: var(--radius-sm); margin-bottom: 1.5rem; display: flex; justify-content: space-between; align-items: center;">
+                            <div>
+                                <h4 style="margin: 0 0 0.25rem 0; font-size: 0.95rem; color: #0f172a;">Two-Factor Authentication (2FA)</h4>
+                                <p style="margin: 0; font-size: 0.82rem; color: #64748b;" id="twoFactorStatusDesc">
+                                    Mandatory for professional accounts; optional for citizens.
+                                </p>
+                            </div>
+                            <span class="status-chip active" id="profTwoFactorBadge">Enabled</span>
+                        </div>
+
+                        <!-- Change Password Form -->
+                        <div style="border-top: 1px solid #e2e8f0; padding-top: 1.5rem;">
+                            <h4 style="margin: 0 0 1rem 0; font-size: 0.95rem; color: #0f172a;">Change Account Password</h4>
+                            <form id="formChangePassword" class="settings-form">
+                                <div class="form-group">
+                                    <label for="pwdCurrent" class="field-label">Current Password *</label>
+                                    <input type="password" id="pwdCurrent" class="field-input" placeholder="••••••••" required>
+                                </div>
+                                <div class="form-group">
+                                    <label for="pwdNew" class="field-label">New Password *</label>
+                                    <input type="password" id="pwdNew" class="field-input" placeholder="••••••••" minlength="8" required>
+                                </div>
+
+                                <!-- Live Validation Checklist (Section 10) -->
+                                <div class="password-criteria-list" id="profilePasswordCriteria" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 0.4rem; margin-top: 0.5rem; margin-bottom: 1rem;">
+                                    <div class="criterion failed" id="critProfLength">✕ At least 8 characters</div>
+                                    <div class="criterion failed" id="critProfNumber">✕ At least one number (0-9)</div>
+                                    <div class="criterion failed" id="critProfSpecial">✕ At least one special symbol (!@#$)</div>
+                                    <div class="criterion failed" id="critProfCase">✕ Upper & lowercase letters</div>
+                                </div>
+
+                                <div class="form-group">
+                                    <label for="pwdConfirm" class="field-label">Confirm New Password *</label>
+                                    <input type="password" id="pwdConfirm" class="field-input" placeholder="••••••••" minlength="8" required>
+                                </div>
+
+                                <div class="form-actions" style="margin-top: 1.25rem;">
+                                    <button type="submit" class="btn-primary" id="btnSubmitChangePassword">Update Password</button>
+                                </div>
+                            </form>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -914,7 +1102,7 @@
                         <span class="health-pill" id="healthGoogle">Configured</span>
                     </div>
                     <div class="health-status-card">
-                        <span class="health-label">GIS / Mapping</span>
+                        <span class="health-label">Leaflet + OpenStreetMap</span>
                         <span class="health-pill healthy" id="healthMaps">Active</span>
                     </div>
                 </div>

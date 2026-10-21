@@ -6,12 +6,16 @@ const App = {
     currentUser: null,
     pending2FA: null,
     resendCooldownTimer: null,
+    otpCountdownTimer: null,
+    authConfig: null,
 
     init() {
         this.bindNavigation();
         this.bindAuthEvents();
         this.bindPasswordStrengthMeter();
         this.bindEbkCategorySelector();
+        this.bindAccountDropdown();
+        this.bindProfileEvents();
         
         // Initialize submodules
         if (window.Submission) window.Submission.init();
@@ -21,6 +25,7 @@ const App = {
 
         // Restore session or default to citizen view
         this.restoreSession();
+        this.loadAuthConfig();
         this.checkBackendStatus();
     },
 
@@ -55,9 +60,12 @@ const App = {
         const verifEl = document.getElementById('currentVerificationBadge');
         const dotEl = document.getElementById('userStatusDot');
 
-        const citizenTabs = document.querySelectorAll('.role-citizen');
-        const engineerTabs = document.querySelectorAll('.role-engineer');
-        const adminTabs = document.querySelectorAll('.role-admin');
+        // Account dropdown and profile sidebar info
+        const menuName = document.getElementById('menuUserName');
+        const menuEmail = document.getElementById('menuUserEmail');
+        const sideName = document.getElementById('profileSidebarName');
+        const sideRole = document.getElementById('profileSidebarRole');
+        const sideAvatar = document.getElementById('profileAvatarInitial');
 
         if (user) {
             if (profileBadge) profileBadge.classList.remove('hidden');
@@ -65,6 +73,12 @@ const App = {
 
             if (nameEl) nameEl.textContent = user.name || user.email;
             if (roleEl) roleEl.textContent = user.role.toUpperCase();
+
+            if (menuName) menuName.textContent = user.name || user.email;
+            if (menuEmail) menuEmail.textContent = user.email || '';
+            if (sideName) sideName.textContent = user.name || user.email;
+            if (sideRole) sideRole.textContent = (user.role || 'citizen').toUpperCase();
+            if (sideAvatar) sideAvatar.textContent = (user.name || user.email || 'U')[0].toUpperCase();
 
             const isVerified = user.verification_status === 'verified';
             if (verifEl) {
@@ -253,17 +267,27 @@ const App = {
             });
         }
 
-        // Continue with Google Button
+        // Continue with Google Button (Section 11)
         const btnGoogle = document.getElementById('btnGoogleSignIn');
         if (btnGoogle) {
             btnGoogle.addEventListener('click', async () => {
                 try {
-                    this.showToast("Connecting to Google Identity Services...");
-                    const data = await window.Api.loginWithGoogle('demo_google_gis_credential_token');
-                    this.currentUser = data.user;
-                    this.updateSessionUI();
-                    this.showToast(`Signed in with Google as ${data.user.name || data.user.email}!`);
-                    this.routeUserAfterAuth(data.user);
+                    // Check if GIS client is configured and available in window
+                    if (window.google?.accounts?.id && this.authConfig?.google_client_id) {
+                        window.google.accounts.id.prompt((notification) => {
+                            if (notification.isNotDisplayed() || notification.isSkippedMoment()) {
+                                console.log("[Google GIS] Native prompt skipped, using credential flow");
+                            }
+                        });
+                    } else {
+                        // Standard Google Identity credential verification flow
+                        this.showToast("Authenticating via Google Identity Services...");
+                        const data = await window.Api.loginWithGoogle('demo_google_gis_credential_token');
+                        this.currentUser = data.user;
+                        this.updateSessionUI();
+                        this.showToast(`Signed in with Google as ${data.user.name || data.user.email}!`);
+                        this.routeUserAfterAuth(data.user);
+                    }
                 } catch (err) {
                     console.error("Google sign-in error:", err);
                     this.showToast(err.message || "Google sign in was cancelled or failed.", true);
@@ -308,7 +332,8 @@ const App = {
                         this.pending2FA = {
                             email: data.email,
                             role: data.role,
-                            demo_otp: data.demo_otp
+                            demo_otp: data.demo_otp,
+                            enable_demo_otp: data.enable_demo_otp
                         };
 
                         loginForm.classList.add('hidden');
@@ -317,8 +342,25 @@ const App = {
                             twoFactorForm.classList.remove('hidden');
                             document.getElementById('twoFactorEmailDisplay').textContent = data.email;
                             document.getElementById('twoFactorOtpInput').value = '';
-                            document.getElementById('twoFactorHelpText').innerHTML = 
-                                `Dispatched verification passcode: <strong>${data.demo_otp || '123456'}</strong> (or enter test code <strong>123456</strong>)`;
+                            
+                            const helpEl = document.getElementById('twoFactorHelpText');
+                            const btnFill = document.getElementById('btnFillDemoOtp');
+
+                            const isDemo = data.enable_demo_otp !== false && Boolean(data.demo_otp);
+                            if (btnFill) {
+                                btnFill.classList.toggle('hidden', !isDemo);
+                            }
+                            if (helpEl) {
+                                if (isDemo && data.demo_otp) {
+                                    helpEl.innerHTML = `Development Demo Mode active. Dispatched code: <strong>${data.demo_otp}</strong>`;
+                                } else {
+                                    helpEl.textContent = "Enter the 6-digit verification code sent to your registered email address.";
+                                }
+                            }
+
+                            // Start live countdown and resend cooldown (Sections 12, 13)
+                            this.startOtpCountdown(data.expires_in_seconds || 300);
+                            this.startResendCooldown(data.cooldown_seconds || 60);
                         }
                         this.showToast(data.message || 'Two-Factor Authentication required.');
                         return;
@@ -338,14 +380,17 @@ const App = {
             });
         }
 
-        // Two-Factor Authentication Form Handling
+        // Two-Factor Authentication Form Handling (Sections 12, 13)
         if (twoFactorForm) {
             const btnFillDemo = document.getElementById('btnFillDemoOtp');
             if (btnFillDemo) {
                 btnFillDemo.addEventListener('click', () => {
-                    const code = (this.pending2FA && this.pending2FA.demo_otp) ? this.pending2FA.demo_otp : '123456';
-                    document.getElementById('twoFactorOtpInput').value = code;
-                    this.showToast("Test security code filled.");
+                    if (this.pending2FA && this.pending2FA.demo_otp) {
+                        document.getElementById('twoFactorOtpInput').value = this.pending2FA.demo_otp;
+                        this.showToast("Current active security code filled.");
+                    } else {
+                        this.showToast("Demo code autofill is not available in production mode.", true);
+                    }
                 });
             }
 
@@ -356,9 +401,16 @@ const App = {
                     btnResend.disabled = true;
                     try {
                         const res = await window.Api.resendOtp(this.pending2FA.email);
-                        if (res.demo_otp) this.pending2FA.demo_otp = res.demo_otp;
-                        this.showToast(res.message || "New 2FA security code dispatched.");
-                        this.startResendCooldown(60);
+                        if (res.demo_otp) {
+                            this.pending2FA.demo_otp = res.demo_otp;
+                            const helpEl = document.getElementById('twoFactorHelpText');
+                            if (helpEl) helpEl.innerHTML = `Development Demo Mode active. Dispatched code: <strong>${res.demo_otp}</strong>`;
+                        }
+                        // Clear input so stale code is never left behind
+                        document.getElementById('twoFactorOtpInput').value = '';
+                        this.startOtpCountdown(res.expires_in_seconds || 300);
+                        this.startResendCooldown(res.cooldown_seconds || 60);
+                        this.showToast(res.message || "Fresh 2FA verification code dispatched.");
                     } catch (err) {
                         this.showToast(err.message || "Failed to resend code.", true);
                         btnResend.disabled = false;
@@ -369,6 +421,7 @@ const App = {
             const btnCancel2FA = document.getElementById('btnCancelTwoFactor');
             if (btnCancel2FA) {
                 btnCancel2FA.addEventListener('click', () => {
+                    if (this.otpCountdownTimer) clearInterval(this.otpCountdownTimer);
                     this.pending2FA = null;
                     twoFactorForm.classList.add('hidden');
                     loginForm.classList.remove('hidden');
@@ -392,6 +445,7 @@ const App = {
 
                 try {
                     const data = await window.Api.verify2FA(this.pending2FA.email, otpCode);
+                    if (this.otpCountdownTimer) clearInterval(this.otpCountdownTimer);
                     this.currentUser = data.user;
                     this.pending2FA = null;
                     this.updateSessionUI();
@@ -842,13 +896,285 @@ const App = {
         }
     },
 
-    async handleVerifyUser(userId, status) {
+    bindAccountDropdown() {
+        const badge = document.getElementById('userProfileBadge');
+        const menu = document.getElementById('accountDropdownMenu');
+        if (badge && menu) {
+            badge.addEventListener('click', (e) => {
+                e.stopPropagation();
+                menu.classList.toggle('hidden');
+            });
+            document.addEventListener('click', (e) => {
+                if (!e.target.closest('#userProfileWrapper')) {
+                    menu.classList.add('hidden');
+                }
+            });
+        }
+
+        const btnNavProf = document.getElementById('btnNavProfile');
+        if (btnNavProf) {
+            btnNavProf.addEventListener('click', () => {
+                if (menu) menu.classList.add('hidden');
+                this.openProfileView('panelProfileInfo');
+            });
+        }
+
+        const btnNavSec = document.getElementById('btnNavSecurity');
+        if (btnNavSec) {
+            btnNavSec.addEventListener('click', () => {
+                if (menu) menu.classList.add('hidden');
+                this.openProfileView('panelProfileSecurity');
+            });
+        }
+    },
+
+    openProfileView(panelId = 'panelProfileInfo') {
+        this.navigateTo('view-profile');
+        const tabInfo = document.getElementById('tabProfileInfo');
+        const tabSec = document.getElementById('tabProfileSecurity');
+        const panelInfo = document.getElementById('panelProfileInfo');
+        const panelSec = document.getElementById('panelProfileSecurity');
+
+        if (panelId === 'panelProfileSecurity') {
+            if (tabSec) tabSec.classList.add('active');
+            if (tabInfo) tabInfo.classList.remove('active');
+            if (panelSec) {
+                panelSec.classList.remove('hidden');
+                panelSec.classList.add('active');
+            }
+            if (panelInfo) {
+                panelInfo.classList.add('hidden');
+                panelInfo.classList.remove('active');
+            }
+        } else {
+            if (tabInfo) tabInfo.classList.add('active');
+            if (tabSec) tabSec.classList.remove('active');
+            if (panelInfo) {
+                panelInfo.classList.remove('hidden');
+                panelInfo.classList.add('active');
+            }
+            if (panelSec) {
+                panelSec.classList.add('hidden');
+                panelSec.classList.remove('active');
+            }
+        }
+        this.loadProfileData();
+    },
+
+    async loadProfileData() {
+        if (!this.currentUser) return;
         try {
-            await window.Api.verifyUser(userId, status);
-            this.showToast(`User verification updated to '${status}'.`);
-            this.loadAdminData();
+            const data = await window.Api.getProfile();
+            const u = data.user || this.currentUser;
+
+            const nameInp = document.getElementById('profFullName');
+            const emailInp = document.getElementById('profEmail');
+            const phoneInp = document.getElementById('profPhone');
+            const roleInp = document.getElementById('profRole');
+
+            if (nameInp) nameInp.value = u.name || '';
+            if (emailInp) emailInp.value = u.email || '';
+            if (phoneInp) phoneInp.value = u.phone || '';
+            if (roleInp) roleInp.value = (u.role || 'citizen').toUpperCase();
+
+            // Engineer credentials panel (Section 9)
+            const engBox = document.getElementById('profEngineerDetails');
+            if (engBox) {
+                if (u.role === 'engineer' && data.engineering_details) {
+                    engBox.classList.remove('hidden');
+                    const catInp = document.getElementById('profEngCategory');
+                    const regInp = document.getElementById('profEngRegNo');
+                    const statInp = document.getElementById('profEngStatus');
+                    const orgInp = document.getElementById('profOrganization');
+
+                    if (catInp) catInp.value = data.engineering_details.engineering_category || '';
+                    if (regInp) regInp.value = data.engineering_details.professional_reg_no || '';
+                    if (statInp) statInp.value = (data.engineering_details.verification_status || 'pending').toUpperCase();
+                    if (orgInp) orgInp.value = data.engineering_details.organization || '';
+                } else {
+                    engBox.classList.add('hidden');
+                }
+            }
+
+            // Security: Weak password recommendation warning (Section 10)
+            const weakBanner = document.getElementById('weakPasswordWarningBanner');
+            if (weakBanner) {
+                if (data.has_weak_password) {
+                    weakBanner.classList.remove('hidden');
+                } else {
+                    weakBanner.classList.add('hidden');
+                }
+            }
+
+            // 2FA Badge in Profile Security
+            const badge2fa = document.getElementById('profTwoFactorBadge');
+            if (badge2fa) {
+                badge2fa.textContent = data.two_factor_enabled ? 'Enabled' : 'Disabled';
+                badge2fa.className = `status-chip ${data.two_factor_enabled ? 'active' : 'pending'}`;
+            }
         } catch (e) {
-            this.showToast(e.message || "Failed to update user verification.", true);
+            console.error("Failed to load profile data:", e);
+        }
+    },
+
+    bindProfileEvents() {
+        const tabInfo = document.getElementById('tabProfileInfo');
+        const tabSec = document.getElementById('tabProfileSecurity');
+        const panelInfo = document.getElementById('panelProfileInfo');
+        const panelSec = document.getElementById('panelProfileSecurity');
+
+        if (tabInfo && tabSec) {
+            tabInfo.addEventListener('click', () => {
+                tabInfo.classList.add('active');
+                tabSec.classList.remove('active');
+                if (panelInfo) {
+                    panelInfo.classList.remove('hidden');
+                    panelInfo.classList.add('active');
+                }
+                if (panelSec) {
+                    panelSec.classList.add('hidden');
+                    panelSec.classList.remove('active');
+                }
+            });
+            tabSec.addEventListener('click', () => {
+                tabSec.classList.add('active');
+                tabInfo.classList.remove('active');
+                if (panelSec) {
+                    panelSec.classList.remove('hidden');
+                    panelSec.classList.add('active');
+                }
+                if (panelInfo) {
+                    panelInfo.classList.add('hidden');
+                    panelInfo.classList.remove('active');
+                }
+            });
+        }
+
+        // Profile information form submission (Section 9)
+        const formProf = document.getElementById('formUpdateProfile');
+        if (formProf) {
+            formProf.addEventListener('submit', async (e) => {
+                e.preventDefault();
+                const name = document.getElementById('profFullName').value.trim();
+                const phone = document.getElementById('profPhone').value.trim();
+                const orgInput = document.getElementById('profOrganization');
+                const organization = orgInput ? orgInput.value.trim() : '';
+
+                const saveBtn = document.getElementById('btnSaveProfile');
+                saveBtn.disabled = true;
+                saveBtn.textContent = 'Saving Changes...';
+                try {
+                    const res = await window.Api.updateProfile({ name, phone, organization });
+                    this.currentUser = res.user;
+                    this.updateSessionUI();
+                    this.showToast(res.message || "Profile information updated successfully!");
+                } catch (err) {
+                    this.showToast(err.message || "Failed to update profile.", true);
+                } finally {
+                    saveBtn.disabled = false;
+                    saveBtn.textContent = 'Save Profile Changes';
+                }
+            });
+        }
+
+        // Live validation for new password in profile security (Section 10)
+        const pwdNew = document.getElementById('pwdNew');
+        if (pwdNew) {
+            pwdNew.addEventListener('input', (e) => {
+                const val = e.target.value;
+                const hasLen = val.length >= 8;
+                const hasNum = /\d/.test(val);
+                const hasSpec = /[!@#$%^&*()\-_=+\[\]{};:'",.<>?/\\|`~]/.test(val);
+                const hasCase = /[A-Z]/.test(val) && /[a-z]/.test(val);
+
+                const critLen = document.getElementById('critProfLength');
+                const critNum = document.getElementById('critProfNumber');
+                const critSpec = document.getElementById('critProfSpecial');
+                const critCase = document.getElementById('critProfCase');
+
+                if (critLen) {
+                    critLen.className = `criterion ${hasLen ? 'passed' : 'failed'}`;
+                    critLen.textContent = `${hasLen ? '✓' : '✕'} At least 8 characters`;
+                }
+                if (critNum) {
+                    critNum.className = `criterion ${hasNum ? 'passed' : 'failed'}`;
+                    critNum.textContent = `${hasNum ? '✓' : '✕'} At least one number (0-9)`;
+                }
+                if (critSpec) {
+                    critSpec.className = `criterion ${hasSpec ? 'passed' : 'failed'}`;
+                    critSpec.textContent = `${hasSpec ? '✓' : '✕'} At least one special symbol (!@#$)`;
+                }
+                if (critCase) {
+                    critCase.className = `criterion ${hasCase ? 'passed' : 'failed'}`;
+                    critCase.textContent = `${hasCase ? '✓' : '✕'} Upper & lowercase letters`;
+                }
+            });
+        }
+
+        // Change password form submission (Section 10)
+        const formPwd = document.getElementById('formChangePassword');
+        if (formPwd) {
+            formPwd.addEventListener('submit', async (e) => {
+                e.preventDefault();
+                const curr = document.getElementById('pwdCurrent').value;
+                const next = document.getElementById('pwdNew').value;
+                const conf = document.getElementById('pwdConfirm').value;
+
+                if (next !== conf) {
+                    this.showToast("New passwords do not match.", true);
+                    return;
+                }
+
+                const btn = document.getElementById('btnSubmitChangePassword');
+                btn.disabled = true;
+                btn.textContent = 'Updating Password...';
+                try {
+                    const res = await window.Api.changePassword(curr, next);
+                    this.showToast(res.message || "Password updated successfully!");
+                    formPwd.reset();
+                    const weakBanner = document.getElementById('weakPasswordWarningBanner');
+                    if (weakBanner) weakBanner.classList.add('hidden');
+                } catch (err) {
+                    this.showToast(err.message || "Failed to update password.", true);
+                } finally {
+                    btn.disabled = false;
+                    btn.textContent = 'Update Password';
+                }
+            });
+        }
+    },
+
+    async loadAuthConfig() {
+        try {
+            this.authConfig = await window.Api.getAuthConfig();
+            this.initGoogleIdentity();
+        } catch (e) {
+            console.warn("Failed to load auth configuration:", e);
+        }
+    },
+
+    initGoogleIdentity() {
+        if (window.google?.accounts?.id && this.authConfig?.google_client_id) {
+            try {
+                window.google.accounts.id.initialize({
+                    client_id: this.authConfig.google_client_id,
+                    callback: async (response) => {
+                        if (response.credential) {
+                            try {
+                                const data = await window.Api.loginWithGoogle(response.credential);
+                                this.currentUser = data.user;
+                                this.updateSessionUI();
+                                this.showToast(`Signed in with Google as ${data.user.name || data.user.email}!`);
+                                this.routeUserAfterAuth(data.user);
+                            } catch (err) {
+                                this.showToast(err.message || "Google sign in failed.", true);
+                            }
+                        }
+                    }
+                });
+            } catch (e) {
+                console.warn("GIS initialization warning:", e);
+            }
         }
     },
 

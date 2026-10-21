@@ -629,3 +629,5 @@ def get_auth_config():
         'otp_expiry_seconds': email_service.get_expiry_seconds(),
         'otp_cooldown_seconds': email_service.get_cooldown_seconds()
     }), 200
+
+

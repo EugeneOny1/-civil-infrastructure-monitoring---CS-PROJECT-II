@@ -133,6 +133,35 @@ const Api = {
         return data;
     },
 
+    async loginWithGoogle(credential) {
+        const res = await this.safeFetch(`${API_BASE}/auth/google`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ credential })
+        });
+        const data = await res.json();
+        if (!res.ok) {
+            throw new Error(data.error || 'Google authentication failed.');
+        }
+        if (data.token && data.user) {
+            this.setSession(data.token, data.user);
+        }
+        return data;
+    },
+
+    async resendOtp(email) {
+        const res = await this.safeFetch(`${API_BASE}/auth/resend-otp`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ email })
+        });
+        const data = await res.json();
+        if (!res.ok) {
+            throw new Error(data.error || 'Failed to resend code.');
+        }
+        return data;
+    },
+
     async toggle2FA(enable) {
         const res = await this.safeFetch(`${API_BASE}/auth/toggle-2fa`, {
             method: 'POST',
@@ -147,17 +176,56 @@ const Api = {
     },
 
     async getProfile() {
-        const res = await this.safeFetch(`${API_BASE}/auth/me`, {
+        const res = await this.safeFetch(`${API_BASE}/auth/profile`, {
             headers: this.getHeaders()
         });
         if (!res.ok) {
-            throw new Error('Unauthorized');
+            throw new Error('Failed to load user profile.');
         }
         const data = await res.json();
         if (data.user) {
             sessionStorage.setItem('user', JSON.stringify(data.user));
         }
-        return data.user;
+        return data;
+    },
+
+    async updateProfile(profileData) {
+        const res = await this.safeFetch(`${API_BASE}/auth/profile`, {
+            method: 'PUT',
+            headers: this.getHeaders(),
+            body: JSON.stringify(profileData)
+        });
+        const data = await res.json();
+        if (!res.ok) {
+            throw new Error(data.error || 'Failed to update profile.');
+        }
+        if (data.user) {
+            sessionStorage.setItem('user', JSON.stringify(data.user));
+        }
+        return data;
+    },
+
+    async changePassword(current_password, new_password) {
+        const res = await this.safeFetch(`${API_BASE}/auth/change-password`, {
+            method: 'POST',
+            headers: this.getHeaders(),
+            body: JSON.stringify({ current_password, new_password })
+        });
+        const data = await res.json();
+        if (!res.ok) {
+            throw new Error(data.error || 'Failed to change password.');
+        }
+        return data;
+    },
+
+    async getAuthConfig() {
+        try {
+            const res = await this.safeFetch(`${API_BASE}/auth/config`);
+            if (res.ok) return await res.json();
+        } catch (e) {
+            // Ignore network errors in offline test mode
+        }
+        return { enable_demo_otp: true, google_client_id: '', otp_expiry_seconds: 300, otp_cooldown_seconds: 60 };
     },
 
     // Defect Reports (FR-02, FR-03, FR-04)
