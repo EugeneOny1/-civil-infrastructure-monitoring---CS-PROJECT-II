@@ -358,6 +358,41 @@ def resend_otp():
 
     return jsonify(res_payload), 200
 
+@auth_bp.route('/change-password', methods=['POST'])
+@login_required
+def change_password(current_user):
+    """
+    Updates the password for an authenticated user with strong password validation.
+    Clears the must_change_password flag for newly secured accounts.
+    """
+    data = request.get_json() or {}
+    current_password = data.get('current_password', '').strip()
+    new_password = data.get('new_password', '').strip()
+
+    if not new_password:
+        return jsonify({'error': 'New password is required.'}), 400
+
+    user_id = str(current_user.get('_id') or current_user.get('user_id'))
+    user_record = db_service.find_one('users', {'_id': user_id})
+
+    # If account didn't have must_change_password forced, verify current password
+    if not user_record.get('must_change_password'):
+        if not current_password or not check_password_hash(user_record.get('password_hash', ''), current_password):
+            return jsonify({'error': 'Current password verification failed.'}), 400
+
+    pw_valid, pw_err = validate_password_strength(new_password)
+    if not pw_valid:
+        return jsonify({'error': pw_err}), 400
+
+    new_hash = generate_password_hash(new_password)
+    db_service.update_one('users', {'_id': user_id}, {
+        'password_hash': new_hash,
+        'must_change_password': False,
+        'password_updated_at': datetime.now(timezone.utc).isoformat()
+    })
+
+    return jsonify({'message': 'Password updated successfully.'}), 200
+
 @auth_bp.route('/google', methods=['POST'])
 def google_auth():
     """
