@@ -56,29 +56,45 @@ const Submission = {
         }
 
         if (gpsBtn) {
-            gpsBtn.addEventListener('click', () => {
-                const locInput = document.getElementById('defectLocation');
+            gpsBtn.addEventListener('click', () => this.openLocationPicker());
+        }
+
+        const closePickerBtn = document.getElementById('btnCloseLocationPicker');
+        const cancelPickerBtn = document.getElementById('btnCancelLocationPicker');
+        const confirmPickerBtn = document.getElementById('btnConfirmLocationPicker');
+        const currentLocBtn = document.getElementById('btnPickerCurrentLocation');
+        const pickerModal = document.getElementById('locationPickerModal');
+
+        if (closePickerBtn) closePickerBtn.addEventListener('click', () => this.closeLocationPicker());
+        if (cancelPickerBtn) cancelPickerBtn.addEventListener('click', () => this.closeLocationPicker());
+        if (confirmPickerBtn) confirmPickerBtn.addEventListener('click', () => this.confirmPickedLocation());
+
+        if (currentLocBtn) {
+            currentLocBtn.addEventListener('click', () => {
                 if (navigator.geolocation) {
-                    window.App.showToast("Acquiring GPS location from device...");
+                    window.App?.showToast("Acquiring GPS location from device...");
                     navigator.geolocation.getCurrentPosition(
                         (position) => {
                             const lat = position.coords.latitude;
                             const lng = position.coords.longitude;
-                            this.selectedCoordinates = { latitude: lat, longitude: lng };
-                            const currentVal = locInput.value ? locInput.value.split('[')[0].trim() : '';
-                            locInput.value = currentVal ? `${currentVal} [${lat.toFixed(5)}°, ${lng.toFixed(5)}°]` : `Location Tag [${lat.toFixed(5)}°, ${lng.toFixed(5)}°]`;
-                            window.App.showToast(`Coordinates tagged: ${lat.toFixed(4)}°, ${lng.toFixed(4)}°`);
+                            this.updatePickerPosition(lat, lng, true, true);
+                            window.App?.showToast(`GPS acquired: ${lat.toFixed(4)}°, ${lng.toFixed(4)}°`);
                         },
                         (err) => {
                             console.warn("Geolocation warning:", err);
-                            this.selectedCoordinates = null;
-                            window.App.showToast("Could not access device GPS. Please type the location manually.", true);
+                            window.App?.showToast("Could not access device GPS. You can click on the map to place a pin.", true);
                         },
                         { timeout: 8000, enableHighAccuracy: true }
                     );
                 } else {
-                    window.App.showToast("Geolocation not supported by browser. Enter location manually.", true);
+                    window.App?.showToast("Geolocation not supported by browser. Enter location manually.", true);
                 }
+            });
+        }
+
+        if (pickerModal) {
+            pickerModal.addEventListener('click', (e) => {
+                if (e.target === pickerModal) this.closeLocationPicker();
             });
         }
 
@@ -90,6 +106,19 @@ const Submission = {
             resetBtn.addEventListener('click', () => {
                 this.clearFile();
                 this.selectedCoordinates = null;
+                this.tempCoordinates = null;
+
+                const taggedBtn = document.getElementById('btnAutoGps');
+                if (taggedBtn) taggedBtn.classList.remove('tagged');
+                const taggedText = document.getElementById('btnAutoGpsText');
+                if (taggedText) taggedText.textContent = '📍 Tag Location';
+                const summaryInput = document.getElementById('pickerLocationSummary');
+                if (summaryInput) {
+                    summaryInput.value = '';
+                    delete summaryInput.dataset.autofilled;
+                }
+
+                document.getElementById('defectLocation').value = '';
                 document.getElementById('defectNotes').value = '';
                 document.getElementById('resDefectClass').textContent = '—';
                 document.getElementById('resConfidence').textContent = '—';
@@ -116,6 +145,181 @@ const Submission = {
                 window.App.showToast("Ready for new defect submission.");
             });
         }
+    },
+
+    openLocationPicker() {
+        const modal = document.getElementById('locationPickerModal');
+        if (!modal) return;
+        modal.classList.add('active');
+
+        // Initial coordinates: existing selectedCoordinates or Nairobi fallback
+        const initialLat = this.selectedCoordinates?.latitude ?? -1.286389;
+        const initialLng = this.selectedCoordinates?.longitude ?? 36.817223;
+        this.tempCoordinates = { latitude: initialLat, longitude: initialLng };
+
+        const summaryInput = document.getElementById('pickerLocationSummary');
+        const locInput = document.getElementById('defectLocation');
+        if (summaryInput && locInput && locInput.value.trim() && !summaryInput.value.trim()) {
+            summaryInput.value = locInput.value.trim();
+        }
+
+        // Initialize or invalidate picker map
+        setTimeout(() => {
+            if (!this.pickerMap) {
+                this.initPickerMap(initialLat, initialLng);
+            } else {
+                this.pickerMap.invalidateSize();
+                this.updatePickerPosition(initialLat, initialLng, true, false);
+            }
+
+            // If user has not tagged yet, attempt browser geolocation politely
+            if (!this.selectedCoordinates && navigator.geolocation) {
+                navigator.geolocation.getCurrentPosition(
+                    (pos) => {
+                        this.updatePickerPosition(pos.coords.latitude, pos.coords.longitude, true, true);
+                        window.App?.showToast("Device coordinates acquired.");
+                    },
+                    (err) => {
+                        console.warn("[LocationPicker] Browser geolocation not granted:", err.message);
+                    },
+                    { timeout: 7000, enableHighAccuracy: true }
+                );
+            }
+        }, 120);
+    },
+
+    closeLocationPicker() {
+        const modal = document.getElementById('locationPickerModal');
+        if (modal) modal.classList.remove('active');
+    },
+
+    initPickerMap(lat, lng) {
+        const container = document.getElementById('pickerMapContainer');
+        if (!container || typeof L === 'undefined') return;
+
+        this.pickerMap = L.map(container, {
+            center: [lat, lng],
+            zoom: 14,
+            zoomControl: true
+        });
+
+        L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            maxZoom: 19,
+            attribution: '&copy; <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a> contributors'
+        }).addTo(this.pickerMap);
+
+        const customPinIcon = L.divIcon({
+            className: 'picker-pin-wrapper',
+            html: `
+                <div style="position:relative; width:30px; height:38px; cursor:grab;">
+                    <svg viewBox="0 0 30 38" width="30" height="38" style="filter: drop-shadow(0 2px 4px rgba(0,0,0,0.4));">
+                        <path d="M15 0C6.7 0 0 6.7 0 15c0 10.5 15 23 15 23s15-12.5 15-23c0-8.3-6.7-15-15-15z" fill="#0071e3"/>
+                        <circle cx="15" cy="14" r="5" fill="#ffffff"/>
+                    </svg>
+                </div>
+            `,
+            iconSize: [30, 38],
+            iconAnchor: [15, 38]
+        });
+
+        this.pickerMarker = L.marker([lat, lng], {
+            draggable: true,
+            icon: customPinIcon
+        }).addTo(this.pickerMap);
+
+        this.pickerMarker.on('dragend', (e) => {
+            const pos = e.target.getLatLng();
+            this.updatePickerPosition(pos.lat, pos.lng, false, true);
+        });
+
+        this.pickerMap.on('click', (e) => {
+            this.updatePickerPosition(e.latlng.lat, e.latlng.lng, false, true);
+        });
+
+        this.updatePickerCoordsBadge(lat, lng);
+    },
+
+    updatePickerPosition(lat, lng, shouldPan = true, reverseGeocode = true) {
+        this.tempCoordinates = { latitude: lat, longitude: lng };
+        if (this.pickerMarker) {
+            this.pickerMarker.setLatLng([lat, lng]);
+        }
+        if (shouldPan && this.pickerMap) {
+            this.pickerMap.setView([lat, lng], Math.max(this.pickerMap.getZoom(), 14));
+        }
+        this.updatePickerCoordsBadge(lat, lng);
+
+        if (reverseGeocode) {
+            this.reverseGeocodeCoordinates(lat, lng);
+        }
+    },
+
+    updatePickerCoordsBadge(lat, lng) {
+        const badge = document.getElementById('pickerCoordsDisplay');
+        if (badge) {
+            badge.textContent = `Lat: ${lat.toFixed(5)}, Lng: ${lng.toFixed(5)}`;
+        }
+    },
+
+    reverseGeocodeCoordinates(lat, lng) {
+        if (this.reverseGeocodeTimeout) {
+            clearTimeout(this.reverseGeocodeTimeout);
+        }
+        this.reverseGeocodeTimeout = setTimeout(async () => {
+            try {
+                const url = `https://nominatim.openstreetmap.org/reverse?format=json&lat=${encodeURIComponent(lat)}&lon=${encodeURIComponent(lng)}&zoom=17&addressdetails=1`;
+                const resp = await fetch(url, {
+                    headers: { 'Accept-Language': 'en' }
+                });
+                if (resp.ok) {
+                    const data = await resp.json();
+                    const addr = data.address || {};
+                    const road = addr.road || addr.pedestrian || addr.suburb || addr.neighbourhood || addr.city || '';
+                    const summary = document.getElementById('pickerLocationSummary');
+                    if (summary && road && (!summary.value || summary.dataset.autofilled === 'true')) {
+                        summary.value = road + (addr.city ? `, ${addr.city}` : '');
+                        summary.dataset.autofilled = 'true';
+                    }
+                }
+            } catch (e) {
+                // Ignore geocoding network errors gracefully
+            }
+        }, 600);
+    },
+
+    confirmPickedLocation() {
+        if (!this.tempCoordinates) {
+            window.App?.showToast("Please place a pin on the map first.", true);
+            return;
+        }
+
+        this.selectedCoordinates = {
+            latitude: this.tempCoordinates.latitude,
+            longitude: this.tempCoordinates.longitude
+        };
+
+        const summaryInput = document.getElementById('pickerLocationSummary');
+        const locInput = document.getElementById('defectLocation');
+        const summaryText = summaryInput ? summaryInput.value.trim() : '';
+
+        if (summaryText) {
+            locInput.value = summaryText;
+        } else if (!locInput.value.trim()) {
+            locInput.value = `Location [${this.selectedCoordinates.latitude.toFixed(5)}°, ${this.selectedCoordinates.longitude.toFixed(5)}°]`;
+        }
+
+        const gpsBtn = document.getElementById('btnAutoGps');
+        const gpsBtnText = document.getElementById('btnAutoGpsText');
+        if (gpsBtn) {
+            gpsBtn.classList.add('tagged');
+            gpsBtn.title = "Defect coordinates tagged. Click to re-position.";
+        }
+        if (gpsBtnText) {
+            gpsBtnText.textContent = `✓ 📍 Tagged (${this.selectedCoordinates.latitude.toFixed(4)}°, ${this.selectedCoordinates.longitude.toFixed(4)}°)`;
+        }
+
+        this.closeLocationPicker();
+        window.App?.showToast(`Defect coordinates confirmed: ${this.selectedCoordinates.latitude.toFixed(4)}°, ${this.selectedCoordinates.longitude.toFixed(4)}°`);
     },
 
     handleFileSelected(file) {
