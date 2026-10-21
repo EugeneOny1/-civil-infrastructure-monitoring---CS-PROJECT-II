@@ -2,8 +2,9 @@
  * Submission Module - Citizen Defect Submission & AI Pre-Assessment (Figure 4.6)
  */
 const Submission = {
-    selectedFile: null,
+    selectedFiles: [],
     lastAssessment: null,
+    currentPreviewIndex: 0,
 
     init() {
         this.bindEvents();
@@ -12,8 +13,8 @@ const Submission = {
     bindEvents() {
         const fileInput = document.getElementById('imageFileInput');
         const triggerBtn = document.getElementById('btnTriggerUpload');
+        const addMoreBtn = document.getElementById('btnAddMorePhotos');
         const dropzone = document.getElementById('uploadDropzone');
-        const removeBtn = document.getElementById('btnRemoveImage');
         const sampleBtn = document.getElementById('btnSamplePhoto');
         const submitAiBtn = document.getElementById('btnSubmitAiAnalysis');
         const resetBtn = document.getElementById('btnResetForm');
@@ -23,10 +24,15 @@ const Submission = {
             triggerBtn.addEventListener('click', () => fileInput.click());
         }
 
+        if (addMoreBtn && fileInput) {
+            addMoreBtn.addEventListener('click', () => fileInput.click());
+        }
+
         if (fileInput) {
             fileInput.addEventListener('change', (e) => {
-                if (e.target.files && e.target.files[0]) {
-                    this.handleFileSelected(e.target.files[0]);
+                if (e.target.files && e.target.files.length > 0) {
+                    this.handleFilesSelected(Array.from(e.target.files));
+                    fileInput.value = '';
                 }
             });
         }
@@ -41,14 +47,10 @@ const Submission = {
             dropzone.addEventListener('drop', (e) => {
                 e.preventDefault();
                 dropzone.classList.remove('drag-active');
-                if (e.dataTransfer.files && e.dataTransfer.files[0]) {
-                    this.handleFileSelected(e.dataTransfer.files[0]);
+                if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+                    this.handleFilesSelected(Array.from(e.dataTransfer.files));
                 }
             });
-        }
-
-        if (removeBtn) {
-            removeBtn.addEventListener('click', () => this.clearFile());
         }
 
         if (sampleBtn) {
@@ -104,7 +106,7 @@ const Submission = {
 
         if (resetBtn) {
             resetBtn.addEventListener('click', () => {
-                this.clearFile();
+                this.clearFiles();
                 this.selectedCoordinates = null;
                 this.tempCoordinates = null;
 
@@ -322,16 +324,119 @@ const Submission = {
         window.App?.showToast(`Defect coordinates confirmed: ${this.selectedCoordinates.latitude.toFixed(4)}°, ${this.selectedCoordinates.longitude.toFixed(4)}°`);
     },
 
-    handleFileSelected(file) {
-        this.selectedFile = file;
-        const reader = new FileReader();
-        reader.onload = (e) => {
-            const previewImg = document.getElementById('previewImg');
-            previewImg.src = e.target.result;
-            document.getElementById('dropzonePrompt').classList.add('hidden');
-            document.getElementById('dropzonePreview').classList.remove('hidden');
-        };
-        reader.readAsDataURL(file);
+    handleFilesSelected(files) {
+        if (!files || files.length === 0) return;
+
+        // Filter valid images under 16MB
+        const validImages = files.filter(f => {
+            const isImg = f.type.startsWith('image/') || /\.(png|jpe?g|webp)$/i.test(f.name);
+            const validSize = f.size <= 16 * 1024 * 1024;
+            if (!isImg) window.App?.showToast(`File "${f.name}" is not a supported image format.`, true);
+            if (!validSize) window.App?.showToast(`File "${f.name}" exceeds the 16MB size limit.`, true);
+            return isImg && validSize;
+        });
+
+        if (validImages.length === 0) return;
+
+        const currentCount = this.selectedFiles.length;
+        const availableSlots = 3 - currentCount;
+
+        if (availableSlots <= 0) {
+            window.App?.showToast("Maximum of 3 photos reached. Remove a photo to add a different one.", true);
+            return;
+        }
+
+        if (validImages.length > availableSlots) {
+            window.App?.showToast(`You may upload up to 3 photos of the same defect. Adding first ${availableSlots} selected photo(s).`, true);
+        }
+
+        const toAdd = validImages.slice(0, availableSlots);
+        this.selectedFiles = this.selectedFiles.concat(toAdd);
+        this.renderImagePreviews();
+    },
+
+    renderImagePreviews() {
+        const badge = document.getElementById('imageCountBadge');
+        const prompt = document.getElementById('dropzonePrompt');
+        const grid = document.getElementById('multiPreviewGrid');
+        const addRow = document.getElementById('multiAddRow');
+
+        const count = this.selectedFiles.length;
+        if (badge) {
+            badge.textContent = `${count} / 3 photos`;
+        }
+
+        if (count === 0) {
+            if (prompt) prompt.classList.remove('hidden');
+            if (grid) {
+                grid.classList.add('hidden');
+                grid.innerHTML = '';
+            }
+            if (addRow) addRow.classList.add('hidden');
+            return;
+        }
+
+        if (prompt) prompt.classList.add('hidden');
+        if (grid) {
+            grid.classList.remove('hidden');
+            grid.innerHTML = '';
+
+            this.selectedFiles.forEach((file, idx) => {
+                const card = document.createElement('div');
+                card.className = 'preview-card';
+
+                const img = document.createElement('img');
+                img.alt = `Angle #${idx + 1}`;
+                const objectUrl = URL.createObjectURL(file);
+                img.src = objectUrl;
+
+                const badgeEl = document.createElement('div');
+                badgeEl.className = 'preview-card-badge';
+                badgeEl.textContent = `Photo #${idx + 1}`;
+
+                const actions = document.createElement('div');
+                actions.className = 'preview-card-actions';
+
+                const removeBtn = document.createElement('button');
+                removeBtn.type = 'button';
+                removeBtn.className = 'btn-card-remove';
+                removeBtn.innerHTML = '✕ Remove';
+                removeBtn.title = 'Remove this photo';
+                removeBtn.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    this.removeFile(idx);
+                });
+
+                actions.appendChild(removeBtn);
+                card.appendChild(img);
+                card.appendChild(badgeEl);
+                card.appendChild(actions);
+                grid.appendChild(card);
+            });
+        }
+
+        if (addRow) {
+            if (count < 3) {
+                addRow.classList.remove('hidden');
+            } else {
+                addRow.classList.add('hidden');
+            }
+        }
+    },
+
+    removeFile(index) {
+        if (index >= 0 && index < this.selectedFiles.length) {
+            this.selectedFiles.splice(index, 1);
+            this.renderImagePreviews();
+            window.App?.showToast("Photo removed.");
+        }
+    },
+
+    clearFiles() {
+        this.selectedFiles = [];
+        const fileInput = document.getElementById('imageFileInput');
+        if (fileInput) fileInput.value = '';
+        this.renderImagePreviews();
     },
 
     loadSamplePhoto() {
@@ -376,23 +481,21 @@ const Submission = {
         ctx.stroke();
 
         canvas.toBlob((blob) => {
-            const file = new File([blob], "sample_pavement_defect.jpg", { type: "image/jpeg" });
-            this.handleFileSelected(file);
-            window.App.showToast("Demonstration infrastructure defect photograph loaded.");
+            const count = this.selectedFiles.length + 1;
+            const file = new File([blob], `sample_pavement_defect_${count}.jpg`, { type: "image/jpeg" });
+            this.handleFilesSelected([file]);
+            window.App.showToast(`Demonstration infrastructure defect photo #${count} loaded.`);
         }, 'image/jpeg');
     },
 
-    clearFile() {
-        this.selectedFile = null;
-        const fileInput = document.getElementById('imageFileInput');
-        if (fileInput) fileInput.value = '';
-        document.getElementById('dropzonePrompt').classList.remove('hidden');
-        document.getElementById('dropzonePreview').classList.add('hidden');
-    },
-
     async processAiSubmission() {
-        if (!this.selectedFile) {
-            window.App.showToast("Please select or upload an infrastructure photograph.", true);
+        if (!this.selectedFiles || this.selectedFiles.length === 0) {
+            window.App.showToast("Please upload at least 1 defect photograph (up to 3 photos allowed).", true);
+            return;
+        }
+
+        if (this.selectedFiles.length > 3) {
+            window.App.showToast("Maximum of 3 photos allowed per report.", true);
             return;
         }
 
@@ -413,7 +516,11 @@ const Submission = {
         }
 
         const formData = new FormData();
-        formData.append('image', this.selectedFile);
+        this.selectedFiles.forEach(file => {
+            formData.append('images', file);
+        });
+        // Backwards compatibility for single-image field expectation
+        formData.append('image', this.selectedFiles[0]);
         formData.append('asset_type', infraType);
         formData.append('location', location);
         formData.append('description', notes);
@@ -425,7 +532,7 @@ const Submission = {
 
         const btn = document.getElementById('btnSubmitAiAnalysis');
         const originalText = btn.innerHTML;
-        btn.innerHTML = `<span>⏳</span> Analyzing with SSD-MobileNetV2...`;
+        btn.innerHTML = `<span>⏳</span> Analyzing ${this.selectedFiles.length} photo(s) with SSD-MobileNetV2...`;
         btn.disabled = true;
 
         try {
@@ -447,42 +554,61 @@ const Submission = {
         const ai = data.ai_assessment;
         if (!ai) return;
 
-        const detections = (ai.detections && ai.detections.length > 0)
-            ? ai.detections
-            : (ai.defect_class && ai.defect_class !== 'None Detected' ? [ai] : []);
+        // Aggregate defect classes across all submitted images if returned
+        let defectName = 'None Detected';
+        if (data.detected_classes && data.detected_classes.length > 0) {
+            defectName = data.detected_classes.join(', ');
+        } else if (ai.defect_class && ai.defect_class !== 'None Detected') {
+            defectName = ai.defect_class;
+        }
 
-        const hasDetections = detections.length > 0;
-        const defectName = (hasDetections && ai.defect_class && ai.defect_class !== 'None Detected')
-            ? ai.defect_class
-            : 'None Detected';
-
-        // Populate metrics separately
-        document.getElementById('resDefectClass').textContent = defectName;
-        document.getElementById('resConfidence').textContent = hasDetections
-            ? `${ai.confidence_percentage}%`
-            : '—';
-
-        const sev = ai.relative_severity || ai.severity || 'Low';
+        const sev = data.overall_visual_severity || ai.relative_severity || ai.severity || 'Low';
         const sevEl = document.getElementById('resSeverity');
         sevEl.textContent = `[ ${sev.toUpperCase()} ]`;
         sevEl.className = `severity-pill ${sev.toLowerCase()}`;
 
+        document.getElementById('resDefectClass').textContent = defectName;
+
+        // Primary assessment detection metrics
+        const allAssessments = data.ai_assessments && data.ai_assessments.length > 0
+            ? data.ai_assessments
+            : [ai];
+
+        const primaryAssessment = allAssessments[0];
+        const detections = (primaryAssessment.detections && primaryAssessment.detections.length > 0)
+            ? primaryAssessment.detections
+            : (primaryAssessment.defect_class && primaryAssessment.defect_class !== 'None Detected' ? [primaryAssessment] : []);
+
+        const hasDetections = detections.length > 0;
+        document.getElementById('resConfidence').textContent = hasDetections
+            ? `${primaryAssessment.confidence_percentage || Math.round((primaryAssessment.confidence_score || 0) * 100)}%`
+            : '—';
+
         document.getElementById('resAreaRatio').textContent = hasDetections
-            ? `${ai.area_percentage}% of image extent`
+            ? `${primaryAssessment.area_percentage || 0.0}% of image extent`
             : '0.0% of image extent';
 
-        // Multi-detection summary badge chips
+        // Multi-detection summary badge chips across all images
         const badgeList = document.getElementById('multiDetectionsList');
         if (badgeList) {
-            if (detections.length > 0) {
-                badgeList.innerHTML = detections.map(d => {
+            const combinedBadges = [];
+            allAssessments.forEach((assItem, imgIdx) => {
+                const itemDets = (assItem.detections && assItem.detections.length > 0)
+                    ? assItem.detections
+                    : (assItem.defect_class && assItem.defect_class !== 'None Detected' ? [assItem] : []);
+                itemDets.forEach(d => {
                     const cls = d.class_name || d.defect_class || 'Defect';
                     const confVal = d.confidence !== undefined ? d.confidence : (d.confidence_score || 0);
                     const conf = Math.round(confVal * 100);
                     const dSev = d.severity || d.relative_severity || 'Low';
                     const slug = cls.toLowerCase().includes('crack') ? 'crack' : (cls.toLowerCase().includes('pothole') ? 'pothole' : 'surface');
-                    return `<span class="defect-badge-pill ${slug}">${cls} • ${conf}% Conf • [${dSev} Severity]</span>`;
-                }).join('');
+                    const imgTag = allAssessments.length > 1 ? `[Photo #${imgIdx + 1}] ` : '';
+                    combinedBadges.push(`<span class="defect-badge-pill ${slug}">${imgTag}${cls} • ${conf}% Conf • [${dSev} Severity]</span>`);
+                });
+            });
+
+            if (combinedBadges.length > 0) {
+                badgeList.innerHTML = combinedBadges.join('');
             } else {
                 badgeList.innerHTML = `<span class="badge-tag" style="background:#f1f5f9; color:#64748b;">No defect detections above threshold</span>`;
             }
@@ -507,8 +633,11 @@ const Submission = {
             }
         }
 
-        // Render Canvas Bounding Box
-        this.drawBoundingBoxOnCanvas(data.image.url, ai);
+        // Render Canvas Bounding Box with primary image
+        const primaryImage = data.image || (data.images && data.images[0]);
+        if (primaryImage) {
+            this.drawBoundingBoxOnCanvas(primaryImage.url, primaryAssessment);
+        }
     },
 
     drawBoundingBoxOnCanvas(imageUrl, aiData) {

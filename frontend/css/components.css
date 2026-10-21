@@ -91,6 +91,89 @@
     box-shadow: 0 2px 6px rgba(0, 0, 0, 0.1);
 }
 
+/* --------------------------------------------------------------------------
+   Multi-Image Defect Reporting (Section 6)
+   -------------------------------------------------------------------------- */
+.image-count-badge {
+    font-family: var(--font-mono);
+    font-size: 0.75rem;
+    font-weight: 700;
+    color: #334155;
+    background: #f1f5f9;
+    padding: 2px 8px;
+    border-radius: var(--radius-sm);
+    border: 1px solid #cbd5e1;
+}
+
+.multi-preview-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
+    gap: 0.75rem;
+    width: 100%;
+    margin-top: 0.5rem;
+}
+
+.preview-card {
+    position: relative;
+    border-radius: var(--radius-sm);
+    overflow: hidden;
+    border: 1px solid var(--border-color);
+    background: #0f172a;
+    aspect-ratio: 4 / 3;
+    box-shadow: var(--shadow-card);
+}
+
+.preview-card img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    display: block;
+}
+
+.preview-card-badge {
+    position: absolute;
+    top: 6px;
+    left: 6px;
+    background: rgba(15, 23, 42, 0.82);
+    color: #ffffff;
+    font-size: 0.68rem;
+    font-weight: 700;
+    padding: 2px 6px;
+    border-radius: var(--radius-sm);
+    backdrop-filter: blur(4px);
+}
+
+.preview-card-actions {
+    position: absolute;
+    bottom: 6px;
+    right: 6px;
+    display: flex;
+    gap: 4px;
+}
+
+.btn-card-remove {
+    background: rgba(255, 255, 255, 0.92);
+    border: 1px solid #cbd5e1;
+    color: #dc2626;
+    border-radius: var(--radius-full);
+    padding: 2px 7px;
+    font-size: 0.7rem;
+    font-weight: 700;
+    cursor: pointer;
+    backdrop-filter: blur(4px);
+    transition: var(--transition-fast);
+}
+
+.btn-card-remove:hover {
+    background: #dc2626;
+    color: #ffffff;
+}
+
+.multi-add-row {
+    display: flex;
+    justify-content: center;
+}
+
 /* Detection Frame (Right Column Fig 4.6) */
 .detection-frame-wrapper {
     background: #ffffff;
