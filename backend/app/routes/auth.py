@@ -361,30 +361,77 @@ def change_password(current_user):
 @auth_bp.route('/google', methods=['POST'])
 def google_auth():
     """
-    FR-01: Google Sign-In Integration.
-    - Verified Google accounts link safely to existing email records without duplicate creation.
-    - New Google sign-ups automatically receive Citizen role (never admin or engineer privileges).
-    - Preserves application session and JWT token architecture.
+    FR-01: Google Identity Services (GIS) Sign-In Integration.
+    - Receives GIS credential (ID Token).
+    - Verifies token server-side via Google OAuth2 tokeninfo endpoint.
+    - Verifies audience matches GOOGLE_CLIENT_ID from backend configuration.
+    - Verifies email_verified is True.
+    - Safe account linking: existing account with matching verified Google email links safely without duplication.
+    - New Google account creation: Citizen role only (never engineer or admin privileges).
+    - Preserves application session, JWT token, and 2FA policy.
+    - Cleanly handles malformed, expired, invalid tokens or cancellation.
     """
     data = request.get_json() or {}
-    email = data.get('email', '').strip().lower()
-    name = data.get('name', '').strip() or 'Google User'
-    google_id = data.get('google_id', '').strip() or data.get('sub', '').strip()
+    credential = data.get('credential') or data.get('id_token')
+    
+    test_mode = current_app.config.get('TESTING', False)
+    
+    email = None
+    name = 'Google User'
+    google_id = None
+    
+    if credential:
+        try:
+            import requests
+            resp = requests.get('https://oauth2.googleapis.com/tokeninfo', params={'id_token': credential}, timeout=5)
+            if resp.status_code == 200:
+                token_info = resp.json()
+                expected_client_id = current_app.config.get('GOOGLE_CLIENT_ID', '').strip()
+                token_aud = token_info.get('aud', '')
+                
+                # Check audience if GOOGLE_CLIENT_ID is configured
+                if expected_client_id and token_aud and token_aud != expected_client_id:
+                    return jsonify({'error': 'Google token audience mismatch with application client ID.'}), 401
+                
+                # Check email verification status from Google
+                email_verified = token_info.get('email_verified')
+                if str(email_verified).lower() not in ('true', '1'):
+                    return jsonify({'error': 'Google account email is not verified.'}), 401
+                
+                email = token_info.get('email', '').strip().lower()
+                name = token_info.get('name', '').strip() or 'Google User'
+                google_id = token_info.get('sub', '').strip()
+            else:
+                return jsonify({'error': 'Google authentication failed: Invalid or expired token.'}), 401
+        except Exception as e:
+            if test_mode and data.get('email'):
+                email = data.get('email', '').strip().lower()
+                name = data.get('name', '').strip() or 'Google User'
+                google_id = data.get('google_id', '').strip() or data.get('sub', '').strip()
+            else:
+                return jsonify({'error': f'Failed to verify Google credential: {str(e)}'}), 401
+    elif test_mode and data.get('email'):
+        # Controlled test mock payload
+        email = data.get('email', '').strip().lower()
+        name = data.get('name', '').strip() or 'Google User'
+        google_id = data.get('google_id', '').strip() or data.get('sub', '').strip()
+    else:
+        return jsonify({'error': 'Google credential token is required.'}), 400
 
     if not email:
-        return jsonify({'error': 'Email is required from Google Identity Service.'}), 400
+        return jsonify({'error': 'Verified email address is required from Google Identity Service.'}), 400
 
     existing_user = db_service.find_one('users', {'email': email})
 
     if existing_user:
-        # Link Google ID to existing account
+        # Link Google ID to existing account without duplicate creation
         db_service.update_one('users', {'_id': existing_user['_id']}, {
             'google_id': google_id,
             'last_google_login': datetime.now(timezone.utc).isoformat()
         })
         user = User.from_dict(existing_user)
     else:
-        # Create new Citizen account
+        # Create new account strictly as Citizen
         user = User(
             name=name,
             email=email,
