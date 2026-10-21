@@ -73,13 +73,6 @@ def submit_report(current_user):
         current_app.logger.error(f"[Inference Error] Failed executing SavedModel inference: {e}")
         return jsonify({'error': 'Automated defect analysis service failed. Please contact system administrator.'}), 500
 
-    # Backend domain integrity validation (Defect vs Infrastructure pairing)
-    validation_result = validation_service.validate_report(asset_type, location, detection_result)
-
-    # Canonical initial report lifecycle status is ALWAYS 'Received'
-    # 'requires_engineer_review' and 'validation_status' are tracked separately in metadata
-    initial_status = InfrastructureReport.STATUS_RECEIVED
-
     # Associate with Infrastructure Asset record
     matched_asset = db_service.find_one('infrastructure_assets', {'location': location})
     if not matched_asset:
@@ -96,6 +89,20 @@ def submit_report(current_user):
         if latitude is None and 'coordinates' in matched_asset:
             latitude = matched_asset['coordinates'].get('lat')
             longitude = matched_asset['coordinates'].get('lng')
+
+    # Location-based priority clustering signal (~50m radius)
+    nearby_metrics = validation_service.calculate_location_proximity_metrics(
+        latitude, longitude, current_user_id=user_id, radius_meters=50.0
+    )
+
+    # Backend domain integrity validation (Defect vs Infrastructure pairing)
+    validation_result = validation_service.validate_report(
+        asset_type, location, detection_result, nearby_metrics=nearby_metrics
+    )
+
+    # Canonical initial report lifecycle status is ALWAYS 'Received'
+    # 'requires_engineer_review' and 'validation_status' are tracked separately in metadata
+    initial_status = InfrastructureReport.STATUS_RECEIVED
 
     # Create InfrastructureReport with canonical lifecycle and validation metadata
     report = InfrastructureReport(
@@ -125,6 +132,10 @@ def submit_report(current_user):
             'flag_reasons': validation_result['flag_reasons'],
             'advisory_notes': validation_result['advisory_notes'],
             'priority': validation_result['priority'],
+            'nearby_report_count': validation_result.get('nearby_report_count', 0),
+            'nearby_unresolved_count': validation_result.get('nearby_unresolved_count', 0),
+            'is_location_cluster': validation_result.get('is_location_cluster', False),
+            'location_priority_signal': 'Cluster Elevated' if validation_result.get('is_location_cluster') else 'Standard',
             'model_version': detection_result.get('model_version'),
             'latitude': latitude,
             'longitude': longitude,
@@ -481,6 +492,19 @@ def get_map_reports():
             point['priority'] = meta.get('priority', 'Standard')
 
         map_points.append(point)
+
+    # Calculate location-based density for each map point (~50m radius)
+    for i, p in enumerate(map_points):
+        nearby_cnt = 0
+        p_lat = p['latitude']
+        p_lng = p['longitude']
+        for j, other in enumerate(map_points):
+            if i == j:
+                continue
+            dist = validation_service.haversine_distance_meters(p_lat, p_lng, other['latitude'], other['longitude'])
+            if dist <= 50.0:
+                nearby_cnt += 1
+        p['nearby_report_count'] = nearby_cnt
 
     return jsonify({
         'points': map_points,
