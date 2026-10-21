@@ -20,19 +20,93 @@ class EmailService:
     cooldown management, and attempt rate-limiting.
     """
 
-    OTP_EXPIRY_MINUTES = 10
+    OTP_EXPIRY_MINUTES = 5
     RESEND_COOLDOWN_SECONDS = 60
     MAX_VERIFICATION_ATTEMPTS = 5
+    MAX_SENDS_PER_HOUR = 5
 
     def __init__(self, app=None):
         self.app = app
         self._demo_last_dispatched: Dict[str, Dict[str, Any]] = {}
 
+    def get_expiry_seconds(self) -> int:
+        try:
+            from flask import current_app
+            if current_app:
+                return int(current_app.config.get('OTP_EXPIRY_SECONDS', 300))
+        except Exception:
+            pass
+        return int(os.getenv('OTP_EXPIRY_SECONDS', '300'))
+
+    def get_cooldown_seconds(self) -> int:
+        try:
+            from flask import current_app
+            if current_app:
+                return int(current_app.config.get('OTP_RESEND_COOLDOWN_SECONDS', 60))
+        except Exception:
+            pass
+        return int(os.getenv('OTP_RESEND_COOLDOWN_SECONDS', '60'))
+
+    def get_max_attempts(self) -> int:
+        try:
+            from flask import current_app
+            if current_app:
+                return int(current_app.config.get('OTP_MAX_ATTEMPTS', 5))
+        except Exception:
+            pass
+        return int(os.getenv('OTP_MAX_ATTEMPTS', '5'))
+
+    def get_max_sends_per_hour(self) -> int:
+        try:
+            from flask import current_app
+            if current_app:
+                return int(current_app.config.get('OTP_MAX_SENDS_PER_HOUR', 5))
+        except Exception:
+            pass
+        return int(os.getenv('OTP_MAX_SENDS_PER_HOUR', '5'))
+
+    def is_demo_mode(self) -> bool:
+        try:
+            from flask import current_app
+            if current_app:
+                return bool(current_app.config.get('ENABLE_DEMO_OTP', True))
+        except Exception:
+            pass
+        return os.getenv('ENABLE_DEMO_OTP', 'True').lower() in ('true', '1', 't')
+
     def is_configured(self) -> bool:
         """Checks if real SMTP transport credentials are configured in the environment."""
         host = os.getenv('SMTP_HOST', '').strip()
         user = os.getenv('SMTP_USER', '').strip()
-        return bool(host and user)
+        password = os.getenv('SMTP_PASSWORD', '').strip()
+        return bool(host and user and password)
+
+    def verify_smtp_health(self) -> Tuple[bool, str]:
+        """
+        Genuinely verifies whether the configured SMTP server can connect and authenticate.
+        Does not reveal credentials.
+        """
+        if not self.is_configured():
+            return False, "Unconfigured (Missing SMTP credentials)"
+
+        host = os.getenv('SMTP_HOST', '').strip()
+        port = int(os.getenv('SMTP_PORT', '587'))
+        user = os.getenv('SMTP_USER', '').strip()
+        password = os.getenv('SMTP_PASSWORD', '').strip()
+        use_tls = os.getenv('SMTP_USE_TLS', 'True').lower() in ('true', '1', 't')
+
+        try:
+            server = smtplib.SMTP(host, port, timeout=5)
+            server.ehlo()
+            if use_tls:
+                server.starttls()
+                server.ehlo()
+            if user and password:
+                server.login(user, password)
+            server.quit()
+            return True, "Operational (SMTP Authenticated)"
+        except Exception as e:
+            return False, f"Degraded ({type(e).__name__})"
 
     @classmethod
     def generate_otp(cls) -> str:
@@ -41,21 +115,21 @@ class EmailService:
 
     def can_resend(self, last_dispatched_at: Optional[str]) -> Tuple[bool, int]:
         """
-        Enforces a 60-second cooldown between OTP generation requests.
+        Enforces cooldown between OTP generation requests.
         Returns (can_resend: bool, seconds_remaining: int).
         """
         if not last_dispatched_at:
             return True, 0
 
+        cooldown = self.get_cooldown_seconds()
         try:
             last_time = datetime.fromisoformat(last_dispatched_at)
-            # Ensure timezone awareness
             if last_time.tzinfo is None:
                 last_time = last_time.replace(tzinfo=timezone.utc)
             now = datetime.now(timezone.utc)
             elapsed = (now - last_time).total_seconds()
-            if elapsed < self.RESEND_COOLDOWN_SECONDS:
-                remaining = int(self.RESEND_COOLDOWN_SECONDS - elapsed)
+            if elapsed < cooldown:
+                remaining = int(cooldown - elapsed)
                 return False, remaining
         except Exception:
             return True, 0
@@ -65,10 +139,13 @@ class EmailService:
     def send_otp_email(self, to_email: str, otp_code: str, user_name: str = 'User') -> Dict[str, Any]:
         """
         Dispatches a 6-digit OTP verification email to the user.
-        Uses real SMTP if configured; otherwise logs and prepares demo payload cleanly.
+        Uses real SMTP if configured; otherwise prepares demo payload cleanly.
+        Never logs the active OTP in runtime logs.
         """
         now_utc = datetime.now(timezone.utc)
-        expiry_utc = now_utc + timedelta(minutes=self.OTP_EXPIRY_MINUTES)
+        expiry_seconds = self.get_expiry_seconds()
+        expiry_minutes = max(1, expiry_seconds // 60)
+        expiry_utc = now_utc + timedelta(seconds=expiry_seconds)
 
         smtp_host = os.getenv('SMTP_HOST', '').strip()
         smtp_port = int(os.getenv('SMTP_PORT', '587'))
@@ -76,6 +153,8 @@ class EmailService:
         smtp_password = os.getenv('SMTP_PASSWORD', '').strip()
         smtp_sender = os.getenv('SMTP_SENDER', 'infravision-alerts@strathmore.edu').strip()
         use_tls = os.getenv('SMTP_USE_TLS', 'True').lower() in ('true', '1', 't')
+
+        allow_demo_exposure = self.is_demo_mode()
 
         if self.is_configured():
             try:
@@ -87,27 +166,27 @@ class EmailService:
                 text_content = (
                     f"Hello {user_name},\n\n"
                     f"Your 6-digit InfraVision authentication passcode is: {otp_code}\n\n"
-                    f"This code will expire in {self.OTP_EXPIRY_MINUTES} minutes. "
-                    "If you did not initiate this login request, please contact your system administrator immediately.\n\n"
+                    f"This code will expire in {expiry_minutes} minutes. "
+                    "If you did not initiate this login request, please ignore this email and contact your system administrator.\n\n"
                     "Civil Infrastructure Monitoring System - Strathmore University"
                 )
 
                 html_content = f"""
-                <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; max-width: 560px; margin: 0 auto; padding: 24px; border: 1px solid #e5e5ea; border-radius: 12px; background-color: #ffffff;">
+                <div style="font-family: -apple-system, BlinkMacSystemFont, 'Montserrat', 'Segoe UI', Roboto, sans-serif; max-width: 560px; margin: 0 auto; padding: 24px; border: 1px solid #e2e8f0; border-radius: 12px; background-color: #ffffff;">
                     <div style="text-align: center; margin-bottom: 20px;">
-                        <span style="font-size: 28px; font-weight: 700; color: #0071e3;">InfraVision</span>
-                        <p style="font-size: 13px; color: #86868b; margin-top: 4px;">Civil Infrastructure Defect Monitoring</p>
+                        <span style="font-size: 26px; font-weight: 800; color: #0f172a; letter-spacing: -0.5px;">InfraVision</span>
+                        <p style="font-size: 13px; color: #64748b; margin-top: 4px;">Civil Infrastructure Defect Monitoring</p>
                     </div>
-                    <div style="background-color: #f5f5f7; border-radius: 8px; padding: 20px; text-align: center; margin: 24px 0;">
-                        <p style="font-size: 14px; color: #424245; margin: 0 0 12px;">Your One-Time Authentication Code</p>
-                        <span style="font-size: 34px; font-weight: 800; letter-spacing: 8px; color: #1d1d1f; font-family: monospace;">{otp_code}</span>
-                        <p style="font-size: 12px; color: #dc2626; margin: 12px 0 0;">Valid for {self.OTP_EXPIRY_MINUTES} minutes • Single use only</p>
+                    <div style="background-color: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 20px; text-align: center; margin: 24px 0;">
+                        <p style="font-size: 13px; color: #475569; margin: 0 0 10px; font-weight: 600;">Your One-Time Authentication Code</p>
+                        <span style="font-size: 36px; font-weight: 800; letter-spacing: 8px; color: #0f172a; font-family: monospace;">{otp_code}</span>
+                        <p style="font-size: 12px; color: #dc2626; margin: 12px 0 0; font-weight: 500;">Valid for {expiry_minutes} minutes • Single use only</p>
                     </div>
-                    <p style="font-size: 13px; color: #424245; line-height: 1.5;">
+                    <p style="font-size: 13px; color: #334155; line-height: 1.5;">
                         Hello <strong>{user_name}</strong>, enter this verification code to complete your secure sign-in.
                     </p>
-                    <p style="font-size: 12px; color: #86868b; margin-top: 24px; border-top: 1px solid #e5e5ea; padding-top: 16px;">
-                        If you did not initiate this request, please change your password and notify your system administrator immediately.
+                    <p style="font-size: 12px; color: #94a3b8; margin-top: 24px; border-top: 1px solid #e2e8f0; padding-top: 16px;">
+                        If you did not initiate this login request, please ignore this email. Your account credentials remain secure.
                     </p>
                 </div>
                 """
@@ -124,38 +203,48 @@ class EmailService:
                 server.sendmail(smtp_sender, [to_email], msg.as_string())
                 server.quit()
 
-                return {
+                res: Dict[str, Any] = {
                     'delivered': True,
                     'method': 'smtp',
                     'email': to_email,
                     'expires_at': expiry_utc.isoformat(),
+                    'expires_in_seconds': expiry_seconds,
                     'error': None
                 }
+                if allow_demo_exposure:
+                    res['demo_code'] = otp_code
+                return res
+
             except Exception as e:
-                # Fallback to local demo logging on SMTP delivery failure
-                print(f"[EmailService / Error] SMTP delivery to {to_email} failed: {e}")
-                return {
+                # Mask sensitive info and avoid logging raw OTP
+                res_fail: Dict[str, Any] = {
                     'delivered': False,
                     'method': 'smtp_failed_fallback_demo',
                     'email': to_email,
-                    'demo_code': otp_code,
                     'expires_at': expiry_utc.isoformat(),
+                    'expires_in_seconds': expiry_seconds,
                     'error': str(e)
                 }
+                if allow_demo_exposure:
+                    res_fail['demo_code'] = otp_code
+                return res_fail
         else:
             # Demo/Development mode
             self._demo_last_dispatched[to_email] = {
                 'otp': otp_code,
                 'expires_at': expiry_utc.isoformat()
             }
-            return {
+            res_demo: Dict[str, Any] = {
                 'delivered': True,
                 'method': 'demo',
                 'email': to_email,
-                'demo_code': otp_code,
                 'expires_at': expiry_utc.isoformat(),
-                'note': 'SMTP is not configured. Running in development/demo mode with automatic code provisioning.'
+                'expires_in_seconds': expiry_seconds,
+                'note': 'SMTP is not configured. Running in development/demo mode.'
             }
+            if allow_demo_exposure:
+                res_demo['demo_code'] = otp_code
+            return res_demo
 
 
 # Global singleton instance

@@ -751,17 +751,16 @@ const App = {
 
             const isBackendOnline = health.backend_api?.status === 'online' || health.backend_api?.status === 'healthy';
             const isMongoConnected = (health.mongodb?.status || health.database?.status) === 'connected';
-            const isAiLoaded = health.ai_model?.status === 'loaded';
-            const isEmailConfigured = health.email_service?.configured === true || health.email_otp?.status === 'configured';
-            const isGoogleConfigured = health.google_auth?.configured === true || health.google_auth?.status === 'configured';
-            const isMapsConfigured = health.google_maps?.configured === true || health.google_maps?.status === 'configured';
+            const isEmailHealthy = health.email_otp?.status === 'operational' || health.email_service?.status === 'operational';
+            const isGoogleConfigured = health.google_auth?.status === 'operational' || health.google_auth?.configured === true;
+            const isMapsActive = health.gis_mapping?.status === 'operational' || health.google_maps?.status === 'operational';
 
             setPill('healthBackend', isBackendOnline, 'Online', 'Offline');
             setPill('healthMongo', isMongoConnected, 'Connected', 'Disconnected');
             setPill('healthAiModel', isAiLoaded, 'Loaded', 'Offline');
-            setPill('healthEmail', isEmailConfigured, 'Configured', 'Demo Fallback');
+            setPill('healthEmail', isEmailHealthy, 'Operational', 'Demo Fallback');
             setPill('healthGoogle', isGoogleConfigured, 'Configured', 'Pending ID');
-            setPill('healthMaps', isMapsConfigured, 'Active (Key)', 'Pending Key');
+            setPill('healthMaps', isMapsActive, 'Active', 'Offline');
 
         } catch (err) {
             console.error("Failed to load admin dashboard:", err);

@@ -229,9 +229,14 @@ def get_admin_dashboard(current_user):
     }
 
     # 4. System Health Indicators
-    google_maps_key = current_app.config.get('GOOGLE_MAPS_API_KEY')
-    google_client_id = current_app.config.get('GOOGLE_CLIENT_ID')
+    google_client_id = current_app.config.get('GOOGLE_CLIENT_ID', '').strip()
+    google_auth_ready = bool(google_client_id and (google_client_id.endswith('.apps.googleusercontent.com') or len(google_client_id) > 15))
+
     smtp_configured = email_service.is_configured()
+    smtp_healthy = False
+    smtp_status_desc = "Demo Fallback"
+    if smtp_configured:
+        smtp_healthy, smtp_status_desc = email_service.verify_smtp_health()
 
     system_health = {
         'backend_api': {
@@ -256,25 +261,34 @@ def get_admin_dashboard(current_user):
             'detections_supported': ['Crack', 'Pothole', 'Surface deterioration']
         },
         'email_service': {
-            'configured': smtp_configured,
-            'status': 'configured' if smtp_configured else 'demo_mode',
-            'provider': 'SMTP External Server' if smtp_configured else 'Local Cryptographic Generator'
+            'configured': smtp_healthy,
+            'status': 'operational' if smtp_healthy else 'demo_mode',
+            'provider': 'Gmail / SMTP Server' if smtp_healthy else 'Local Cryptographic Generator'
         },
         'email_otp': {
-            'status': 'configured' if smtp_configured else 'demo_mode',
-            'provider': 'SMTP External Server' if smtp_configured else 'Local Cryptographic Generator (Demo Passcode)',
-            'expiry_minutes': email_service.OTP_EXPIRY_MINUTES,
-            'cooldown_seconds': email_service.RESEND_COOLDOWN_SECONDS
+            'status': 'operational' if smtp_healthy else 'demo_mode',
+            'configured': smtp_healthy,
+            'provider': 'Gmail / SMTP Server' if smtp_healthy else 'Local Cryptographic Generator (Demo Fallback)',
+            'status_desc': smtp_status_desc,
+            'demo_mode_enabled': current_app.config.get('ENABLE_DEMO_OTP', True),
+            'expiry_seconds': current_app.config.get('OTP_EXPIRY_SECONDS', 300),
+            'cooldown_seconds': current_app.config.get('OTP_RESEND_COOLDOWN_SECONDS', 60)
         },
         'google_auth': {
-            'configured': bool(google_client_id),
-            'status': 'configured' if bool(google_client_id) else 'pending_client_id',
-            'has_client_id': bool(google_client_id)
+            'configured': google_auth_ready,
+            'status': 'operational' if google_auth_ready else 'pending_client_id',
+            'provider': 'Google Identity Services (GIS)'
         },
-        'google_maps': {
-            'configured': bool(google_maps_key),
-            'status': 'configured' if bool(google_maps_key) else 'pending_api_key',
-            'has_api_key': bool(google_maps_key)
+        'gis_mapping': {
+            'configured': True,
+            'status': 'operational',
+            'provider': 'Leaflet + OpenStreetMap',
+            'default_center': 'Nairobi (-1.286389, 36.817223)'
+        },
+        'google_maps': {  # Compatibility alias
+            'configured': True,
+            'status': 'operational',
+            'provider': 'Leaflet + OpenStreetMap'
         }
     }
 

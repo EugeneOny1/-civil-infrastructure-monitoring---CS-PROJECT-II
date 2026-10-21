@@ -50,18 +50,29 @@ class Config:
     DUPLICATE_IOU_THRESHOLD = float(os.getenv('DUPLICATE_IOU_THRESHOLD', '0.50'))
 
     # Two-Factor Authentication (2FA) & Real Email Delivery (SMTP)
-    SMTP_HOST = os.getenv('SMTP_HOST', '')
+    SMTP_HOST = os.getenv('SMTP_HOST', '').strip()
     SMTP_PORT = int(os.getenv('SMTP_PORT', '587'))
-    SMTP_USER = os.getenv('SMTP_USER', '')
-    SMTP_PASSWORD = os.getenv('SMTP_PASSWORD', '')
-    SMTP_SENDER = os.getenv('SMTP_SENDER', 'infravision-alerts@strathmore.edu')
+    SMTP_USER = os.getenv('SMTP_USER', '').strip()
+    SMTP_PASSWORD = os.getenv('SMTP_PASSWORD', '').strip()
+    SMTP_SENDER = os.getenv('SMTP_SENDER', 'infravision-alerts@strathmore.edu').strip()
     SMTP_USE_TLS = os.getenv('SMTP_USE_TLS', 'True').lower() in ('true', '1', 't')
 
-    # Google Authentication (OAuth2 / GIS)
-    GOOGLE_CLIENT_ID = os.getenv('GOOGLE_CLIENT_ID', '')
+    # OTP Lifecycle & Rate Limits
+    OTP_EXPIRY_SECONDS = int(os.getenv('OTP_EXPIRY_SECONDS', '300'))  # 5 minutes
+    OTP_RESEND_COOLDOWN_SECONDS = int(os.getenv('OTP_RESEND_COOLDOWN_SECONDS', '60'))  # 60 seconds
+    OTP_MAX_ATTEMPTS = int(os.getenv('OTP_MAX_ATTEMPTS', '5'))  # 5 attempts max
+    OTP_MAX_SENDS_PER_HOUR = int(os.getenv('OTP_MAX_SENDS_PER_HOUR', '5'))  # 5 sends per hour max
+    ENABLE_DEMO_OTP = os.getenv('ENABLE_DEMO_OTP', 'True').lower() in ('true', '1', 't')
 
-    # Google Maps Platform
-    GOOGLE_MAPS_API_KEY = os.getenv('GOOGLE_MAPS_API_KEY', '')
+    # Google Authentication (OAuth2 / GIS)
+    GOOGLE_CLIENT_ID = os.getenv('GOOGLE_CLIENT_ID', '').strip()
+    GOOGLE_CLIENT_SECRET = os.getenv('GOOGLE_CLIENT_SECRET', '').strip()
+
+    # GIS / Mapping (Leaflet + OpenStreetMap)
+    MAP_PROVIDER = os.getenv('MAP_PROVIDER', 'leaflet').strip()
+    MAP_DEFAULT_LAT = float(os.getenv('MAP_DEFAULT_LAT', '-1.286389'))
+    MAP_DEFAULT_LNG = float(os.getenv('MAP_DEFAULT_LNG', '36.817223'))
+    MAP_DEFAULT_ZOOM = int(os.getenv('MAP_DEFAULT_ZOOM', '12'))
 
 class DevelopmentConfig(Config):
     DEBUG = True
