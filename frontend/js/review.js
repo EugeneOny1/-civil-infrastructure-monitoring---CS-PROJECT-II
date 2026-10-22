@@ -16,6 +16,8 @@ const Review = {
     currentAssessment: null,
     caseworkReports: [],
     targetReportId: null,
+    activeImageIndex: 0,
+    activeReportData: null,
 
     init() {
         this.bindEvents();
@@ -210,6 +212,16 @@ const Review = {
         if (sevEl) sevEl.textContent = '—';
         if (areaEl) areaEl.textContent = '—';
 
+        const gallery = document.getElementById('reviewImageGallery');
+        if (gallery) {
+            gallery.classList.add('hidden');
+            gallery.style.display = 'none';
+        }
+        const thumbList = document.getElementById('reviewThumbnailList');
+        if (thumbList) thumbList.innerHTML = '';
+        this.activeReportData = null;
+        this.activeImageIndex = 0;
+
         // Draw clear empty placeholder on canvas
         const canvas = document.getElementById('reviewCanvas');
         if (canvas) {
@@ -309,40 +321,113 @@ const Review = {
                 if (notesEl && !notesEl.value) notesEl.value = '';
             }
 
-            // AI Output & Telemetry
-            const ai = data.assessment || {};
-            const detections = (ai.detections && ai.detections.length > 0)
-                ? ai.detections
-                : (ai.defect_class && ai.defect_class !== 'None Detected' ? [ai] : []);
-            const hasDetections = detections.length > 0;
-
-            const defectClass = ai.class_name || ai.defect_class || (hasDetections ? detections[0].class_name || 'Crack' : 'None Detected');
-            const severity = (ai.severity || ai.relative_severity || 'Low').toUpperCase();
-            const rawScore = ai.confidence !== undefined ? ai.confidence : (ai.confidence_score !== undefined ? ai.confidence_score : 0.0);
-            const confidence = hasDetections ? Math.round(rawScore * 1000) / 10 : 0.0;
-            const areaRatio = Math.round((ai.area_percentage || 0) * 10) / 10;
-
-            const predClassEl = document.getElementById('reviewPredictedClass');
-            const calcSevEl = document.getElementById('reviewCalculatedSeverity');
-            if (predClassEl) predClassEl.textContent = defectClass;
-            if (calcSevEl) calcSevEl.textContent = `[ RELATIVE SEVERITY: ${severity} ]`;
-
-            const confEl = document.getElementById('telemConfidence');
-            const sevEl = document.getElementById('telemSeverity');
-            const areaEl = document.getElementById('telemArea');
-            if (confEl) confEl.textContent = hasDetections ? `${confidence}%` : '—';
-            if (sevEl) sevEl.textContent = severity;
-            if (areaEl) areaEl.textContent = `${areaRatio}%`;
-
-            // Render inspection canvas with scaled bounding boxes
-            const imageUrl = data.image?.url || '/api/reports/images/seed_pothole.jpg';
-            this.drawReviewCanvas(imageUrl, ai);
+            // Multi-image angle switching & AI Telemetry rendering
+            this.activeReportData = data;
+            this.activeImageIndex = 0;
+            this.renderImageGallery(data);
 
         } catch (e) {
             console.error("[Review] Load report review error:", e);
             window.App.showToast("Failed to load defect report for review.", true);
             this.renderEmptyCaseworkState("Could not retrieve defect report.");
         }
+    },
+
+    renderImageGallery(data) {
+        const galleryContainer = document.getElementById('reviewImageGallery');
+        const thumbList = document.getElementById('reviewThumbnailList');
+        if (!galleryContainer || !thumbList) return;
+
+        const images = (data.images && data.images.length > 0) ? data.images : (data.image ? [data.image] : []);
+
+        if (images.length <= 1) {
+            galleryContainer.classList.add('hidden');
+            galleryContainer.style.display = 'none';
+            thumbList.innerHTML = '';
+            const img = images[0] || {};
+            const ass = (data.assessments && data.assessments[0]) || data.assessment || {};
+            this.updateTelemetryAndCanvas(img.url, ass);
+            return;
+        }
+
+        galleryContainer.classList.remove('hidden');
+        galleryContainer.style.display = 'flex';
+        thumbList.innerHTML = images.map((img, idx) => {
+            const isActive = idx === this.activeImageIndex;
+            const activeStyle = isActive
+                ? 'border: 2px solid #0284c7; box-shadow: 0 0 0 2px rgba(2, 132, 199, 0.4);'
+                : 'border: 2px solid transparent; opacity: 0.7;';
+            const angleName = img.original_filename || `Photo ${idx + 1}`;
+            return `
+                <button type="button" class="review-thumb-btn ${isActive ? 'active' : ''}" data-index="${idx}" title="${angleName}" style="cursor: pointer; padding: 0; background: none; border-radius: 4px; overflow: hidden; width: 68px; height: 50px; flex-shrink: 0; ${activeStyle}">
+                    <img src="${img.url}" alt="${angleName}" style="width: 100%; height: 100%; object-fit: cover;" onerror="this.src='/api/reports/images/seed_pothole.jpg'">
+                </button>
+            `;
+        }).join('');
+
+        thumbList.querySelectorAll('.review-thumb-btn').forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                const targetBtn = e.currentTarget;
+                const idx = parseInt(targetBtn.getAttribute('data-index'), 10);
+                this.selectActiveImage(idx);
+            });
+        });
+
+        this.selectActiveImage(0);
+    },
+
+    selectActiveImage(index) {
+        this.activeImageIndex = index;
+        const data = this.activeReportData;
+        if (!data) return;
+
+        const images = (data.images && data.images.length > 0) ? data.images : (data.image ? [data.image] : []);
+        const activeImg = images[index] || images[0] || {};
+        const activeAss = (data.assessments && data.assessments[index]) || (index === 0 ? data.assessment : {}) || {};
+
+        // Update active class and styles on thumbnails
+        const thumbList = document.getElementById('reviewThumbnailList');
+        if (thumbList) {
+            thumbList.querySelectorAll('.review-thumb-btn').forEach((btn, idx) => {
+                const isActive = idx === index;
+                btn.classList.toggle('active', isActive);
+                btn.style.border = isActive ? '2px solid #0284c7' : '2px solid transparent';
+                btn.style.boxShadow = isActive ? '0 0 0 2px rgba(2, 132, 199, 0.4)' : 'none';
+                btn.style.opacity = isActive ? '1' : '0.7';
+            });
+        }
+
+        this.updateTelemetryAndCanvas(activeImg.url, activeAss);
+    },
+
+    updateTelemetryAndCanvas(imageUrl, ai) {
+        ai = ai || {};
+        const detections = (ai.detections && ai.detections.length > 0)
+            ? ai.detections
+            : (ai.defect_class && ai.defect_class !== 'None Detected' ? [ai] : []);
+        const hasDetections = detections.length > 0;
+
+        const defectClass = ai.class_name || ai.defect_class || (hasDetections ? detections[0].class_name || 'Crack' : 'None Detected');
+        const severity = (ai.severity || ai.relative_severity || 'Low').toUpperCase();
+        const rawScore = ai.confidence !== undefined ? ai.confidence : (ai.confidence_score !== undefined ? ai.confidence_score : 0.0);
+        const confidence = hasDetections ? Math.round(rawScore * 1000) / 10 : 0.0;
+        const areaRatio = Math.round((ai.area_percentage || 0) * 10) / 10;
+
+        const predClassEl = document.getElementById('reviewPredictedClass');
+        const calcSevEl = document.getElementById('reviewCalculatedSeverity');
+        if (predClassEl) predClassEl.textContent = defectClass;
+        if (calcSevEl) calcSevEl.textContent = `[ RELATIVE SEVERITY: ${severity} ]`;
+
+        const confEl = document.getElementById('telemConfidence');
+        const sevEl = document.getElementById('telemSeverity');
+        const areaEl = document.getElementById('telemArea');
+        if (confEl) confEl.textContent = hasDetections ? `${confidence}%` : '—';
+        if (sevEl) sevEl.textContent = severity;
+        if (areaEl) areaEl.textContent = `${areaRatio}%`;
+
+        // Render inspection canvas with scaled bounding boxes
+        const url = imageUrl || '/api/reports/images/seed_pothole.jpg';
+        this.drawReviewCanvas(url, ai);
     },
 
     drawReviewCanvas(imageUrl, aiData) {
