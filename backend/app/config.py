@@ -24,7 +24,8 @@ class Config:
     DB_NAME = os.getenv('DB_NAME', 'civil_infrastructure')
 
     # File uploads
-    UPLOAD_FOLDER = os.getenv('UPLOAD_FOLDER', str(BASE_DIR / 'uploads'))
+    _raw_upload = os.getenv('UPLOAD_FOLDER', 'uploads').strip()
+    UPLOAD_FOLDER = str((BASE_DIR / _raw_upload).resolve()) if not os.path.isabs(_raw_upload) else _raw_upload
     MAX_CONTENT_LENGTH = int(os.getenv('MAX_CONTENT_LENGTH', 16 * 1024 * 1024))  # 16 MB
     ALLOWED_EXTENSIONS = {'png', 'jpg', 'jpeg', 'webp'}
 

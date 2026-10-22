@@ -468,6 +468,39 @@ def get_report_detail(current_user, report_id):
     primary_image = image_list[0] if image_list else None
     primary_assessment = assessment_list[0] if assessment_list else None
 
+    # Legacy report compatibility: check if report or metadata references image directly
+    meta = report.get('metadata') or {}
+    if not primary_image:
+        legacy_image_path = report.get('image_path') or meta.get('image_path')
+        legacy_image_id = report.get('image_id') or meta.get('image_id')
+        if legacy_image_id:
+            legacy_img = db_service.find_one('submitted_images', {'_id': legacy_image_id})
+            if legacy_img:
+                primary_image = {
+                    'image_id': legacy_img['_id'],
+                    'url': f"/api/reports/images/{legacy_img['image_path']}",
+                    'filename': legacy_img['image_path'],
+                    'original_filename': legacy_img.get('original_filename', ''),
+                    'file_size': legacy_img.get('file_size', 0),
+                    'dimensions': legacy_img.get('dimensions', {})
+                }
+                image_list = [primary_image]
+        elif legacy_image_path:
+            primary_image = {
+                'image_id': 'legacy',
+                'url': f"/api/reports/images/{legacy_image_path}",
+                'filename': legacy_image_path,
+                'original_filename': legacy_image_path,
+                'file_size': 0,
+                'dimensions': {}
+            }
+            image_list = [primary_image]
+
+    if not primary_assessment:
+        primary_assessment = db_service.find_one('ai_assessments', {'report_id': report_id})
+        if primary_assessment and not assessment_list:
+            assessment_list = [primary_assessment]
+
     asset = db_service.find_one('infrastructure_assets', {'_id': report.get('asset_id')})
     review = None
     if primary_assessment:
@@ -673,11 +706,6 @@ def serve_image(filename):
     upload_folder = current_app.config['UPLOAD_FOLDER']
     file_path = os.path.join(upload_folder, filename)
     if not os.path.exists(file_path):
-        from PIL import Image, ImageDraw
-        os.makedirs(upload_folder, exist_ok=True)
-        img = Image.new('RGB', (800, 600), color=(30, 36, 48))
-        d = ImageDraw.Draw(img)
-        d.text((260, 280), f"Civil Infrastructure Image\n{filename}", fill=(200, 200, 200))
-        img.save(file_path)
+        return jsonify({'error': 'Defect photograph not found.'}), 404
 
     return send_from_directory(upload_folder, filename)
