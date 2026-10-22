@@ -550,18 +550,38 @@ class TestAuthAndMaps(unittest.TestCase):
         self.assertEqual(priority_crit_cluster, 'Urgent Review')
 
         # 3. Anti-spam de-duplication check:
-        # Multiple historical reports exist on Uhuru Highway (Chainage 14+350)
-        proximity_metrics = validation_service.calculate_location_proximity_metrics(-1.29850, 36.82280, radius_meters=60.0)
-        self.assertGreaterEqual(proximity_metrics['nearby_report_count'], 1)
+        # Create an isolated reference report at Uhuru Highway (Chainage 14+350) for hermetic testing
+        test_rep_id = 'test_cluster_rep_14'
+        db_service.insert('infrastructure_reports', {
+            '_id': test_rep_id,
+            'user_id': 'usr_cit_01',
+            'asset_id': 'ast_uhuru_01',
+            'description': 'Cluster proximity test report',
+            'status': 'Received',
+            'date_submitted': datetime.now(timezone.utc).isoformat(),
+            'latitude': -1.29850,
+            'longitude': 36.82280,
+            'metadata': {
+                'location_name': 'Uhuru Highway (Chainage 14+350)',
+                'latitude': -1.29850,
+                'longitude': 36.82280,
+                'priority': 'Critical'
+            }
+        })
+        try:
+            proximity_metrics = validation_service.calculate_location_proximity_metrics(-1.29850, 36.82280, radius_meters=60.0)
+            self.assertGreaterEqual(proximity_metrics['nearby_report_count'], 1)
 
-        # 4. Map points include nearby_report_count
-        res_map = self.client.get('/api/reports/map')
-        self.assertEqual(res_map.status_code, 200)
-        points = res_map.get_json().get('points', [])
-        # Find points near Uhuru Highway
-        uhuru_pts = [p for p in points if abs(p['latitude'] - (-1.29850)) < 0.001]
-        if uhuru_pts:
-            self.assertIn('nearby_report_count', uhuru_pts[0])
+            # 4. Map points include nearby_report_count
+            res_map = self.client.get('/api/reports/map')
+            self.assertEqual(res_map.status_code, 200)
+            points = res_map.get_json().get('points', [])
+            # Find points near Uhuru Highway
+            uhuru_pts = [p for p in points if abs(p['latitude'] - (-1.29850)) < 0.001]
+            if uhuru_pts:
+                self.assertIn('nearby_report_count', uhuru_pts[0])
+        finally:
+            db_service.delete_one('infrastructure_reports', {'_id': test_rep_id})
 
     def test_15_multi_image_submission_and_aggregation(self):
         """Verifies multi-image defect reporting (1-3 images), class union, and severity aggregation."""

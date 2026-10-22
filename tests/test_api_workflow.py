@@ -29,11 +29,12 @@ from app.services.database import db_service
 class TestApiWorkflow(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
-        cls.app = create_app('development')
+        cls.app = create_app('testing')
         cls.client = cls.app.test_client()
         cls.test_image_path = os.path.abspath(os.path.join(
             os.path.dirname(__file__), '..', 'backend', 'uploads', 'seed_pothole.jpg'
         ))
+        cls.created_report_ids = []
 
         # Login as citizen
         res = cls.client.post('/api/auth/login', json={
@@ -57,6 +58,17 @@ class TestApiWorkflow(unittest.TestCase):
             cls.engineer_token = res_2fa.get_json().get('token')
         else:
             cls.engineer_token = eng_data.get('token')
+
+    @classmethod
+    def tearDownClass(cls):
+        """Clean up reports created during integration testing to keep database pristine."""
+        for rid in getattr(cls, 'created_report_ids', []):
+            try:
+                db_service.delete_one('infrastructure_reports', {'_id': rid})
+                db_service.delete_many('submitted_images', {'report_id': rid})
+                db_service.delete_many('ai_assessments', {'report_id': rid})
+            except Exception:
+                pass
 
     def test_01_health_check_endpoint(self):
         """Verifies GET /api/health returns online status and SavedModel version."""
@@ -108,6 +120,7 @@ class TestApiWorkflow(unittest.TestCase):
 
         # Verify MongoDB persistence
         report_id = data['report_id']
+        self.__class__.created_report_ids.append(report_id)
         persisted_report = db_service.find_one('infrastructure_reports', {'_id': report_id})
         self.assertIsNotNone(persisted_report)
         self.assertEqual(persisted_report['user_id'], 'usr_cit_01')
@@ -155,6 +168,8 @@ class TestApiWorkflow(unittest.TestCase):
 
         self.assertEqual(res.status_code, 201)
         data = res.get_json()
+        if 'report_id' in data:
+            self.__class__.created_report_ids.append(data['report_id'])
         self.assertEqual(data['status'], 'Received')
         self.assertEqual(data['validation']['validation_status'], 'unusual')
         self.assertTrue(data['validation']['is_unusual'])
@@ -184,6 +199,8 @@ class TestApiWorkflow(unittest.TestCase):
 
         self.assertEqual(res.status_code, 201)
         data = res.get_json()
+        if 'report_id' in data:
+            self.__class__.created_report_ids.append(data['report_id'])
         ai = data['ai_assessment']
         self.assertEqual(ai['defect_class'], 'None Detected')
         self.assertEqual(ai['confidence_score'], 0.0)

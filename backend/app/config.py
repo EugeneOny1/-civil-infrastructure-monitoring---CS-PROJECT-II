@@ -84,6 +84,8 @@ class ProductionConfig(Config):
 class TestingConfig(Config):
     TESTING = True
     DEBUG = True
+    DB_NAME = os.getenv('TEST_DB_NAME', 'civil_infrastructure_test')
+    MONGO_URI = os.getenv('TEST_MONGO_URI', 'mongodb://localhost:27017/civil_infrastructure_test')
 
 config_by_name = {
     'development': DevelopmentConfig,

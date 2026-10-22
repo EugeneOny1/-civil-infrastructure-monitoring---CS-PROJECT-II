@@ -44,6 +44,11 @@ class DatabaseService:
     def connect(self):
         """Attempts connection to MongoDB, falling back to mock store if unavailable."""
         try:
+            if self.client is not None:
+                try:
+                    self.client.close()
+                except Exception:
+                    pass
             self.client = MongoClient(self.uri, serverSelectionTimeoutMS=2000)
             self.client.admin.command('ping')
             self.db = self.client[self.db_name]
@@ -295,6 +300,15 @@ class DatabaseService:
                 del self._mock_data[collection_name][item['_id']]
                 return True
             return False
+
+    def delete_many(self, collection_name, query):
+        if not self.use_mock and self.db is not None:
+            return self.db[collection_name].delete_many(self._format_query(query))
+        else:
+            items = self.find(collection_name, query)
+            for item in items:
+                del self._mock_data[collection_name][item['_id']]
+            return True
 
     def _format_query(self, query):
         formatted = {}
