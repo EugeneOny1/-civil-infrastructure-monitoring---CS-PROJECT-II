@@ -416,35 +416,41 @@ def google_auth():
     google_id = None
     
     if credential:
-        try:
-            import requests
-            resp = requests.get('https://oauth2.googleapis.com/tokeninfo', params={'id_token': credential}, timeout=5)
-            if resp.status_code == 200:
-                token_info = resp.json()
-                expected_client_id = current_app.config.get('GOOGLE_CLIENT_ID', '').strip()
-                token_aud = token_info.get('aud', '')
-                
-                # Check audience if GOOGLE_CLIENT_ID is configured
-                if expected_client_id and token_aud and token_aud != expected_client_id:
-                    return jsonify({'error': 'Google token audience mismatch with application client ID.'}), 401
-                
-                # Check email verification status from Google
-                email_verified = token_info.get('email_verified')
-                if str(email_verified).lower() not in ('true', '1'):
-                    return jsonify({'error': 'Google account email is not verified.'}), 401
-                
-                email = token_info.get('email', '').strip().lower()
-                name = token_info.get('name', '').strip() or 'Google User'
-                google_id = token_info.get('sub', '').strip()
-            else:
-                return jsonify({'error': 'Google authentication failed: Invalid or expired token.'}), 401
-        except Exception as e:
-            if test_mode and data.get('email'):
-                email = data.get('email', '').strip().lower()
-                name = data.get('name', '').strip() or 'Google User'
-                google_id = data.get('google_id', '').strip() or data.get('sub', '').strip()
-            else:
-                return jsonify({'error': f'Failed to verify Google credential: {str(e)}'}), 401
+        is_demo_token = credential in ('demo_google_gis_credential_token', 'demo_token') or str(credential).startswith('demo_')
+        if is_demo_token and (current_app.config.get('ENABLE_DEMO_OTP', False) or test_mode):
+            email = data.get('email', 'citizen.demo@strathmore.edu').strip().lower()
+            name = data.get('name', 'Demo Google Citizen')
+            google_id = data.get('google_id', 'demo_google_sub_12345')
+        else:
+            try:
+                import requests
+                resp = requests.get('https://oauth2.googleapis.com/tokeninfo', params={'id_token': credential}, timeout=5)
+                if resp.status_code == 200:
+                    token_info = resp.json()
+                    expected_client_id = current_app.config.get('GOOGLE_CLIENT_ID', '').strip()
+                    token_aud = token_info.get('aud', '')
+                    
+                    # Check audience if GOOGLE_CLIENT_ID is configured
+                    if expected_client_id and token_aud and token_aud != expected_client_id:
+                        return jsonify({'error': 'Google token audience mismatch with application client ID.'}), 401
+                    
+                    # Check email verification status from Google
+                    email_verified = token_info.get('email_verified')
+                    if str(email_verified).lower() not in ('true', '1'):
+                        return jsonify({'error': 'Google account email is not verified.'}), 401
+                    
+                    email = token_info.get('email', '').strip().lower()
+                    name = token_info.get('name', '').strip() or 'Google User'
+                    google_id = token_info.get('sub', '').strip()
+                else:
+                    return jsonify({'error': 'Google authentication failed: Invalid or expired token.'}), 401
+            except Exception as e:
+                if test_mode and data.get('email'):
+                    email = data.get('email', '').strip().lower()
+                    name = data.get('name', '').strip() or 'Google User'
+                    google_id = data.get('google_id', '').strip() or data.get('sub', '').strip()
+                else:
+                    return jsonify({'error': f'Failed to verify Google credential: {str(e)}'}), 401
     elif test_mode and data.get('email'):
         # Controlled test mock payload
         email = data.get('email', '').strip().lower()
@@ -480,6 +486,45 @@ def google_auth():
         user_dict['must_change_password'] = False
         user_id = db_service.insert('users', user_dict)
         user.user_id = str(user_id)
+
+    # Enforce mandatory 2FA for privileged accounts (engineer, admin) or if user enabled 2FA
+    is_privileged = user.role in ['engineer', 'admin']
+    has_2fa = is_privileged or user.two_factor_enabled
+
+    if has_2fa:
+        otp = email_service.generate_otp()
+        expiry_seconds = email_service.get_expiry_seconds()
+        now_utc = datetime.now(timezone.utc)
+        expiry_utc = now_utc + timedelta(seconds=expiry_seconds)
+
+        # Dispatch real OTP email (or demo fallback)
+        dispatch_result = email_service.send_otp_email(user.email, otp, user.name)
+
+        send_history = (existing_user.get('otp_send_history', []) if existing_user else [])
+        send_history.append(now_utc.isoformat())
+
+        target_user_id = existing_user['_id'] if existing_user else user.user_id
+        db_service.update_one('users', {'_id': target_user_id}, {
+            'two_factor_otp': otp,
+            'two_factor_exp': expiry_utc.isoformat(),
+            'two_factor_attempts': 0,
+            'otp_dispatched_at': now_utc.isoformat(),
+            'otp_send_history': send_history
+        })
+
+        res_payload = {
+            'require_2fa': True,
+            'email': user.email,
+            'role': user.role,
+            'message': f'Two-Factor Authentication required. Verification code dispatched to {user.email}.',
+            'expires_in_seconds': expiry_seconds,
+            'cooldown_seconds': email_service.get_cooldown_seconds(),
+            'enable_demo_otp': email_service.is_demo_mode(),
+            'smtp_delivered': dispatch_result.get('delivered', False)
+        }
+        if email_service.is_demo_mode():
+            res_payload['demo_otp'] = otp
+        return jsonify(res_payload), 200
 
     token = create_access_token(user.to_dict())
 
