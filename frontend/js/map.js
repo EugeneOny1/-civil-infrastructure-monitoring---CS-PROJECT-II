@@ -166,14 +166,56 @@ const DefectMap = {
                 attribution: this.config.attribution
             }).addTo(this.map);
 
-            // Initialize marker cluster group
+            // Initialize marker cluster group with severity-aware visual treatment
             if (typeof L.markerClusterGroup === 'function') {
                 this.markerCluster = L.markerClusterGroup({
                     chunkedLoading: true,
                     maxClusterRadius: 40,
                     spiderfyOnMaxZoom: true,
                     showCoverageOnHover: false,
-                    zoomToBoundsOnClick: true
+                    zoomToBoundsOnClick: true,
+                    iconCreateFunction: (cluster) => {
+                        const childMarkers = cluster.getAllChildMarkers();
+                        const count = childMarkers.length;
+                        let hasCritical = false;
+                        let hasMedium = false;
+
+                        for (const m of childMarkers) {
+                            const sev = m.reportSeverity || m.options?.severity;
+                            if (sev === 'Critical') {
+                                hasCritical = true;
+                                break;
+                            } else if (sev === 'Medium') {
+                                hasMedium = true;
+                            }
+                        }
+
+                        let innerColor = '#10b981'; // Green: predominantly Low
+                        let ringColor = 'rgba(16, 185, 129, 0.25)';
+                        let shadowColor = 'rgba(16, 185, 129, 0.4)';
+
+                        if (hasCritical) {
+                            innerColor = '#ef4444'; // Red: Critical defect present
+                            ringColor = 'rgba(239, 68, 68, 0.25)';
+                            shadowColor = 'rgba(239, 68, 68, 0.45)';
+                        } else if (hasMedium) {
+                            innerColor = '#f59e0b'; // Amber: Medium defect present
+                            ringColor = 'rgba(245, 158, 11, 0.25)';
+                            shadowColor = 'rgba(245, 158, 11, 0.45)';
+                        }
+
+                        return L.divIcon({
+                            html: `
+                                <div style="width:42px; height:42px; border-radius:50%; background-color:${ringColor}; display:flex; align-items:center; justify-content:center; transition:transform 0.15s ease;">
+                                    <div style="width:32px; height:32px; border-radius:50%; background-color:${innerColor}; color:#ffffff; font-family:var(--font-sans, system-ui, -apple-system, sans-serif); font-weight:700; font-size:13px; display:flex; align-items:center; justify-content:center; box-shadow:0 2px 6px ${shadowColor};">
+                                        ${count}
+                                    </div>
+                                </div>
+                            `,
+                            className: 'custom-severity-cluster-icon',
+                            iconSize: L.point(42, 42)
+                        });
+                    }
                 });
                 this.map.addLayer(this.markerCluster);
             } else {
@@ -368,6 +410,7 @@ const DefectMap = {
 
             const icon = this.createMarkerIcon(point.relative_severity, point.is_unusual);
             const marker = L.marker([lat, lng], { icon: icon });
+            marker.reportSeverity = point.relative_severity;
 
             const popupContent = this.createPopupContent(point);
             marker.bindPopup(popupContent, { maxWidth: 300, className: 'leaflet-custom-popup' });
