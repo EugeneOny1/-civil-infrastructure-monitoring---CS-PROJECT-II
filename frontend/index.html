@@ -179,9 +179,10 @@
                                 Enter the 6-digit verification code sent to your email.
                             </small>
                         </div>
-                        <div style="display: flex; gap: 0.5rem; margin-bottom: 0.75rem;">
-                            <button type="button" class="btn-secondary btn-sm" id="btnResendOtp" style="flex: 1;">
-                                ↻ Resend Code (<span id="resendTimerText">Ready</span>)
+                        <div class="resend-otp-container" style="display: flex; align-items: center; justify-content: center; gap: 0.35rem; margin-bottom: 0.85rem; font-size: 0.82rem; color: #475569;">
+                            <span>Didn't receive a code?</span>
+                            <button type="button" id="btnResendOtp" class="btn-resend-link" style="background: none; border: none; padding: 0; color: #0284c7; font-weight: 600; font-size: inherit; cursor: pointer; text-decoration: underline;" disabled>
+                                <span id="resendTimerText">Resend available in 60s</span>
                             </button>
                         </div>
                         <button type="submit" class="btn-primary btn-block" id="btnVerifyTwoFactor">

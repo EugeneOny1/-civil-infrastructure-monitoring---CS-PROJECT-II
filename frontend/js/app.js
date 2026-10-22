@@ -125,6 +125,11 @@ const App = {
             }
         } else {
             // Unauthenticated Guest: public Citizen views
+            const menu = document.getElementById('accountDropdownMenu');
+            const wrapper = document.getElementById('userProfileWrapper');
+            if (menu) menu.classList.add('hidden');
+            if (wrapper) wrapper.classList.remove('open');
+
             if (profileBadge) profileBadge.classList.add('hidden');
             if (authButtons) authButtons.classList.remove('hidden');
             document.getElementById('tabSubmit')?.classList.remove('hidden');
@@ -207,6 +212,11 @@ const App = {
         }
         if (btnLogout) {
             btnLogout.addEventListener('click', () => {
+                const menu = document.getElementById('accountDropdownMenu');
+                const wrapper = document.getElementById('userProfileWrapper');
+                if (menu) menu.classList.add('hidden');
+                if (wrapper) wrapper.classList.remove('open');
+
                 window.Api.clearSession();
                 this.currentUser = null;
                 this.pending2FA = null;
@@ -283,6 +293,10 @@ const App = {
                         // Standard Google Identity credential verification flow
                         this.showToast("Authenticating via Google Identity Services...");
                         const data = await window.Api.loginWithGoogle('demo_google_gis_credential_token');
+                        if (data.require_2fa) {
+                            this.show2FAChallenge(data);
+                            return;
+                        }
                         this.currentUser = data.user;
                         this.updateSessionUI();
                         this.showToast(`Signed in with Google as ${data.user.name || data.user.email}!`);
@@ -329,40 +343,7 @@ const App = {
 
                     // Check if 2FA challenge is returned
                     if (data.require_2fa) {
-                        this.pending2FA = {
-                            email: data.email,
-                            role: data.role,
-                            demo_otp: data.demo_otp,
-                            enable_demo_otp: data.enable_demo_otp
-                        };
-
-                        loginForm.classList.add('hidden');
-                        if (authTabsRow) authTabsRow.classList.add('hidden');
-                        if (twoFactorForm) {
-                            twoFactorForm.classList.remove('hidden');
-                            document.getElementById('twoFactorEmailDisplay').textContent = data.email;
-                            document.getElementById('twoFactorOtpInput').value = '';
-                            
-                            const helpEl = document.getElementById('twoFactorHelpText');
-                            const btnFill = document.getElementById('btnFillDemoOtp');
-
-                            const isDemo = data.enable_demo_otp !== false && Boolean(data.demo_otp);
-                            if (btnFill) {
-                                btnFill.classList.toggle('hidden', !isDemo);
-                            }
-                            if (helpEl) {
-                                if (isDemo && data.demo_otp) {
-                                    helpEl.innerHTML = `Development Demo Mode active. Dispatched code: <strong>${data.demo_otp}</strong>`;
-                                } else {
-                                    helpEl.textContent = "Enter the 6-digit verification code sent to your registered email address.";
-                                }
-                            }
-
-                            // Start live countdown and resend cooldown (Sections 12, 13)
-                            this.startOtpCountdown(data.expires_in_seconds || 300);
-                            this.startResendCooldown(data.cooldown_seconds || 60);
-                        }
-                        this.showToast(data.message || 'Two-Factor Authentication required.');
+                        this.show2FAChallenge(data);
                         return;
                     }
 
@@ -404,7 +385,7 @@ const App = {
                         if (res.demo_otp) {
                             this.pending2FA.demo_otp = res.demo_otp;
                             const helpEl = document.getElementById('twoFactorHelpText');
-                            if (helpEl) helpEl.innerHTML = `Development Demo Mode active. Dispatched code: <strong>${res.demo_otp}</strong>`;
+                            if (helpEl) helpEl.textContent = "Development Demo Mode active. Use 'Fill Demo Code' to auto-populate the security code or check your registered email inbox.";
                         }
                         // Clear input so stale code is never left behind
                         document.getElementById('twoFactorOtpInput').value = '';
@@ -574,6 +555,48 @@ const App = {
         });
     },
 
+    show2FAChallenge(data) {
+        this.pending2FA = {
+            email: data.email,
+            role: data.role,
+            demo_otp: data.demo_otp,
+            enable_demo_otp: data.enable_demo_otp
+        };
+
+        const loginForm = document.getElementById('loginForm');
+        const authTabsRow = document.getElementById('authTabsRow');
+        const twoFactorForm = document.getElementById('twoFactorForm');
+
+        if (loginForm) loginForm.classList.add('hidden');
+        if (authTabsRow) authTabsRow.classList.add('hidden');
+        if (twoFactorForm) {
+            twoFactorForm.classList.remove('hidden');
+            const emailDisp = document.getElementById('twoFactorEmailDisplay');
+            if (emailDisp) emailDisp.textContent = data.email;
+            const otpInput = document.getElementById('twoFactorOtpInput');
+            if (otpInput) otpInput.value = '';
+
+            const helpEl = document.getElementById('twoFactorHelpText');
+            const btnFill = document.getElementById('btnFillDemoOtp');
+
+            const isDemo = data.enable_demo_otp !== false && Boolean(data.demo_otp);
+            if (btnFill) {
+                btnFill.classList.toggle('hidden', !isDemo);
+            }
+            if (helpEl) {
+                if (isDemo) {
+                    helpEl.textContent = "Development Demo Mode active. Use 'Fill Demo Code' to auto-populate the security code or check your registered email inbox.";
+                } else {
+                    helpEl.textContent = "Enter the 6-digit verification code sent to your registered email address.";
+                }
+            }
+
+            this.startOtpCountdown(data.expires_in_seconds || 300);
+            this.startResendCooldown(data.cooldown_seconds || 60);
+        }
+        this.showToast(data.message || 'Two-Factor Authentication required.');
+    },
+
     startResendCooldown(seconds) {
         const btn = document.getElementById('btnResendOtp');
         const timerText = document.getElementById('resendTimerText');
@@ -581,7 +604,10 @@ const App = {
 
         let remaining = seconds;
         btn.disabled = true;
-        timerText.textContent = `${remaining}s`;
+        btn.style.opacity = '0.7';
+        btn.style.cursor = 'not-allowed';
+        btn.style.textDecoration = 'none';
+        timerText.textContent = `Resend available in ${remaining}s`;
 
         if (this.resendCooldownTimer) clearInterval(this.resendCooldownTimer);
 
@@ -590,9 +616,12 @@ const App = {
             if (remaining <= 0) {
                 clearInterval(this.resendCooldownTimer);
                 btn.disabled = false;
-                timerText.textContent = 'Ready';
+                btn.style.opacity = '1';
+                btn.style.cursor = 'pointer';
+                btn.style.textDecoration = 'underline';
+                timerText.textContent = 'Resend Code';
             } else {
-                timerText.textContent = `${remaining}s`;
+                timerText.textContent = `Resend available in ${remaining}s`;
             }
         }, 1000);
     },
@@ -899,14 +928,27 @@ const App = {
     bindAccountDropdown() {
         const badge = document.getElementById('userProfileBadge');
         const menu = document.getElementById('accountDropdownMenu');
+        const wrapper = document.getElementById('userProfileWrapper');
+
+        const closeDropdown = () => {
+            if (menu) menu.classList.add('hidden');
+            if (wrapper) wrapper.classList.remove('open');
+        };
+
         if (badge && menu) {
             badge.addEventListener('click', (e) => {
                 e.stopPropagation();
-                menu.classList.toggle('hidden');
+                const isHidden = menu.classList.toggle('hidden');
+                if (wrapper) wrapper.classList.toggle('open', !isHidden);
             });
             document.addEventListener('click', (e) => {
                 if (!e.target.closest('#userProfileWrapper')) {
-                    menu.classList.add('hidden');
+                    closeDropdown();
+                }
+            });
+            document.addEventListener('keydown', (e) => {
+                if (e.key === 'Escape' || e.key === 'Esc') {
+                    closeDropdown();
                 }
             });
         }
@@ -914,7 +956,7 @@ const App = {
         const btnNavProf = document.getElementById('btnNavProfile');
         if (btnNavProf) {
             btnNavProf.addEventListener('click', () => {
-                if (menu) menu.classList.add('hidden');
+                closeDropdown();
                 this.openProfileView('panelProfileInfo');
             });
         }
@@ -922,7 +964,7 @@ const App = {
         const btnNavSec = document.getElementById('btnNavSecurity');
         if (btnNavSec) {
             btnNavSec.addEventListener('click', () => {
-                if (menu) menu.classList.add('hidden');
+                closeDropdown();
                 this.openProfileView('panelProfileSecurity');
             });
         }
@@ -1162,6 +1204,10 @@ const App = {
                         if (response.credential) {
                             try {
                                 const data = await window.Api.loginWithGoogle(response.credential);
+                                if (data.require_2fa) {
+                                    this.show2FAChallenge(data);
+                                    return;
+                                }
                                 this.currentUser = data.user;
                                 this.updateSessionUI();
                                 this.showToast(`Signed in with Google as ${data.user.name || data.user.email}!`);
