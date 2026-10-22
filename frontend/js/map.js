@@ -325,7 +325,6 @@ const DefectMap = {
             if (this.heatLayer && this.map && !this.map.hasLayer(this.heatLayer)) {
                 this.heatLayer.addTo(this.map);
             }
-            window.App?.showToast("Hotspot layer active: Visualizing defect report density & priority.");
         } else {
             if (btn) {
                 btn.classList.remove('active-hotspot');
@@ -335,7 +334,6 @@ const DefectMap = {
             if (this.heatLayer && this.map && this.map.hasLayer(this.heatLayer)) {
                 this.map.removeLayer(this.heatLayer);
             }
-            window.App?.showToast("Hotspot layer hidden.");
         }
     },
 
@@ -460,6 +458,11 @@ const DefectMap = {
                 }
             } else {
                 this.heatLayer.setLatLngs(heatPoints);
+                if (this.showHotspotLayer && this.map && !this.map.hasLayer(this.heatLayer)) {
+                    this.heatLayer.addTo(this.map);
+                } else if (!this.showHotspotLayer && this.map && this.map.hasLayer(this.heatLayer)) {
+                    this.map.removeLayer(this.heatLayer);
+                }
             }
         }
     }
