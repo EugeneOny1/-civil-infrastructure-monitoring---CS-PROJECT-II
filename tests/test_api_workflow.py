@@ -76,7 +76,7 @@ class TestApiWorkflow(unittest.TestCase):
         self.assertEqual(res.status_code, 200)
         data = res.get_json()
         self.assertEqual(data.get('status'), 'online')
-        self.assertEqual(data.get('model'), 'ssd_mobilenet_v2_lr00125_step5000_v1')
+        self.assertEqual(data.get('model'), 'ssd_mobilenet_v2_lr00625_step8000_v2')
         self.assertTrue(data.get('model_loaded'))
 
     def test_02_report_submission_with_saved_model_inference(self):
@@ -111,7 +111,7 @@ class TestApiWorkflow(unittest.TestCase):
 
         # Check AI assessment payload
         ai = data['ai_assessment']
-        self.assertEqual(ai['model_version'], 'ssd_mobilenet_v2_lr00125_step5000_v1')
+        self.assertEqual(ai['model_version'], 'ssd_mobilenet_v2_lr00625_step8000_v2')
         self.assertIn(ai['defect_class'], ['Crack', 'Pothole', 'Surface deterioration'])
         self.assertGreaterEqual(ai['confidence_score'], 0.30)
         self.assertIn('relative_severity', ai)
@@ -127,7 +127,7 @@ class TestApiWorkflow(unittest.TestCase):
 
         persisted_ai = db_service.find_one('ai_assessments', {'image_id': data['image']['image_id']})
         self.assertIsNotNone(persisted_ai)
-        self.assertEqual(persisted_ai['model_version'], 'ssd_mobilenet_v2_lr00125_step5000_v1')
+        self.assertEqual(persisted_ai['model_version'], 'ssd_mobilenet_v2_lr00625_step8000_v2')
 
     @patch('app.routes.reports.inference_service.detect_defects')
     def test_03_unusual_combination_workflow(self, mock_detect):
@@ -144,7 +144,7 @@ class TestApiWorkflow(unittest.TestCase):
                 'bounding_box': [0.2, 0.2, 0.6, 0.6],
                 'relative_severity': 'High'
             }],
-            'model_version': 'ssd_mobilenet_v2_lr00125_step5000_v1',
+            'model_version': 'ssd_mobilenet_v2_lr00625_step8000_v2',
             'model_name': 'SSD-MobileNetV2',
             'bounding_box': [0.2, 0.2, 0.6, 0.6],
             'image_dimensions': {'width': 300, 'height': 300}

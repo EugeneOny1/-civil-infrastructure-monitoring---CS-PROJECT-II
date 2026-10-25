@@ -54,7 +54,7 @@ def create_app(config_name=None):
             'status': 'online',
             'system': 'Civil Infrastructure Monitoring System',
             'version': '1.0.0',
-            'model': app.config.get('MODEL_VERSION', 'ssd_mobilenet_v2_lr00125_step5000_v1'),
+            'model': app.config.get('MODEL_VERSION', 'ssd_mobilenet_v2_lr00625_step8000_v2'),
             'model_loaded': inference_service.is_loaded,
             'model_name': inference_service.model_name
         })

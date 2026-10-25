@@ -36,7 +36,7 @@ class TestInferenceService(unittest.TestCase):
         self.assertTrue(self.service.is_loaded, "InferenceService failed to load SavedModel")
         self.assertIsNotNone(self.service.saved_model, "saved_model attribute should not be None")
         self.assertIsNotNone(self.service.serving_fn, "serving_default callable must be present")
-        self.assertEqual(self.service.model_version, 'ssd_mobilenet_v2_lr00125_step5000_v1')
+        self.assertEqual(self.service.model_version, 'ssd_mobilenet_v2_lr00625_step8000_v2')
 
     def test_02_preprocessing_preserves_dimensions_and_dtype(self):
         """Verifies that preprocessing keeps original image size and uint8 RGB channels."""

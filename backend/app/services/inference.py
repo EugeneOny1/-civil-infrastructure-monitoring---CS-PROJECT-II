@@ -50,7 +50,7 @@ class InferenceService:
     }
 
     DEFAULT_CONFIDENCE_THRESHOLD = 0.30
-    DEFAULT_MODEL_VERSION = 'ssd_mobilenet_v2_lr00125_step5000_v1'
+    DEFAULT_MODEL_VERSION = 'ssd_mobilenet_v2_lr00625_step8000_v2'
     DEFAULT_MODEL_NAME = 'SSD-MobileNetV2'
 
     # Prototype visual severity thresholds (relative bounding box area to image area)
