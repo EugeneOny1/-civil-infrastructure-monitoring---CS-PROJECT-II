@@ -1135,6 +1135,10 @@
     border-radius: var(--radius-md);
 }
 
+.leaflet-heatmap-layer {
+    pointer-events: none !important;
+}
+
 .leaflet-popup-content-wrapper {
     background: #ffffff !important;
     border: 1px solid var(--border-color) !important;

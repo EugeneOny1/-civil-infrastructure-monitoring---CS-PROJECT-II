@@ -31,7 +31,7 @@ const DefectMap = {
     },
     isInitialized: false,
     heatLayer: null,
-    showHotspotLayer: false,
+    showHotspotLayer: true,
 
     async init() {
         this.bindEvents();
@@ -171,6 +171,18 @@ const DefectMap = {
                 const heatPane = this.map.createPane('heatmapPane');
                 heatPane.style.zIndex = '350';
                 heatPane.style.pointerEvents = 'none';
+                heatPane.style.opacity = '0.85';
+            }
+
+            // Sync initial hotspot button and legend state
+            if (this.showHotspotLayer) {
+                const hotspotBtn = document.getElementById('btnToggleHotspot');
+                const legend = document.getElementById('hotspotLegendItem');
+                if (hotspotBtn) {
+                    hotspotBtn.classList.add('active-hotspot');
+                    hotspotBtn.textContent = '🔥 Hotspot Active';
+                }
+                if (legend) legend.style.display = 'flex';
             }
 
             // Initialize marker cluster group with severity-aware visual treatment
@@ -250,6 +262,9 @@ const DefectMap = {
             setTimeout(() => {
                 try {
                     this.map.invalidateSize();
+                    if (this.heatLayer && typeof this.heatLayer._reset === 'function') {
+                        this.heatLayer._reset();
+                    }
                 } catch (e) {
                     // Suppress if map is not rendered
                 }
@@ -448,25 +463,24 @@ const DefectMap = {
 
             markers.push(marker);
 
-            // Calculate transparent continuous hotspot density intensity [0.2 - 1.0]
-            // Low priority/density: green intensity (~0.35)
-            // Moderate: yellow/amber intensity (~0.60)
-            // High / Critical: red intensity (~0.95)
-            let weight = 0.35; // Low severity baseline
-            if (point.relative_severity === 'Critical') weight = 0.95;
-            else if (point.relative_severity === 'Medium') weight = 0.60;
+            // Defect Report Density / Monitoring Priority intensity mapping (Section 4):
+            // Low      = 0.35
+            // Medium   = 0.65
+            // Critical = 1.00
+            const sev = (point.relative_severity || 'Low').toLowerCase();
+            let intensity = 0.35; // Low severity baseline
+            if (sev === 'critical') {
+                intensity = 1.00;
+            } else if (sev === 'medium' || sev === 'moderate') {
+                intensity = 0.65;
+            }
 
             // Unresolved defects require active monitoring
-            if (point.status !== 'Resolved') {
-                weight += 0.05;
+            if (point.status && point.status !== 'Resolved') {
+                intensity = Math.min(intensity + 0.05, 1.0);
             }
 
-            // High concentration of nearby reports increases monitoring priority
-            if (point.nearby_report_count && point.nearby_report_count >= 1) {
-                weight += Math.min(point.nearby_report_count * 0.15, 0.4);
-            }
-
-            heatPoints.push([lat, lng, Math.min(Math.max(weight, 0.2), 1.0)]);
+            heatPoints.push([lat, lng, intensity]);
         });
 
         if (typeof this.markerCluster.addLayers === 'function') {
@@ -480,16 +494,18 @@ const DefectMap = {
             if (!this.heatLayer) {
                 this.heatLayer = L.heatLayer(heatPoints, {
                     pane: 'heatmapPane',
-                    radius: 35,
-                    blur: 22,
-                    maxZoom: 18,
+                    radius: 65,
+                    blur: 40,
+                    maxZoom: 13,
                     max: 1.0,
                     minOpacity: 0.35,
+                    scaleIntensity: false,
                     gradient: {
-                        0.2: '#10b981', // Low density: Green
-                        0.5: '#f59e0b', // Moderate density: Yellow / Amber
-                        0.8: '#ef4444', // High density: Red
-                        1.0: '#991b1b'  // Critical hotspot peak: Crimson
+                        0.20: '#2ecc71', // Low density / priority -> Green (#2ecc71 / #10b981)
+                        0.45: '#f1c40f', // Moderate -> Yellow / Amber (#f1c40f / #f59e0b)
+                        0.65: '#e67e22', // Higher -> Orange
+                        0.85: '#e74c3c', // Highest -> Red (#e74c3c / #ef4444)
+                        1.00: '#c0392b'  // Peak hotspot -> Crimson (#c0392b)
                     }
                 });
                 if (this.showHotspotLayer && this.map) {
