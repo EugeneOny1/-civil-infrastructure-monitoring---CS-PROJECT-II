@@ -166,6 +166,13 @@ const DefectMap = {
                 attribution: this.config.attribution
             }).addTo(this.map);
 
+            // Dedicated heatmap pane underneath markers and clusters (markerPane is zIndex 600, overlayPane is 400)
+            if (!this.map.getPane('heatmapPane')) {
+                const heatPane = this.map.createPane('heatmapPane');
+                heatPane.style.zIndex = '350';
+                heatPane.style.pointerEvents = 'none';
+            }
+
             // Initialize marker cluster group with severity-aware visual treatment
             if (typeof L.markerClusterGroup === 'function') {
                 this.markerCluster = L.markerClusterGroup({
@@ -177,36 +184,44 @@ const DefectMap = {
                     iconCreateFunction: (cluster) => {
                         const childMarkers = cluster.getAllChildMarkers();
                         const count = childMarkers.length;
-                        let hasCritical = false;
-                        let hasMedium = false;
 
+                        // Severity composition weighting: Low = 1, Medium = 2, Critical = 3
+                        // cluster_severity_score = sum(report severity weights) / number of reports
+                        let sumWeights = 0;
                         for (const m of childMarkers) {
-                            const sev = m.reportSeverity || m.options?.severity;
-                            if (sev === 'Critical') {
-                                hasCritical = true;
-                                break;
-                            } else if (sev === 'Medium') {
-                                hasMedium = true;
+                            const sev = (m.reportSeverity || m.options?.severity || 'Low').toLowerCase();
+                            if (sev === 'critical') {
+                                sumWeights += 3;
+                            } else if (sev === 'medium' || sev === 'moderate') {
+                                sumWeights += 2;
+                            } else {
+                                sumWeights += 1;
                             }
                         }
 
-                        let innerColor = '#10b981'; // Green: predominantly Low
+                        const score = count > 0 ? (sumWeights / count) : 1.0;
+
+                        // Presentation bands:
+                        // 1.00 – 1.49 -> Green
+                        // 1.50 – 2.24 -> Amber
+                        // 2.25 – 3.00 -> Red
+                        let innerColor = '#10b981'; // Green: Low priority composition
                         let ringColor = 'rgba(16, 185, 129, 0.25)';
                         let shadowColor = 'rgba(16, 185, 129, 0.4)';
 
-                        if (hasCritical) {
-                            innerColor = '#ef4444'; // Red: Critical defect present
+                        if (score >= 2.25) {
+                            innerColor = '#ef4444'; // Red: Critical density composition
                             ringColor = 'rgba(239, 68, 68, 0.25)';
                             shadowColor = 'rgba(239, 68, 68, 0.45)';
-                        } else if (hasMedium) {
-                            innerColor = '#f59e0b'; // Amber: Medium defect present
+                        } else if (score >= 1.50) {
+                            innerColor = '#f59e0b'; // Amber: Medium priority composition
                             ringColor = 'rgba(245, 158, 11, 0.25)';
                             shadowColor = 'rgba(245, 158, 11, 0.45)';
                         }
 
                         return L.divIcon({
                             html: `
-                                <div style="width:42px; height:42px; border-radius:50%; background-color:${ringColor}; display:flex; align-items:center; justify-content:center; transition:transform 0.15s ease;">
+                                <div style="width:42px; height:42px; border-radius:50%; background-color:${ringColor}; display:flex; align-items:center; justify-content:center; transition:transform 0.15s ease;" title="Cluster Severity Score: ${score.toFixed(2)} (${count} reports)">
                                     <div style="width:32px; height:32px; border-radius:50%; background-color:${innerColor}; color:#ffffff; font-family:var(--font-sans, system-ui, -apple-system, sans-serif); font-weight:700; font-size:13px; display:flex; align-items:center; justify-content:center; box-shadow:0 2px 6px ${shadowColor};">
                                         ${count}
                                     </div>
@@ -242,24 +257,42 @@ const DefectMap = {
         }
     },
 
-    createMarkerIcon(severity, isUnusual) {
+    createMarkerIcon(severity, isUnusual, status) {
+        const isResolved = status === 'Resolved' || this.activeFilters.status === 'Resolved';
+        const isUnderReview = status === 'Under Review';
+
         let pinColor = '#10b981'; // Low: Green
         if (severity === 'Critical') pinColor = '#ef4444'; // Critical: Red
         else if (severity === 'Medium') pinColor = '#f59e0b'; // Medium: Amber
 
-        const iconHtml = `
-            <div class="custom-leaflet-pin" style="position:relative; width:28px; height:36px; cursor:pointer;">
-                <svg viewBox="0 0 30 38" width="28" height="36" style="filter: drop-shadow(0 2px 4px rgba(0,0,0,0.35));">
-                    <path d="M15 0C6.7 0 0 6.7 0 15c0 10.5 15 23 15 23s15-12.5 15-23c0-8.3-6.7-15-15-15z" fill="${pinColor}"/>
-                    <circle cx="15" cy="14" r="5.5" fill="#ffffff"/>
-                </svg>
-                ${isUnusual ? '<span style="position:absolute; top:-3px; right:-3px; font-size:11px;" title="Unusual Pairing Flagged">⚠️</span>' : ''}
-            </div>
-        `;
+        let iconInner = '';
+        if (isResolved) {
+            // Distinct resolved treatment: Green pin with crisp checkmark
+            iconInner = `
+                <div class="custom-leaflet-pin resolved-pin" style="position:relative; width:28px; height:36px; cursor:pointer;" title="Resolved Infrastructure Defect">
+                    <svg viewBox="0 0 30 38" width="28" height="36" style="filter: drop-shadow(0 2px 5px rgba(16,185,129,0.5));">
+                        <path d="M15 0C6.7 0 0 6.7 0 15c0 10.5 15 23 15 23s15-12.5 15-23c0-8.3-6.7-15-15-15z" fill="#059669"/>
+                        <circle cx="15" cy="14" r="6" fill="#ffffff"/>
+                        <path d="M12 14l2 2 4-4" fill="none" stroke="#059669" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/>
+                    </svg>
+                </div>
+            `;
+        } else {
+            iconInner = `
+                <div class="custom-leaflet-pin" style="position:relative; width:28px; height:36px; cursor:pointer;">
+                    <svg viewBox="0 0 30 38" width="28" height="36" style="filter: drop-shadow(0 2px 4px rgba(0,0,0,0.35));">
+                        <path d="M15 0C6.7 0 0 6.7 0 15c0 10.5 15 23 15 23s15-12.5 15-23c0-8.3-6.7-15-15-15z" fill="${pinColor}"/>
+                        <circle cx="15" cy="14" r="5.5" fill="#ffffff"/>
+                    </svg>
+                    ${isUnderReview ? '<span style="position:absolute; top:-3px; right:-4px; font-size:10px; background:#0f172a; border-radius:50%; padding:1px; line-height:1;" title="Under Review">🔍</span>' : ''}
+                    ${isUnusual ? '<span style="position:absolute; top:-3px; right:-3px; font-size:11px;" title="Unusual Pairing Flagged">⚠️</span>' : ''}
+                </div>
+            `;
+        }
 
         return L.divIcon({
             className: 'leaflet-pin-wrapper',
-            html: iconHtml,
+            html: iconInner,
             iconSize: [28, 36],
             iconAnchor: [14, 36],
             popupAnchor: [0, -34]
@@ -406,7 +439,7 @@ const DefectMap = {
 
             if (isNaN(lat) || isNaN(lng) || lat === 0 || lng === 0) return;
 
-            const icon = this.createMarkerIcon(point.relative_severity, point.is_unusual);
+            const icon = this.createMarkerIcon(point.relative_severity, point.is_unusual, point.status);
             const marker = L.marker([lat, lng], { icon: icon });
             marker.reportSeverity = point.relative_severity;
 
@@ -415,22 +448,25 @@ const DefectMap = {
 
             markers.push(marker);
 
-            // Calculate transparent hotspot density intensity [0.1 - 1.0]
+            // Calculate transparent continuous hotspot density intensity [0.2 - 1.0]
+            // Low priority/density: green intensity (~0.35)
+            // Moderate: yellow/amber intensity (~0.60)
+            // High / Critical: red intensity (~0.95)
             let weight = 0.35; // Low severity baseline
-            if (point.relative_severity === 'Critical') weight = 0.85;
-            else if (point.relative_severity === 'Medium') weight = 0.55;
+            if (point.relative_severity === 'Critical') weight = 0.95;
+            else if (point.relative_severity === 'Medium') weight = 0.60;
 
             // Unresolved defects require active monitoring
             if (point.status !== 'Resolved') {
-                weight += 0.1;
+                weight += 0.05;
             }
 
             // High concentration of nearby reports increases monitoring priority
             if (point.nearby_report_count && point.nearby_report_count >= 1) {
-                weight += Math.min(point.nearby_report_count * 0.12, 0.4);
+                weight += Math.min(point.nearby_report_count * 0.15, 0.4);
             }
 
-            heatPoints.push([lat, lng, Math.min(weight, 1.0)]);
+            heatPoints.push([lat, lng, Math.min(Math.max(weight, 0.2), 1.0)]);
         });
 
         if (typeof this.markerCluster.addLayers === 'function') {
@@ -439,18 +475,21 @@ const DefectMap = {
             markers.forEach(m => this.markerCluster.addLayer(m));
         }
 
-        // Update or initialize Leaflet heat/density layer
+        // Update or initialize Leaflet heat/density layer underneath clusters
         if (typeof L.heatLayer === 'function') {
             if (!this.heatLayer) {
                 this.heatLayer = L.heatLayer(heatPoints, {
-                    radius: 28,
-                    blur: 16,
+                    pane: 'heatmapPane',
+                    radius: 35,
+                    blur: 22,
                     maxZoom: 18,
                     max: 1.0,
+                    minOpacity: 0.35,
                     gradient: {
-                        0.2: '#10b981', // Lower density: Green
-                        0.55: '#f59e0b', // Moderate density: Amber
-                        0.85: '#ef4444'  // High density: Red
+                        0.2: '#10b981', // Low density: Green
+                        0.5: '#f59e0b', // Moderate density: Yellow / Amber
+                        0.8: '#ef4444', // High density: Red
+                        1.0: '#991b1b'  // Critical hotspot peak: Crimson
                     }
                 });
                 if (this.showHotspotLayer && this.map) {
