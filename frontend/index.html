@@ -15,6 +15,8 @@
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="" />
     <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.css" />
     <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.Default.css" />
+    <!-- Google Identity Services (GIS) Client Library -->
+    <script src="https://accounts.google.com/gsi/client" async defer></script>
 </head>
 <body class="light-theme">
     <!-- Navigation Bar -->
@@ -62,6 +64,26 @@
 
             <!-- User Session State & Auth Controls -->
             <div class="user-session-panel" id="userSessionPanel">
+                <!-- Citizen Report Feedback Notifications (Section 11) -->
+                <div class="notification-panel-wrapper hidden" id="notificationPanelWrapper">
+                    <button type="button" class="btn-notification-bell" id="btnNotificationBell" title="Report notifications" aria-label="Notifications" aria-haspopup="true" aria-expanded="false">
+                        <svg class="bell-icon" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"></path>
+                            <path d="M13.73 21a2 2 0 0 1-3.46 0"></path>
+                        </svg>
+                        <span class="notification-badge hidden" id="notificationBadge">0</span>
+                    </button>
+                    <div class="notification-dropdown-menu hidden" id="notificationDropdown">
+                        <div class="notification-dropdown-header">
+                            <span class="notification-dropdown-title">Report Feedback</span>
+                            <button type="button" class="btn-mark-all-read" id="btnMarkAllRead">Mark all read</button>
+                        </div>
+                        <div class="notification-items-list" id="notificationItemsList">
+                            <div class="notification-empty">No notifications yet.</div>
+                        </div>
+                    </div>
+                </div>
+
                 <!-- Authenticated User Display with Interactive Account Dropdown (Section 8) -->
                 <div class="user-profile-wrapper" id="userProfileWrapper">
                     <div class="user-profile-badge hidden" id="userProfileBadge" tabindex="0" role="button" aria-haspopup="true" aria-expanded="false" title="Click to open account menu">
@@ -1165,9 +1187,9 @@
                     </div>
                 </div>
                 <div class="kpi-card">
-                    <span class="kpi-label">TOTAL DEFECT REPORTS</span>
+                    <span class="kpi-label">ACTIVE USER ACCOUNTS</span>
                     <div class="kpi-value-row">
-                        <span class="kpi-number" id="adminTotalReports">0</span>
+                        <span class="kpi-number text-success" id="adminActiveUsers">0</span>
                     </div>
                 </div>
             </div>

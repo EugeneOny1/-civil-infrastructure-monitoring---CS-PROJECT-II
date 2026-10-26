@@ -70,6 +70,9 @@ const App = {
         if (user) {
             if (profileBadge) profileBadge.classList.remove('hidden');
             if (authButtons) authButtons.classList.add('hidden');
+            const notifPanel = document.getElementById('notificationPanelWrapper');
+            if (notifPanel) notifPanel.classList.remove('hidden');
+            this.loadNotifications();
 
             if (nameEl) nameEl.textContent = user.name || user.email;
             if (roleEl) roleEl.textContent = user.role.toUpperCase();
@@ -129,6 +132,10 @@ const App = {
             const wrapper = document.getElementById('userProfileWrapper');
             if (menu) menu.classList.add('hidden');
             if (wrapper) wrapper.classList.remove('open');
+            const notifPanel = document.getElementById('notificationPanelWrapper');
+            if (notifPanel) notifPanel.classList.add('hidden');
+            const notifDropdown = document.getElementById('notificationDropdown');
+            if (notifDropdown) notifDropdown.classList.add('hidden');
 
             if (profileBadge) profileBadge.classList.add('hidden');
             if (authButtons) authButtons.classList.remove('hidden');
@@ -277,30 +284,58 @@ const App = {
             });
         }
 
-        // Continue with Google Button (Section 11)
+        // Notification bell toggle & mark all read (Section 11)
+        const btnBell = document.getElementById('btnNotificationBell');
+        const notifDropdown = document.getElementById('notificationDropdown');
+        if (btnBell && notifDropdown) {
+            btnBell.addEventListener('click', (e) => {
+                e.stopPropagation();
+                const isHidden = notifDropdown.classList.contains('hidden');
+                notifDropdown.classList.toggle('hidden', !isHidden);
+                if (isHidden) {
+                    this.loadNotifications();
+                }
+            });
+        }
+
+        const btnMarkAll = document.getElementById('btnMarkAllRead');
+        if (btnMarkAll) {
+            btnMarkAll.addEventListener('click', async (e) => {
+                e.stopPropagation();
+                try {
+                    await window.Api.markAllNotificationsRead();
+                    await this.loadNotifications();
+                    this.showToast('All notifications marked as read.');
+                } catch (err) {
+                    console.warn("Failed to mark all notifications read:", err);
+                }
+            });
+        }
+
+        // Close dropdown when clicking outside
+        document.addEventListener('click', (e) => {
+            if (notifDropdown && !notifDropdown.classList.contains('hidden')) {
+                if (!notifDropdown.contains(e.target) && btnBell && !btnBell.contains(e.target)) {
+                    notifDropdown.classList.add('hidden');
+                }
+            }
+        });
+
+        // Real Google Identity Services Sign-In (Section 5)
         const btnGoogle = document.getElementById('btnGoogleSignIn');
         if (btnGoogle) {
             btnGoogle.addEventListener('click', async () => {
                 try {
-                    // Check if GIS client is configured and available in window
                     if (window.google?.accounts?.id && this.authConfig?.google_client_id) {
                         window.google.accounts.id.prompt((notification) => {
                             if (notification.isNotDisplayed() || notification.isSkippedMoment()) {
-                                console.log("[Google GIS] Native prompt skipped, using credential flow");
+                                console.log("[Google GIS] Native prompt skipped or closed:", notification.getNotDisplayedReason?.() || notification.getSkippedReason?.());
                             }
                         });
+                    } else if (!this.authConfig?.google_client_id) {
+                        this.showToast("Google Sign-In is not configured: Missing GOOGLE_CLIENT_ID.", true);
                     } else {
-                        // Standard Google Identity credential verification flow
-                        this.showToast("Authenticating via Google Identity Services...");
-                        const data = await window.Api.loginWithGoogle('demo_google_gis_credential_token');
-                        if (data.require_2fa) {
-                            this.show2FAChallenge(data);
-                            return;
-                        }
-                        this.currentUser = data.user;
-                        this.updateSessionUI();
-                        this.showToast(`Signed in with Google as ${data.user.name || data.user.email}!`);
-                        this.routeUserAfterAuth(data.user);
+                        this.showToast("Google Identity Services library is loading. Please try again in a few moments.", true);
                     }
                 } catch (err) {
                     console.error("Google sign-in error:", err);
@@ -760,6 +795,83 @@ const App = {
         }
     },
 
+    // Citizen Report Feedback Notifications (Section 11)
+    async loadNotifications() {
+        if (!this.currentUser) return;
+        try {
+            const data = await window.Api.getNotifications();
+            const notifications = data.notifications || [];
+            const unreadCount = data.unread_count || 0;
+
+            const badge = document.getElementById('notificationBadge');
+            if (badge) {
+                if (unreadCount > 0) {
+                    badge.textContent = unreadCount > 99 ? '99+' : unreadCount;
+                    badge.classList.remove('hidden');
+                } else {
+                    badge.classList.add('hidden');
+                }
+            }
+
+            const listEl = document.getElementById('notificationItemsList');
+            if (!listEl) return;
+
+            if (notifications.length === 0) {
+                listEl.innerHTML = `<div class="notification-empty">No report feedback notifications yet.</div>`;
+                return;
+            }
+
+            listEl.innerHTML = notifications.map(n => {
+                const isUnread = !n.is_read;
+                const timeStr = n.created_at ? new Date(n.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', month: 'short', day: 'numeric' }) : '';
+                return `
+                    <div class="notification-item ${isUnread ? 'unread' : ''}" data-id="${n.notification_id || n._id}" data-report-id="${n.report_id || ''}">
+                        <div class="notification-item-header">
+                            <span class="notification-item-title">${n.title || 'Report Feedback'}</span>
+                            <span class="notification-item-time">${timeStr}</span>
+                        </div>
+                        <div class="notification-item-message">${n.message}</div>
+                        ${n.report_id ? `<div class="notification-item-link">View Report Details →</div>` : ''}
+                    </div>
+                `;
+            }).join('');
+
+            // Bind click to each notification item
+            listEl.querySelectorAll('.notification-item').forEach(item => {
+                item.addEventListener('click', async () => {
+                    const notifId = item.getAttribute('data-id');
+                    const reportId = item.getAttribute('data-report-id');
+                    try {
+                        await window.Api.markNotificationRead(notifId);
+                    } catch (e) {
+                        console.warn("Failed to mark notification read:", e);
+                    }
+                    item.classList.remove('unread');
+                    const currentBadge = document.getElementById('notificationBadge');
+                    if (currentBadge && !currentBadge.classList.contains('hidden')) {
+                        const count = parseInt(currentBadge.textContent, 10) || 1;
+                        if (count <= 1) {
+                            currentBadge.classList.add('hidden');
+                        } else {
+                            currentBadge.textContent = count - 1;
+                        }
+                    }
+                    document.getElementById('notificationDropdown')?.classList.add('hidden');
+
+                    if (reportId) {
+                        if (this.currentUser?.role === 'engineer' || this.currentUser?.role === 'admin') {
+                            this.navigateTo('view-review', reportId);
+                        } else {
+                            this.navigateTo('view-tracking');
+                        }
+                    }
+                });
+            });
+        } catch (err) {
+            console.warn("Failed to load notifications:", err);
+        }
+    },
+
     // Cohesive Administrative Oversight Dashboard View
     async loadAdminDashboard() {
         try {
@@ -835,14 +947,29 @@ const App = {
             const isBackendOnline = health.backend_api?.status === 'online' || health.backend_api?.status === 'healthy';
             const isMongoConnected = (health.mongodb?.status || health.database?.status) === 'connected';
             const isEmailHealthy = health.email_otp?.status === 'operational' || health.email_service?.status === 'operational';
-            const isGoogleConfigured = health.google_auth?.status === 'operational' || health.google_auth?.configured === true;
             const isMapsActive = health.gis_mapping?.status === 'operational' || health.google_maps?.status === 'operational';
 
             setPill('healthBackend', isBackendOnline, 'Online', 'Offline');
             setPill('healthMongo', isMongoConnected, 'Connected', 'Disconnected');
             setPill('healthAiModel', isAiLoaded, 'Loaded', 'Offline');
             setPill('healthEmail', isEmailHealthy, 'Operational', 'Demo Fallback');
-            setPill('healthGoogle', isGoogleConfigured, 'Configured', 'Pending ID');
+            
+            // Distinguish Google Identity Configured vs Operational (Section 5)
+            const googleStatus = health.google_auth?.status;
+            const googleEl = document.getElementById('healthGoogle');
+            if (googleEl) {
+                if (googleStatus === 'operational') {
+                    googleEl.className = 'health-pill healthy';
+                    googleEl.textContent = 'Operational';
+                } else if (health.google_auth?.configured) {
+                    googleEl.className = 'health-pill warning';
+                    googleEl.textContent = 'Configured';
+                } else {
+                    googleEl.className = 'health-pill warning';
+                    googleEl.textContent = 'Pending ID';
+                }
+            }
+
             setPill('healthMaps', isMapsActive, 'Active', 'Offline');
 
         } catch (err) {
@@ -868,7 +995,11 @@ const App = {
             document.getElementById('adminTotalUsers').textContent = statsData.total_users || 0;
             document.getElementById('adminPendingEngineers').textContent = statsData.pending_engineer_verifications || 0;
             document.getElementById('adminVerifiedEngineers').textContent = statsData.verified_engineers_count || 0;
-            document.getElementById('adminTotalReports').textContent = statsData.total_defect_reports || 0;
+            if (document.getElementById('adminActiveUsers')) {
+                document.getElementById('adminActiveUsers').textContent = statsData.active_users_count || (statsData.total_users - (statsData.pending_engineer_verifications || 0));
+            } else if (document.getElementById('adminTotalReports')) {
+                document.getElementById('adminTotalReports').textContent = statsData.total_defect_reports || 0;
+            }
 
             const searchInput = (document.getElementById('adminUserSearch')?.value || '').toLowerCase().trim();
             let users = usersData.users || [];

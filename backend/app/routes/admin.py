@@ -61,12 +61,14 @@ def get_system_stats(current_user):
     pending_engineers = sum(1 for u in all_users if u.get('role') == 'engineer' and u.get('verification_status') == 'pending')
     verified_engineers = sum(1 for u in all_users if u.get('role') == 'engineer' and u.get('verification_status') == 'verified')
     total_citizens = sum(1 for u in all_users if u.get('role') == 'citizen')
+    active_users = sum(1 for u in all_users if u.get('is_active', True) and u.get('verification_status', 'verified') == 'verified')
 
     return jsonify({
         'total_users': len(all_users),
         'citizens_count': total_citizens,
         'pending_engineer_verifications': pending_engineers,
         'verified_engineers_count': verified_engineers,
+        'active_users_count': active_users,
         'total_defect_reports': len(all_reports),
         'total_professional_reviews': len(all_reviews)
     }), 200
@@ -230,7 +232,9 @@ def get_admin_dashboard(current_user):
 
     # 4. System Health Indicators
     google_client_id = current_app.config.get('GOOGLE_CLIENT_ID', '').strip()
-    google_auth_ready = bool(google_client_id and (google_client_id.endswith('.apps.googleusercontent.com') or len(google_client_id) > 15))
+    google_configured = bool(google_client_id and (google_client_id.endswith('.apps.googleusercontent.com') or len(google_client_id) > 15))
+    google_live = db_service.find_one('system_state', {'_id': 'google_identity_status'})
+    google_operational = bool(google_configured and google_live and google_live.get('operational') is True)
 
     smtp_configured = email_service.is_configured()
     smtp_healthy = False
@@ -275,8 +279,8 @@ def get_admin_dashboard(current_user):
             'cooldown_seconds': current_app.config.get('OTP_RESEND_COOLDOWN_SECONDS', 60)
         },
         'google_auth': {
-            'configured': google_auth_ready,
-            'status': 'operational' if google_auth_ready else 'pending_client_id',
+            'configured': google_configured,
+            'status': 'operational' if google_operational else ('configured' if google_configured else 'pending_client_id'),
             'provider': 'Google Identity Services (GIS)'
         },
         'gis_mapping': {

@@ -417,10 +417,14 @@ def google_auth():
     
     if credential:
         is_demo_token = credential in ('demo_google_gis_credential_token', 'demo_token') or str(credential).startswith('demo_')
-        if is_demo_token and (current_app.config.get('ENABLE_DEMO_OTP', False) or test_mode):
-            email = data.get('email', 'citizen.demo@strathmore.edu').strip().lower()
-            name = data.get('name', 'Demo Google Citizen')
-            google_id = data.get('google_id', 'demo_google_sub_12345')
+        if is_demo_token:
+            if test_mode:
+                # Permitted ONLY when running automated test suite with TESTING=True
+                email = data.get('email', 'citizen.demo@strathmore.edu').strip().lower()
+                name = data.get('name', 'Demo Google Citizen')
+                google_id = data.get('google_id', 'demo_google_sub_12345')
+            else:
+                return jsonify({'error': 'Demo Google tokens are disabled. A real verified Google Identity Services token is required.'}), 401
         else:
             try:
                 import requests
@@ -430,10 +434,21 @@ def google_auth():
                     expected_client_id = current_app.config.get('GOOGLE_CLIENT_ID', '').strip()
                     token_aud = token_info.get('aud', '')
                     
-                    # Check audience if GOOGLE_CLIENT_ID is configured
+                    # Verify audience matches GOOGLE_CLIENT_ID from backend configuration
                     if expected_client_id and token_aud and token_aud != expected_client_id:
                         return jsonify({'error': 'Google token audience mismatch with application client ID.'}), 401
                     
+                    # Verify token issuer
+                    token_iss = token_info.get('iss', '')
+                    if token_iss not in ('accounts.google.com', 'https://accounts.google.com'):
+                        return jsonify({'error': 'Invalid Google token issuer.'}), 401
+
+                    # Verify expiration
+                    now_ts = datetime.now(timezone.utc).timestamp()
+                    exp_ts = float(token_info.get('exp', 0))
+                    if exp_ts and exp_ts < now_ts:
+                        return jsonify({'error': 'Google token has expired.'}), 401
+
                     # Check email verification status from Google
                     email_verified = token_info.get('email_verified')
                     if str(email_verified).lower() not in ('true', '1'):
@@ -442,15 +457,22 @@ def google_auth():
                     email = token_info.get('email', '').strip().lower()
                     name = token_info.get('name', '').strip() or 'Google User'
                     google_id = token_info.get('sub', '').strip()
+
+                    # Live browser Google Sign-In succeeded: record operational state
+                    db_service.update_one(
+                        'system_state',
+                        {'_id': 'google_identity_status'},
+                        {
+                            'operational': True,
+                            'last_verified_at': datetime.now(timezone.utc).isoformat(),
+                            'last_user_email': email
+                        },
+                        upsert=True
+                    )
                 else:
                     return jsonify({'error': 'Google authentication failed: Invalid or expired token.'}), 401
             except Exception as e:
-                if test_mode and data.get('email'):
-                    email = data.get('email', '').strip().lower()
-                    name = data.get('name', '').strip() or 'Google User'
-                    google_id = data.get('google_id', '').strip() or data.get('sub', '').strip()
-                else:
-                    return jsonify({'error': f'Failed to verify Google credential: {str(e)}'}), 401
+                return jsonify({'error': f'Failed to verify Google credential: {str(e)}'}), 401
     elif test_mode and data.get('email'):
         # Controlled test mock payload
         email = data.get('email', '').strip().lower()
