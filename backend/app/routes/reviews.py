@@ -30,6 +30,14 @@ def submit_review(current_user, assessment_id):
     if not assessment:
         return jsonify({'error': 'AIAssessment record not found.'}), 404
 
+    # Enforce read-only mode for resolved reports
+    image = db_service.find_one('submitted_images', {'_id': assessment.get('image_id')})
+    if image:
+        report_id = image.get('report_id')
+        rep = db_service.find_one('infrastructure_reports', {'_id': report_id})
+        if rep and InfrastructureReport.canonical_status(rep.get('status')) == InfrastructureReport.STATUS_RESOLVED:
+            return jsonify({'error': 'This defect report has already completed professional review and resolution and is in read-only mode.'}), 400
+
     # Create or update ProfessionalReview record
     existing_review = db_service.find_one('professional_reviews', {'assessment_id': assessment_id})
     if existing_review:
@@ -116,6 +124,9 @@ def review_by_report(current_user, report_id):
 
     current_status = InfrastructureReport.canonical_status(report.get('status', 'Received'))
     target_status = InfrastructureReport.canonical_status(target_status)
+
+    if current_status == InfrastructureReport.STATUS_RESOLVED:
+        return jsonify({'error': 'This defect report has already completed professional review and resolution and is in read-only mode.'}), 400
 
     if not InfrastructureReport.can_transition(current_status, target_status):
         return jsonify({'error': f"Transition from '{current_status}' to '{target_status}' is not permitted."}), 400

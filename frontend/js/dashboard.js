@@ -148,13 +148,16 @@ const Dashboard = {
         const filterVal = document.getElementById('filterSeveritySelect')?.value || '';
 
         try {
-            const params = {};
+            const params = { exclude_status: 'Resolved' };
             if (filterVal && filterVal !== 'Flagged') {
                 params.severity = filterVal;
             }
 
             const data = await window.Api.getReports(params);
             let reports = data.reports || [];
+
+            // Exclude resolved reports from active priority queue
+            reports = reports.filter(r => (r.status || '').toLowerCase() !== 'resolved');
 
             if (filterVal === 'Flagged') {
                 reports = reports.filter(r => r.validation_status === 'unusual' || r.requires_engineer_review === true || r.metadata?.is_unusual === true);

@@ -259,10 +259,21 @@ const Review = {
             url.searchParams.set('report_id', reportId);
             window.history.replaceState({}, '', url);
 
-            // Populate Case Meta Header
+            // Populate Case Meta Header: Infrastructure Asset and Lifecycle Status
             const repId = data.report.report_id || data.report._id;
             const frameEl = document.getElementById('reviewFrameId');
             if (frameEl) frameEl.textContent = `#${repId}`;
+
+            const assetType = data.asset?.asset_type || data.report.metadata?.asset_type || 'Road / Pavement';
+            const assetTypeEl = document.getElementById('reviewAssetType');
+            if (assetTypeEl) assetTypeEl.textContent = assetType;
+
+            const status = data.report.status || 'Received';
+            const statusSlug = status.toLowerCase().replace(/\s+/g, '-');
+            const lifecycleEl = document.getElementById('reviewLifecycleStatus');
+            if (lifecycleEl) {
+                lifecycleEl.innerHTML = `<span class="status-chip ${statusSlug}">${status}</span>`;
+            }
 
             const locName = data.asset?.location || data.report.metadata?.location_name || 'Corridor Asset';
             const lat = data.report.latitude || data.report.metadata?.latitude;
@@ -297,27 +308,95 @@ const Review = {
                 citizenNotesEl.textContent = data.report.description || data.report.metadata?.citizen_notes || 'No citizen field observations recorded.';
             }
 
+            // Section 7: Enforce Read-Only Mode for Resolved Defect Reports
+            const isResolved = (status === 'Resolved');
+            const resolvedNotice = document.getElementById('reviewResolvedNotice');
+            if (resolvedNotice) {
+                resolvedNotice.classList.toggle('hidden', !isResolved);
+                if (isResolved) {
+                    const revName = data.review?.reviewer_name || data.report.metadata?.reviewed_by || 'Accredited Civil Engineer';
+                    const revNameEl = document.getElementById('resolvedReviewerName');
+                    if (revNameEl) revNameEl.textContent = revName;
+
+                    const revDate = data.review?.review_date || data.report.metadata?.reviewed_at || data.report.date_submitted;
+                    const dateEl = document.getElementById('resolvedDate');
+                    if (dateEl) dateEl.textContent = revDate ? new Date(revDate).toLocaleDateString('en-KE', { dateStyle: 'medium' }) : 'Verified';
+
+                    const finalClass = data.review?.override_details?.override_class || data.assessment?.defect_class || data.report.metadata?.defect_class || 'Confirmed Class';
+                    const classEl = document.getElementById('resolvedFinalClass');
+                    if (classEl) classEl.textContent = finalClass;
+
+                    const finalSev = data.review?.override_details?.override_severity || data.assessment?.relative_severity || data.report.metadata?.relative_severity || 'Confirmed Severity';
+                    const sevEl = document.getElementById('resolvedFinalSeverity');
+                    if (sevEl) sevEl.textContent = finalSev;
+                }
+            }
+
+            // Lock or unlock review controls based on resolution state
+            const btnSignOff = document.getElementById('btnSubmitSignOff');
+            const notesEl = document.getElementById('engineerNotes');
+            const ocSelect = document.getElementById('overrideClassSelect');
+            const osSelect = document.getElementById('overrideSeveritySelect');
+            const bReview = document.getElementById('btnMoveUnderReview');
+            const bVerify = document.getElementById('btnMarkVerified');
+            const bResolve = document.getElementById('btnMarkResolved');
+
+            if (isResolved) {
+                if (btnSignOff) {
+                    btnSignOff.disabled = true;
+                    btnSignOff.style.opacity = '0.5';
+                    btnSignOff.style.cursor = 'not-allowed';
+                    btnSignOff.title = 'This defect report is resolved and read-only.';
+                }
+                if (notesEl) {
+                    notesEl.value = data.review?.comments || data.report.metadata?.engineer_notes || 'Repairs completed and validated.';
+                    notesEl.disabled = true;
+                    notesEl.readOnly = true;
+                }
+                document.querySelectorAll('input[name="reviewDecision"]').forEach(r => r.disabled = true);
+                if (ocSelect) ocSelect.disabled = true;
+                if (osSelect) osSelect.disabled = true;
+                if (bReview) bReview.disabled = true;
+                if (bVerify) bVerify.disabled = true;
+                if (bResolve) bResolve.disabled = true;
+            } else {
+                if (btnSignOff) {
+                    btnSignOff.disabled = false;
+                    btnSignOff.style.opacity = '1';
+                    btnSignOff.style.cursor = 'pointer';
+                    btnSignOff.title = 'Submit professional validation';
+                }
+                if (notesEl) {
+                    notesEl.disabled = false;
+                    notesEl.readOnly = false;
+                }
+                document.querySelectorAll('input[name="reviewDecision"]').forEach(r => r.disabled = false);
+                if (ocSelect) ocSelect.disabled = false;
+                if (osSelect) osSelect.disabled = false;
+                if (bReview) bReview.disabled = false;
+                if (bVerify) bVerify.disabled = false;
+                if (bResolve) bResolve.disabled = false;
+            }
+
             // Canonical Status & Validation Flags
-            const status = data.report.status || 'Received';
-            const statusSlug = status.toLowerCase().replace(/\s+/g, '-');
             const isUnusual = data.report.metadata?.is_unusual === true || data.report.validation_status === 'unusual';
             const statusEl = document.getElementById('reviewHeaderStatus');
             const badgeDot = document.getElementById('reviewBadgeDot');
 
-            if (data.review) {
+            if (isResolved) {
+                if (statusEl) statusEl.textContent = `Status: Resolved (Case Closed)`;
+                if (badgeDot) badgeDot.className = 'badge-dot success';
+            } else if (data.review) {
                 if (statusEl) statusEl.textContent = `Status: ${status} (Validated: ${data.review.decision})`;
                 if (badgeDot) badgeDot.className = 'badge-dot success';
-                const notesEl = document.getElementById('engineerNotes');
-                if (notesEl) notesEl.value = data.review.comments || '';
+                if (notesEl && !notesEl.value) notesEl.value = data.review.comments || '';
             } else if (isUnusual) {
                 if (statusEl) statusEl.textContent = `Status: ${status} ⚠️ Unusual Pairing Flagged`;
                 if (badgeDot) badgeDot.className = 'badge-dot warning';
-                const notesEl = document.getElementById('engineerNotes');
                 if (notesEl && !notesEl.value) notesEl.value = data.report.metadata?.advisory_notes || '';
             } else {
                 if (statusEl) statusEl.textContent = `Status: ${status}`;
-                if (badgeDot) badgeDot.className = `badge-dot ${status === 'Resolved' || status === 'Verified' ? 'success' : 'warning'}`;
-                const notesEl = document.getElementById('engineerNotes');
+                if (badgeDot) badgeDot.className = `badge-dot ${status === 'Verified' ? 'success' : 'warning'}`;
                 if (notesEl && !notesEl.value) notesEl.value = '';
             }
 
@@ -583,6 +662,11 @@ const Review = {
             return;
         }
 
+        if (this.currentReport.status === 'Resolved') {
+            window.App.showToast("This defect report has already completed professional review and resolution. The record is displayed in read-only mode.", true);
+            return;
+        }
+
         const reportId = this.currentReport.report_id || this.currentReport._id;
 
         try {
@@ -605,6 +689,11 @@ const Review = {
     async submitProfessionalValidation() {
         if (!this.currentReport) {
             window.App.showToast("No active defect report loaded to review.", true);
+            return;
+        }
+
+        if (this.currentReport.status === 'Resolved') {
+            window.App.showToast("This defect report has already completed professional review and resolution. The record is displayed in read-only mode.", true);
             return;
         }
 

@@ -381,9 +381,12 @@ def list_reports(current_user):
     severity_filter = request.args.get('severity')
     status_filter = request.args.get('status')
     defect_class_filter = request.args.get('defect_class')
+    exclude_status = request.args.get('exclude_status')
 
     if status_filter:
-        query['status'] = status_filter
+        query['status'] = InfrastructureReport.normalize_lifecycle_status(status_filter)
+    elif exclude_status:
+        query['status'] = {'$ne': InfrastructureReport.normalize_lifecycle_status(exclude_status)}
 
     reports = db_service.find('infrastructure_reports', query, sort_key='date_submitted', reverse=True)
 

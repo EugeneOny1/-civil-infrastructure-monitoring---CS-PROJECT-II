@@ -10,12 +10,15 @@ def get_summary(current_user):
     """
     FR-07: Summary metrics for the Engineer Monitoring Dashboard (Figure 4.7).
     """
+    from ..models.report import InfrastructureReport
+
     all_reports = db_service.find('infrastructure_reports')
     all_assessments = db_service.find('ai_assessments')
 
-    pending_count = sum(1 for r in all_reports if r.get('status') in ['Pending', 'Flagged for Review', 'Under Review'])
+    # Active defect queue: cases requiring active professional attention (excludes Resolved)
+    active_count = sum(1 for r in all_reports if InfrastructureReport.normalize_lifecycle_status(r.get('status')) in [InfrastructureReport.STATUS_RECEIVED, InfrastructureReport.STATUS_UNDER_REVIEW])
     flagged_unusual_count = sum(1 for r in all_reports if r.get('status') == 'Flagged for Review' or r.get('metadata', {}).get('is_unusual') is True)
-    verified_count = sum(1 for r in all_reports if r.get('status') in ['Verified', 'Resolved'])
+    verified_count = sum(1 for r in all_reports if InfrastructureReport.normalize_lifecycle_status(r.get('status')) in [InfrastructureReport.STATUS_VERIFIED, InfrastructureReport.STATUS_RESOLVED])
 
     # Relative visual severity distribution
     critical_count = sum(1 for a in all_assessments if a.get('relative_severity') in ['Critical', 'High'])
@@ -31,7 +34,7 @@ def get_summary(current_user):
     model_version = current_app.config.get('MODEL_VERSION', 'ssd_mobilenet_v2_lr00625_step8000_v2')
 
     return jsonify({
-        'active_defect_queue': pending_count,
+        'active_defect_queue': active_count,
         'flagged_unusual_count': flagged_unusual_count,
         'verified_inspections': verified_count,
         'total_submissions': len(all_reports),
