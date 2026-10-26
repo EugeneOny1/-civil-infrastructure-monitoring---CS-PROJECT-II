@@ -360,7 +360,7 @@ const Review = {
             const angleName = img.original_filename || `Photo ${idx + 1}`;
             return `
                 <button type="button" class="review-thumb-btn ${isActive ? 'active' : ''}" data-index="${idx}" title="${angleName}" style="cursor: pointer; padding: 0; background: none; border-radius: 4px; overflow: hidden; width: 68px; height: 50px; flex-shrink: 0; ${activeStyle}">
-                    <img src="${img.url}" alt="${angleName}" style="width: 100%; height: 100%; object-fit: cover;" onerror="this.src='/api/reports/images/seed_pothole.jpg'">
+                    <img src="${img.url}" alt="${angleName}" style="width: 100%; height: 100%; object-fit: cover;" onerror="this.style.display='none'; this.parentElement.innerHTML='<span style=\\'font-size:10px; color:#94a3b8; display:flex; align-items:center; justify-content:center; height:100%; background:#1e293b;\\'>No Image</span>';">
                 </button>
             `;
         }).join('');
@@ -426,14 +426,28 @@ const Review = {
         if (areaEl) areaEl.textContent = `${areaRatio}%`;
 
         // Render inspection canvas with scaled bounding boxes
-        const url = imageUrl || '/api/reports/images/seed_pothole.jpg';
-        this.drawReviewCanvas(url, ai);
+        this.drawReviewCanvas(imageUrl, ai);
     },
 
     drawReviewCanvas(imageUrl, aiData) {
         const canvas = document.getElementById('reviewCanvas');
         if (!canvas) return;
         const ctx = canvas.getContext('2d');
+
+        if (!imageUrl) {
+            canvas.width = 640;
+            canvas.height = 400;
+            ctx.fillStyle = '#0f172a';
+            ctx.fillRect(0, 0, 640, 400);
+            ctx.fillStyle = '#f59e0b';
+            ctx.font = 'bold 15px "Montserrat", sans-serif';
+            ctx.textAlign = 'center';
+            ctx.fillText('📷 Evidence image unavailable', 320, 185);
+            ctx.fillStyle = '#94a3b8';
+            ctx.font = '12px "Montserrat", sans-serif';
+            ctx.fillText('Source photographic file is not stored for this historical report.', 320, 215);
+            return;
+        }
 
         const img = new Image();
         img.crossOrigin = 'anonymous';
@@ -549,12 +563,15 @@ const Review = {
             const placeholderH = 400;
             canvas.width = placeholderW;
             canvas.height = placeholderH;
-            ctx.fillStyle = '#1e2536';
+            ctx.fillStyle = '#0f172a';
             ctx.fillRect(0, 0, placeholderW, placeholderH);
-            ctx.fillStyle = '#ef4444';
-            ctx.font = '14px "JetBrains Mono", monospace';
+            ctx.fillStyle = '#f59e0b';
+            ctx.font = 'bold 15px "Montserrat", sans-serif';
             ctx.textAlign = 'center';
-            ctx.fillText('Inspection photograph could not be loaded.', 320, 200);
+            ctx.fillText('📷 Evidence image unavailable', 320, 185);
+            ctx.fillStyle = '#94a3b8';
+            ctx.font = '12px "Montserrat", sans-serif';
+            ctx.fillText('Source photographic evidence could not be retrieved from storage.', 320, 215);
         };
 
         img.src = imageUrl;
