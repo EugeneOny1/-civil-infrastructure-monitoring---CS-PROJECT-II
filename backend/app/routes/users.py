@@ -69,3 +69,36 @@ def get_user_reports(current_user):
         })
 
     return jsonify({'reports': results, 'count': len(results)}), 200
+
+from ..services.notification_service import notification_service
+
+@users_bp.route('/notifications', methods=['GET'])
+@login_required
+def get_notifications(current_user):
+    """Retrieves notifications for the active authenticated user."""
+    user_id = str(current_user.get('_id') or current_user.get('user_id'))
+    notifs = notification_service.get_user_notifications(user_id)
+    unread_count = sum(1 for n in notifs if not n.get('is_read'))
+    return jsonify({
+        'notifications': notifs,
+        'unread_count': unread_count,
+        'count': len(notifs)
+    }), 200
+
+@users_bp.route('/notifications/<notification_id>/read', methods=['PATCH', 'POST'])
+@login_required
+def mark_notification_read(current_user, notification_id):
+    """Marks a single citizen notification as read."""
+    user_id = str(current_user.get('_id') or current_user.get('user_id'))
+    success = notification_service.mark_as_read(user_id, notification_id)
+    if success:
+        return jsonify({'message': 'Notification marked as read.', 'notification_id': notification_id}), 200
+    return jsonify({'error': 'Notification not found or access denied.'}), 404
+
+@users_bp.route('/notifications/mark-all-read', methods=['POST'])
+@login_required
+def mark_all_notifications_read(current_user):
+    """Marks all unread notifications for the user as read."""
+    user_id = str(current_user.get('_id') or current_user.get('user_id'))
+    count = notification_service.mark_all_as_read(user_id)
+    return jsonify({'message': 'All notifications marked as read.', 'marked_count': count}), 200

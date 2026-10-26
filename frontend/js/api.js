@@ -276,6 +276,33 @@ const Api = {
         return res.json();
     },
 
+    // Citizen Report Feedback Notifications (Section 11)
+    async getNotifications() {
+        const res = await this.safeFetch(`${API_BASE}/users/notifications`, {
+            headers: this.getHeaders()
+        });
+        if (!res.ok) {
+            return { notifications: [], unread_count: 0 };
+        }
+        return res.json();
+    },
+
+    async markNotificationRead(notificationId) {
+        const res = await this.safeFetch(`${API_BASE}/users/notifications/${notificationId}/read`, {
+            method: 'PATCH',
+            headers: this.getHeaders()
+        });
+        return res.json();
+    },
+
+    async markAllNotificationsRead() {
+        const res = await this.safeFetch(`${API_BASE}/users/notifications/mark-all-read`, {
+            method: 'POST',
+            headers: this.getHeaders()
+        });
+        return res.json();
+    },
+
     // Engineer Analytics & Trends (FR-07, FR-09)
     async getSummary() {
         const res = await this.safeFetch(`${API_BASE}/analytics/summary`, {

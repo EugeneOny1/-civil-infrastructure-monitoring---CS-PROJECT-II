@@ -91,10 +91,41 @@ def submit_review(current_user, assessment_id):
             meta['reviewed_at'] = now_iso
             meta['is_self_review'] = is_self_review
             meta['requires_engineer_review'] = False
+            meta['engineer_assessment'] = {
+                'decision': decision,
+                'override_details': override_details,
+                'comments': comments,
+                'reviewer_id': reviewer_id,
+                'reviewer_name': reviewer_name,
+                'reviewed_at': now_iso
+            }
+
             db_service.update_one('infrastructure_reports', {'_id': report_id}, {
                 'status': InfrastructureReport.STATUS_VERIFIED,
                 'metadata': meta
             })
+
+            # Citizen feedback notification on professional review
+            if submitter_id:
+                from ..services.notification_service import notification_service
+                if decision == ProfessionalReview.DECISION_OVERRIDDEN:
+                    orig_class = assessment.get('defect_class', 'Defect')
+                    orig_sev = assessment.get('relative_severity', 'Low')
+                    corr_class = override_details.get('override_class', orig_class)
+                    corr_sev = override_details.get('override_severity', orig_sev)
+                    changes = []
+                    if corr_class != orig_class:
+                        changes.append(f"{orig_class} → {corr_class}")
+                    if corr_sev != orig_sev:
+                        changes.append(f"{orig_sev} → {corr_sev}")
+                    change_str = ", ".join(changes) if changes else f"{corr_class} ({corr_sev})"
+                    reason_str = f" Reason: {comments}" if comments else ""
+                    msg = f"Engineer assessment updated: {change_str}.{reason_str}"
+                    notification_service.create_notification(submitter_id, report_id, 'override', 'Assessment Updated', msg)
+                else:
+                    feedback_str = f" Engineer feedback: {comments}" if comments and comments != 'Confirmed' else ""
+                    msg = f"Your report has been professionally verified.{feedback_str}"
+                    notification_service.create_notification(submitter_id, report_id, 'verified', 'Report Verified', msg)
 
     return jsonify({
         'message': 'Engineer review and assessment validation submitted successfully.',
@@ -155,13 +186,49 @@ def review_by_report(current_user, report_id):
     meta['reviewed_by'] = reviewer_name
     meta['reviewed_at'] = now_iso
     meta['is_self_review'] = is_self_review
+    override_details = data.get('override_details', {})
     if target_status in [InfrastructureReport.STATUS_VERIFIED, InfrastructureReport.STATUS_RESOLVED]:
         meta['requires_engineer_review'] = False
+
+    meta['engineer_assessment'] = {
+        'decision': decision,
+        'override_details': override_details,
+        'notes': notes,
+        'reviewer_id': reviewer_id,
+        'reviewer_name': reviewer_name,
+        'reviewed_at': now_iso
+    }
 
     db_service.update_one('infrastructure_reports', {'_id': report_id}, {
         'status': target_status,
         'metadata': meta
     })
+
+    # Dispatch citizen report feedback notification
+    if submitter_id:
+        from ..services.notification_service import notification_service
+        if target_status == InfrastructureReport.STATUS_RESOLVED:
+            feedback_str = f" Note: {notes}" if notes else ""
+            msg = f"Your infrastructure report has been marked resolved.{feedback_str}"
+            notification_service.create_notification(submitter_id, report_id, 'resolved', 'Report Resolved', msg)
+        elif decision == 'Overridden' and override_details:
+            corr_class = override_details.get('override_class')
+            corr_sev = override_details.get('override_severity')
+            orig_class = meta.get('defect_class', 'Defect')
+            orig_sev = meta.get('relative_severity', 'Low')
+            changes = []
+            if corr_class and corr_class != orig_class:
+                changes.append(f"{orig_class} → {corr_class}")
+            if corr_sev and corr_sev != orig_sev:
+                changes.append(f"{orig_sev} → {corr_sev}")
+            change_str = ", ".join(changes) if changes else (f"{corr_class} ({corr_sev})" if corr_class else "Updated")
+            reason_str = f" Reason: {notes}" if notes else ""
+            msg = f"Engineer assessment updated: {change_str}.{reason_str}"
+            notification_service.create_notification(submitter_id, report_id, 'override', 'Assessment Updated', msg)
+        elif target_status == InfrastructureReport.STATUS_VERIFIED:
+            feedback_str = f" Engineer feedback: {notes}" if notes and notes != 'Confirmed' else ""
+            msg = f"Your report has been professionally verified.{feedback_str}"
+            notification_service.create_notification(submitter_id, report_id, 'verified', 'Report Verified', msg)
 
     return jsonify({
         'message': f"Report successfully transitioned to '{target_status}'.",
