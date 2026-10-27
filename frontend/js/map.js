@@ -32,6 +32,81 @@ const DefectMap = {
     isInitialized: false,
     heatLayer: null,
     showHotspotLayer: true,
+    heatGradient: {
+        0.25: '#10b981', // Clean low-density green (#10b981 / #2ecc71)
+        0.50: '#f59e0b', // Moderate yellow/amber (#f59e0b / #f1c40f)
+        0.70: '#ea580c', // Higher orange (#ea580c / #e67e22)
+        0.88: '#ef4444', // Highest red (#ef4444 / #e74c3c)
+        1.00: '#991b1b'  // Peak hotspot crimson (#991b1b / #c0392b)
+    },
+
+    getZoomHeatOptions(zoom) {
+        // Zoom-aware radius, blur, and opacity scaling.
+        // Prevents country-scale ballooning and city-scale foggy halos.
+        if (zoom <= 7) {
+            // Far / country scale: strongly attenuated to prevent misleading nationwide clouds
+            return { radius: 12, blur: 10, minOpacity: 0.08, attenuated: true };
+        } else if (zoom <= 10) {
+            // Regional / greater Nairobi view
+            return { radius: 16, blur: 14, minOpacity: 0.12, attenuated: false };
+        } else if (zoom <= 13) {
+            // City / Nairobi default scale (zoom 11-13)
+            return { radius: 24, blur: 18, minOpacity: 0.20, attenuated: false };
+        } else {
+            // Street / neighbourhood scale (zoom >= 14)
+            return { radius: 34, blur: 22, minOpacity: 0.24, attenuated: false };
+        }
+    },
+
+    updateZoomAwareHeatmap() {
+        if (!this.map || !this.heatLayer) return;
+        const currentZoom = this.map.getZoom();
+        const opts = this.getZoomHeatOptions(currentZoom);
+
+        // Update existing layer options without recreating instances
+        this.heatLayer.setOptions({
+            radius: opts.radius,
+            blur: opts.blur,
+            minOpacity: opts.minOpacity,
+            gradient: this.heatGradient
+        });
+
+        // Low-zoom attenuation: below analytical threshold (<= 7),
+        // remove heat layer from map so Nairobi does not cover all of Kenya,
+        // and restore automatically when zooming back in.
+        if (this.showHotspotLayer) {
+            if (opts.attenuated) {
+                if (this.map.hasLayer(this.heatLayer)) {
+                    this.map.removeLayer(this.heatLayer);
+                }
+            } else {
+                if (!this.map.hasLayer(this.heatLayer)) {
+                    this.heatLayer.addTo(this.map);
+                }
+            }
+        }
+    },
+
+    syncHotspotButtonState() {
+        const btn = document.getElementById('btnToggleHotspot');
+        const legend = document.getElementById('hotspotLegendItem');
+        if (btn) {
+            if (this.showHotspotLayer) {
+                btn.classList.add('active-hotspot');
+                btn.innerHTML = '🔥 Hide Hotspots';
+                btn.setAttribute('aria-pressed', 'true');
+                btn.title = 'Hide defect density hotspot surface';
+            } else {
+                btn.classList.remove('active-hotspot');
+                btn.innerHTML = '🔥 Show Hotspots';
+                btn.setAttribute('aria-pressed', 'false');
+                btn.title = 'Display defect density hotspot surface';
+            }
+        }
+        if (legend) {
+            legend.style.display = this.showHotspotLayer ? 'flex' : 'none';
+        }
+    },
 
     async init() {
         this.bindEvents();
@@ -175,15 +250,12 @@ const DefectMap = {
             }
 
             // Sync initial hotspot button and legend state
-            if (this.showHotspotLayer) {
-                const hotspotBtn = document.getElementById('btnToggleHotspot');
-                const legend = document.getElementById('hotspotLegendItem');
-                if (hotspotBtn) {
-                    hotspotBtn.classList.add('active-hotspot');
-                    hotspotBtn.textContent = '🔥 Hotspot Active';
-                }
-                if (legend) legend.style.display = 'flex';
-            }
+            this.syncHotspotButtonState();
+
+            // Zoom-aware dynamic heatmap adaptation
+            this.map.on('zoomend', () => {
+                this.updateZoomAwareHeatmap();
+            });
 
             // Initialize marker cluster group with severity-aware visual treatment
             if (typeof L.markerClusterGroup === 'function') {
@@ -326,13 +398,15 @@ const DefectMap = {
         const dateStr = point.date_submitted ? new Date(point.date_submitted).toLocaleDateString('en-KE', { dateStyle: 'medium' }) : 'Recently Submitted';
         const isEngineer = window.App?.currentUser?.role === 'engineer';
 
+        const resolvedImgUrl = point.image_url ? (window.Api?.resolveImageUrl(point.image_url) || point.image_url) : '';
+
         return `
             <div class="map-popup-card" style="font-family: inherit; min-width: 240px; padding: 2px;">
                 <div style="display:flex; justify-content:space-between; align-items:center; border-bottom:1px solid #e2e8f0; padding-bottom:6px; margin-bottom:8px;">
                     <code style="font-weight:700; color:#1e293b; font-size:0.85rem;">#REP-${repId}</code>
                     <span class="severity-pill ${sevClass}" style="font-size:0.7rem; padding:2px 8px;">${sev}</span>
                 </div>
-                ${point.image_url ? `<div style="width:100%; height:110px; border-radius:6px; overflow:hidden; margin-bottom:8px; background:#0f172a;"><img src="${point.image_url}" alt="Defect" style="width:100%; height:100%; object-fit:cover;" onerror="this.parentElement.style.display='none'"></div>` : ''}
+                ${resolvedImgUrl ? `<div style="width:100%; height:110px; border-radius:6px; overflow:hidden; margin-bottom:8px; background:#0f172a;"><img src="${resolvedImgUrl}" alt="Defect" style="width:100%; height:100%; object-fit:cover;" onerror="this.parentElement.style.display='none'"></div>` : ''}
                 <div style="font-size:0.9rem; font-weight:700; color:#0f172a; margin-bottom:3px;">${defect}</div>
                 <div style="font-size:0.78rem; color:#475569; margin-bottom:6px;">📍 ${location}</div>
                 <div style="display:flex; justify-content:space-between; align-items:center; font-size:0.75rem; color:#64748b; margin-bottom:8px;">
@@ -361,26 +435,20 @@ const DefectMap = {
 
     toggleHotspotLayer() {
         this.showHotspotLayer = !this.showHotspotLayer;
-        const btn = document.getElementById('btnToggleHotspot');
-        const legend = document.getElementById('hotspotLegendItem');
+        this.syncHotspotButtonState();
 
-        if (this.showHotspotLayer) {
-            if (btn) {
-                btn.classList.add('active-hotspot');
-                btn.textContent = '🔥 Hotspot Active';
-            }
-            if (legend) legend.style.display = 'flex';
-            if (this.heatLayer && this.map && !this.map.hasLayer(this.heatLayer)) {
-                this.heatLayer.addTo(this.map);
-            }
-        } else {
-            if (btn) {
-                btn.classList.remove('active-hotspot');
-                btn.textContent = '🔥 Hotspot Layer';
-            }
-            if (legend) legend.style.display = 'none';
-            if (this.heatLayer && this.map && this.map.hasLayer(this.heatLayer)) {
-                this.map.removeLayer(this.heatLayer);
+        if (this.heatLayer && this.map) {
+            const currentZoom = this.map.getZoom();
+            const opts = this.getZoomHeatOptions(currentZoom);
+
+            if (this.showHotspotLayer && !opts.attenuated) {
+                if (!this.map.hasLayer(this.heatLayer)) {
+                    this.heatLayer.addTo(this.map);
+                }
+            } else {
+                if (this.map.hasLayer(this.heatLayer)) {
+                    this.map.removeLayer(this.heatLayer);
+                }
             }
         }
     },
@@ -491,31 +559,34 @@ const DefectMap = {
 
         // Update or initialize Leaflet heat/density layer underneath clusters
         if (typeof L.heatLayer === 'function') {
+            const currentZoom = this.map ? this.map.getZoom() : (this.config.default_zoom || 12);
+            const zoomOpts = this.getZoomHeatOptions(currentZoom);
+
             if (!this.heatLayer) {
                 this.heatLayer = L.heatLayer(heatPoints, {
                     pane: 'heatmapPane',
-                    radius: 65,
-                    blur: 40,
+                    radius: zoomOpts.radius,
+                    blur: zoomOpts.blur,
                     maxZoom: 13,
                     max: 1.0,
-                    minOpacity: 0.35,
+                    minOpacity: zoomOpts.minOpacity,
                     scaleIntensity: false,
-                    gradient: {
-                        0.20: '#2ecc71', // Low density / priority -> Green (#2ecc71 / #10b981)
-                        0.45: '#f1c40f', // Moderate -> Yellow / Amber (#f1c40f / #f59e0b)
-                        0.65: '#e67e22', // Higher -> Orange
-                        0.85: '#e74c3c', // Highest -> Red (#e74c3c / #ef4444)
-                        1.00: '#c0392b'  // Peak hotspot -> Crimson (#c0392b)
-                    }
+                    gradient: this.heatGradient
                 });
-                if (this.showHotspotLayer && this.map) {
+                if (this.showHotspotLayer && !zoomOpts.attenuated && this.map) {
                     this.heatLayer.addTo(this.map);
                 }
             } else {
                 this.heatLayer.setLatLngs(heatPoints);
-                if (this.showHotspotLayer && this.map && !this.map.hasLayer(this.heatLayer)) {
+                this.heatLayer.setOptions({
+                    radius: zoomOpts.radius,
+                    blur: zoomOpts.blur,
+                    minOpacity: zoomOpts.minOpacity,
+                    gradient: this.heatGradient
+                });
+                if (this.showHotspotLayer && !zoomOpts.attenuated && this.map && !this.map.hasLayer(this.heatLayer)) {
                     this.heatLayer.addTo(this.map);
-                } else if (!this.showHotspotLayer && this.map && this.map.hasLayer(this.heatLayer)) {
+                } else if ((!this.showHotspotLayer || zoomOpts.attenuated) && this.map && this.map.hasLayer(this.heatLayer)) {
                     this.map.removeLayer(this.heatLayer);
                 }
             }
