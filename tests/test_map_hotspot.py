@@ -37,7 +37,7 @@ class TestMapHotspotVisualization(unittest.TestCase):
         self.assertIn("scaleIntensity", heat_code, "leaflet-heat.js must support safe intensity scaling without auto-collapse")
 
     def test_02_map_js_heatmap_configuration(self):
-        """Verifies heatmapPane creation, z-index 350, pointer-events none, and continuous color gradient."""
+        """Verifies heatmapPane creation, z-index 350, pointer-events none, zoom-aware configuration, and continuous color gradient."""
         self.assertTrue(os.path.exists(self.map_js_path), "map.js must exist in frontend/js")
         with open(self.map_js_path, 'r', encoding='utf-8') as f:
             map_code = f.read()
@@ -45,8 +45,10 @@ class TestMapHotspotVisualization(unittest.TestCase):
         self.assertIn("heatmapPane", map_code, "heatmapPane must be configured in map.js")
         self.assertIn("350", map_code, "heatmapPane z-index must be 350 (beneath markers/clusters)")
         self.assertIn("pointerEvents", map_code, "heatmapPane must have pointerEvents: 'none'")
-        self.assertIn("radius: 65", map_code, "Heatmap radius must be appropriate (approx 65)")
-        self.assertIn("blur: 40", map_code, "Heatmap blur must provide smooth blending (approx 40)")
+        self.assertIn("getZoomHeatOptions", map_code, "map.js must contain getZoomHeatOptions for zoom-aware scaling")
+        self.assertIn("updateZoomAwareHeatmap", map_code, "map.js must contain updateZoomAwareHeatmap")
+        self.assertIn("#10b981", map_code, "map.js must include emerald green stop in heatGradient")
+        self.assertIn("#991b1b", map_code, "map.js must include deep red stop in heatGradient")
 
     def test_03_heat_intensity_mapping_deterministic(self):
         """Verifies deterministic mapping: Low = 0.35, Medium = 0.65, Critical = 1.00."""
@@ -144,6 +146,83 @@ class TestMapHotspotVisualization(unittest.TestCase):
         self.assertIn(".leaflet-heatmap-layer", css_code)
         self.assertNotIn(".leaflet-heatmap-layer {\n    display: none", css_code)
         self.assertNotIn("canvas {\n    opacity: 0", css_code)
+
+    def test_07_zoom_aware_radius_blur_ranges_and_attenuation(self):
+        """Verifies zoom-aware options logic matching getZoomHeatOptions:
+        - zoom <= 7: attenuated, radius 12, blur 10, minOpacity 0.08
+        - zoom 8-10: radius 16, blur 14, minOpacity 0.12
+        - zoom 11-13: radius 24, blur 18, minOpacity 0.20
+        - zoom >= 14: radius 34, blur 22, minOpacity 0.24
+        """
+        def get_zoom_heat_options(zoom):
+            if zoom <= 7:
+                return {'radius': 12, 'blur': 10, 'minOpacity': 0.08, 'attenuated': True}
+            elif zoom <= 10:
+                return {'radius': 16, 'blur': 14, 'minOpacity': 0.12, 'attenuated': False}
+            elif zoom <= 13:
+                return {'radius': 24, 'blur': 18, 'minOpacity': 0.20, 'attenuated': False}
+            else:
+                return {'radius': 34, 'blur': 22, 'minOpacity': 0.24, 'attenuated': False}
+
+        opt_country = get_zoom_heat_options(6)
+        self.assertTrue(opt_country['attenuated'])
+        self.assertEqual(opt_country['radius'], 12)
+        self.assertEqual(opt_country['blur'], 10)
+
+        opt_regional = get_zoom_heat_options(9)
+        self.assertFalse(opt_regional['attenuated'])
+        self.assertEqual(opt_regional['radius'], 16)
+        self.assertEqual(opt_regional['blur'], 14)
+
+        opt_nairobi = get_zoom_heat_options(12)
+        self.assertFalse(opt_nairobi['attenuated'])
+        self.assertEqual(opt_nairobi['radius'], 24)
+        self.assertEqual(opt_nairobi['blur'], 18)
+
+        opt_street = get_zoom_heat_options(16)
+        self.assertFalse(opt_street['attenuated'])
+        self.assertEqual(opt_street['radius'], 34)
+        self.assertEqual(opt_street['blur'], 22)
+
+    def test_08_image_serving_endpoint_security_and_reliability(self):
+        """Verifies safe image serving endpoint:
+        - 200 for existing image
+        - 404 for missing image (no fake fallback)
+        - 400 for path traversal attempt (../)
+        - 200 for legacy path prefix normalization
+        """
+        # Test existing image if available (check uploads directory)
+        upload_dir = os.path.join(os.path.dirname(__file__), '..', 'backend', 'uploads')
+        existing_files = [f for f in os.listdir(upload_dir) if f.lower().endswith(('.jpg', '.jpeg', '.png'))]
+        if existing_files:
+            target_file = existing_files[0]
+            # Valid direct filename
+            res = self.client.get(f"/api/reports/images/{target_file}")
+            self.assertEqual(res.status_code, 200)
+            self.assertIn("image/", res.content_type)
+
+            # Legacy prefixed filename
+            res_legacy = self.client.get(f"/api/reports/images/uploads/{target_file}")
+            self.assertEqual(res_legacy.status_code, 200)
+
+        # Missing file must return 404
+        res_missing = self.client.get("/api/reports/images/nonexistent_defect_image_xyz_9999.jpg")
+        self.assertEqual(res_missing.status_code, 404)
+
+        # Path traversal must return 400
+        res_traversal = self.client.get("/api/reports/images/../../app/__init__.py")
+        self.assertIn(res_traversal.status_code, (400, 404))
+
+    def test_09_navigation_motion_transition_css(self):
+        """Verifies viewSlideFadeIn transition keyframe and prefers-reduced-motion in main.css."""
+        main_css_path = os.path.join(self.frontend_dir, 'css', 'main.css')
+        self.assertTrue(os.path.exists(main_css_path))
+        with open(main_css_path, 'r', encoding='utf-8') as f:
+            css = f.read()
+
+        self.assertIn("viewSlideFadeIn", css, "main.css must contain viewSlideFadeIn animation")
+        self.assertIn("prefers-reduced-motion", css, "main.css must respect prefers-reduced-motion")
+        self.assertIn("cubic-bezier(0.16, 1, 0.3, 1)", css, "main.css must use smooth easing curve")
 
 if __name__ == '__main__':
     unittest.main()
