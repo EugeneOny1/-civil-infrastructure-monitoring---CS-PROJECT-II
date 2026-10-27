@@ -437,9 +437,10 @@ const Review = {
                 ? 'border: 2px solid #0284c7; box-shadow: 0 0 0 2px rgba(2, 132, 199, 0.4);'
                 : 'border: 2px solid transparent; opacity: 0.7;';
             const angleName = img.original_filename || `Photo ${idx + 1}`;
+            const thumbUrl = window.Api?.resolveImageUrl(img.url) || img.url;
             return `
                 <button type="button" class="review-thumb-btn ${isActive ? 'active' : ''}" data-index="${idx}" title="${angleName}" style="cursor: pointer; padding: 0; background: none; border-radius: 4px; overflow: hidden; width: 68px; height: 50px; flex-shrink: 0; ${activeStyle}">
-                    <img src="${img.url}" alt="${angleName}" style="width: 100%; height: 100%; object-fit: cover;" onerror="this.style.display='none'; this.parentElement.innerHTML='<span style=\\'font-size:10px; color:#94a3b8; display:flex; align-items:center; justify-content:center; height:100%; background:#1e293b;\\'>No Image</span>';">
+                    <img src="${thumbUrl}" alt="${angleName}" style="width: 100%; height: 100%; object-fit: cover;" onerror="this.style.display='none'; this.parentElement.innerHTML='<span style=\\'font-size:10px; color:#94a3b8; display:flex; align-items:center; justify-content:center; height:100%; background:#1e293b;\\'>No Image</span>';">
                 </button>
             `;
         }).join('');
@@ -513,7 +514,9 @@ const Review = {
         if (!canvas) return;
         const ctx = canvas.getContext('2d');
 
-        if (!imageUrl) {
+        const resolvedUrl = window.Api?.resolveImageUrl(imageUrl) || imageUrl;
+
+        if (!resolvedUrl) {
             canvas.width = 640;
             canvas.height = 400;
             ctx.fillStyle = '#0f172a';
@@ -653,7 +656,7 @@ const Review = {
             ctx.fillText('Source photographic evidence could not be retrieved from storage.', 320, 215);
         };
 
-        img.src = imageUrl;
+        img.src = resolvedUrl;
     },
 
     async handleLifecycleTransition(targetStatus, reason = '') {

@@ -456,17 +456,20 @@ def get_report_detail(current_user, report_id):
 
     for img in images:
         ass = db_service.find_one('ai_assessments', {'image_id': img['_id']})
+        if not ass and len(images) == 1:
+            ass = db_service.find_one('ai_assessments', {'report_id': report_id})
+        raw_path = img.get('image_path') or img.get('unique_filename') or img.get('filename') or ''
+        clean_name = os.path.basename(raw_path.replace('\\', '/'))
         img_dict = {
             'image_id': img['_id'],
-            'url': f"/api/reports/images/{img['image_path']}",
-            'filename': img['image_path'],
+            'url': f"/api/reports/images/{clean_name}",
+            'filename': clean_name,
             'original_filename': img.get('original_filename', ''),
             'file_size': img.get('file_size', 0),
             'dimensions': img.get('dimensions', {})
         }
         image_list.append(img_dict)
-        if ass:
-            assessment_list.append(ass)
+        assessment_list.append(ass if ass else {})
 
     primary_image = image_list[0] if image_list else None
     primary_assessment = assessment_list[0] if assessment_list else None
@@ -703,12 +706,38 @@ def update_report_status(current_user, report_id):
     }), 200
 
 
-@reports_bp.route('/images/<filename>', methods=['GET'])
+@reports_bp.route('/images/<path:filename>', methods=['GET'])
 def serve_image(filename):
-    """Serves uploaded defect photographs for display and bounding-box rendering."""
-    upload_folder = current_app.config['UPLOAD_FOLDER']
-    file_path = os.path.join(upload_folder, filename)
-    if not os.path.exists(file_path):
-        return jsonify({'error': 'Defect photograph not found.'}), 404
+    """
+    Serves uploaded defect photographs for display and bounding-box rendering.
+    Supports safe historical path resolution, normalizes legacy directory prefixes,
+    and strictly rejects directory traversal attempts.
+    """
+    # 1. Path Traversal & Security Validation
+    if not filename or '..' in filename or filename.startswith('/') or filename.startswith('\\'):
+        return jsonify({'error': 'Invalid evidence image path.'}), 400
 
-    return send_from_directory(upload_folder, filename)
+    # 2. Normalize Legacy Historical Path Prefixes (e.g. backend/uploads/ or uploads/)
+    clean_filename = filename.replace('\\', '/')
+    for prefix in ('backend/uploads/', 'uploads/'):
+        if clean_filename.lower().startswith(prefix):
+            clean_filename = clean_filename[len(prefix):]
+    
+    clean_filename = os.path.basename(clean_filename)
+    if not clean_filename:
+        return jsonify({'error': 'Invalid evidence image filename.'}), 400
+
+    # 3. Canonical Upload Directory
+    canonical_upload_dir = os.path.abspath(current_app.config['UPLOAD_FOLDER'])
+    file_path = os.path.join(canonical_upload_dir, clean_filename)
+
+    # 4. Resolve in canonical directory, or fallback to root workspace uploads directory
+    if os.path.exists(file_path):
+        return send_from_directory(canonical_upload_dir, clean_filename)
+
+    root_uploads_dir = os.path.abspath(os.path.join(canonical_upload_dir, '..', '..', 'uploads'))
+    fallback_path = os.path.join(root_uploads_dir, clean_filename)
+    if os.path.exists(fallback_path):
+        return send_from_directory(root_uploads_dir, clean_filename)
+
+    return jsonify({'error': 'Evidence image unavailable in storage.'}), 404

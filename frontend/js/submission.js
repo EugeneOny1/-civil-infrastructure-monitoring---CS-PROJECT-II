@@ -646,6 +646,8 @@ const Submission = {
         if (!canvas) return;
         const ctx = canvas.getContext('2d');
 
+        const resolvedUrl = window.Api?.resolveImageUrl(imageUrl) || imageUrl;
+
         const img = new Image();
         img.crossOrigin = 'anonymous';
         img.onload = () => {
@@ -755,7 +757,25 @@ const Submission = {
             });
             window._drawnPills = [];
         };
-        img.src = imageUrl;
+
+        img.onerror = () => {
+            if (placeholder) placeholder.classList.add('hidden');
+            const placeholderW = 640;
+            const placeholderH = 400;
+            canvas.width = placeholderW;
+            canvas.height = placeholderH;
+            ctx.fillStyle = '#0f172a';
+            ctx.fillRect(0, 0, placeholderW, placeholderH);
+            ctx.fillStyle = '#f59e0b';
+            ctx.font = 'bold 15px "Inter", sans-serif';
+            ctx.textAlign = 'center';
+            ctx.fillText('📷 Evidence image unavailable', 320, 185);
+            ctx.fillStyle = '#94a3b8';
+            ctx.font = '12px "Inter", sans-serif';
+            ctx.fillText('Source photographic file could not be loaded.', 320, 215);
+        };
+
+        img.src = resolvedUrl;
     }
 };
 

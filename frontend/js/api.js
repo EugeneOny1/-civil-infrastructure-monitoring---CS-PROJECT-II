@@ -49,6 +49,28 @@ const Api = {
         localStorage.removeItem('user');
     },
 
+    /**
+     * Resolves an image URL against the backend origin if relative and running on a separate host/port.
+     */
+    resolveImageUrl(url) {
+        if (!url || typeof url !== 'string') return '';
+        if (url.startsWith('http://') || url.startsWith('https://') || url.startsWith('data:') || url.startsWith('blob:')) {
+            return url;
+        }
+        if (url.startsWith('/api')) {
+            const apiBase = getApiBase();
+            if (apiBase.startsWith('http://') || apiBase.startsWith('https://')) {
+                try {
+                    const hostOrigin = new URL(apiBase).origin;
+                    return `${hostOrigin}${url}`;
+                } catch {
+                    return url;
+                }
+            }
+        }
+        return url;
+    },
+
     getHeaders(isFormData = false) {
         const headers = {};
         const token = this.getToken();
