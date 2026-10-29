@@ -415,6 +415,10 @@ const Review = {
     renderImageGallery(data) {
         const galleryContainer = document.getElementById('reviewImageGallery');
         const thumbList = document.getElementById('reviewThumbnailList');
+        const carouselNav = document.getElementById('reviewCarouselNav');
+        const dotsContainer = document.getElementById('reviewPaginationDots');
+        const counterEl = document.getElementById('reviewGalleryCounter');
+        const titleEl = document.getElementById('reviewGalleryTitle');
         if (!galleryContainer || !thumbList) return;
 
         const images = (data.images && data.images.length > 0) ? data.images : (data.image ? [data.image] : []);
@@ -422,15 +426,25 @@ const Review = {
         if (images.length <= 1) {
             galleryContainer.classList.add('hidden');
             galleryContainer.style.display = 'none';
+            if (carouselNav) carouselNav.classList.add('hidden');
             thumbList.innerHTML = '';
+            if (dotsContainer) dotsContainer.innerHTML = '';
             const img = images[0] || {};
             const ass = (data.assessments && data.assessments[0]) || data.assessment || {};
             this.updateTelemetryAndCanvas(img.url, ass);
             return;
         }
 
+        const isSameDefect = (data.report?.metadata?.multi_image_mode === 'same_defect' || data.multi_image_mode === 'same_defect');
+        if (titleEl) {
+            titleEl.textContent = isSameDefect ? "Multi-View Perspectives:" : "Corridor Observations:";
+        }
+
         galleryContainer.classList.remove('hidden');
         galleryContainer.style.display = 'flex';
+        if (carouselNav) carouselNav.classList.remove('hidden');
+
+        // Render thumbnails
         thumbList.innerHTML = images.map((img, idx) => {
             const isActive = idx === this.activeImageIndex;
             const activeStyle = isActive
@@ -453,6 +467,74 @@ const Review = {
             });
         });
 
+        // Hook prev / next carousel buttons
+        const btnPrev = document.getElementById('btnReviewPrev');
+        const btnNext = document.getElementById('btnReviewNext');
+        if (btnPrev && !btnPrev._bound) {
+            btnPrev._bound = true;
+            btnPrev.addEventListener('click', () => {
+                const imgs = (this.activeReportData?.images || []);
+                if (imgs.length <= 1) return;
+                const nextIdx = (this.activeImageIndex - 1 + imgs.length) % imgs.length;
+                this.selectActiveImage(nextIdx);
+            });
+        }
+        if (btnNext && !btnNext._bound) {
+            btnNext._bound = true;
+            btnNext.addEventListener('click', () => {
+                const imgs = (this.activeReportData?.images || []);
+                if (imgs.length <= 1) return;
+                const nextIdx = (this.activeImageIndex + 1) % imgs.length;
+                this.selectActiveImage(nextIdx);
+            });
+        }
+
+        // Global keyboard listener for ArrowLeft / ArrowRight
+        if (!this._keyboardBound) {
+            this._keyboardBound = true;
+            window.addEventListener('keydown', (e) => {
+                const reviewView = document.getElementById('view-review');
+                if (!reviewView || reviewView.classList.contains('hidden')) return;
+                const imgs = (this.activeReportData?.images || []);
+                if (imgs.length <= 1) return;
+                if (e.key === 'ArrowLeft') {
+                    const nextIdx = (this.activeImageIndex - 1 + imgs.length) % imgs.length;
+                    this.selectActiveImage(nextIdx);
+                } else if (e.key === 'ArrowRight') {
+                    const nextIdx = (this.activeImageIndex + 1) % imgs.length;
+                    this.selectActiveImage(nextIdx);
+                }
+            });
+        }
+
+        // Touch swipe listener on review canvas
+        const canvas = document.getElementById('reviewCanvas');
+        if (canvas && !canvas._swipeBound) {
+            canvas._swipeBound = true;
+            let touchStartX = 0;
+            canvas.addEventListener('touchstart', (e) => {
+                if (e.changedTouches && e.changedTouches[0]) {
+                    touchStartX = e.changedTouches[0].clientX;
+                }
+            }, { passive: true });
+            canvas.addEventListener('touchend', (e) => {
+                if (e.changedTouches && e.changedTouches[0]) {
+                    const deltaX = e.changedTouches[0].clientX - touchStartX;
+                    const imgs = (this.activeReportData?.images || []);
+                    if (imgs.length <= 1) return;
+                    if (deltaX > 40) {
+                        // Swipe right -> prev
+                        const nextIdx = (this.activeImageIndex - 1 + imgs.length) % imgs.length;
+                        this.selectActiveImage(nextIdx);
+                    } else if (deltaX < -40) {
+                        // Swipe left -> next
+                        const nextIdx = (this.activeImageIndex + 1) % imgs.length;
+                        this.selectActiveImage(nextIdx);
+                    }
+                }
+            }, { passive: true });
+        }
+
         this.selectActiveImage(0);
     },
 
@@ -464,6 +546,23 @@ const Review = {
         const images = (data.images && data.images.length > 0) ? data.images : (data.image ? [data.image] : []);
         const activeImg = images[index] || images[0] || {};
         const activeAss = (data.assessments && data.assessments[index]) || (index === 0 ? data.assessment : {}) || {};
+
+        // Update counter & title
+        const counterEl = document.getElementById('reviewGalleryCounter');
+        if (counterEl) {
+            counterEl.textContent = `Photo ${index + 1} of ${images.length}`;
+        }
+
+        // Update pagination dots
+        const dotsContainer = document.getElementById('reviewPaginationDots');
+        if (dotsContainer) {
+            dotsContainer.innerHTML = images.map((_, idx) => {
+                const isActive = idx === index;
+                const dotColor = isActive ? '#38bdf8' : '#475569';
+                const dotWidth = isActive ? '18px' : '6px';
+                return `<span style="display:inline-block; width:${dotWidth}; height:6px; border-radius:3px; background:${dotColor}; transition:all 0.2s ease;"></span>`;
+            }).join('');
+        }
 
         // Update active class and styles on thumbnails
         const thumbList = document.getElementById('reviewThumbnailList');
@@ -509,6 +608,24 @@ const Review = {
         this.drawReviewCanvas(imageUrl, ai);
     },
 
+    renderImageUnavailablePlaceholder(canvas, message) {
+        if (!canvas) return;
+        const ctx = canvas.getContext('2d');
+        const placeholderW = 640;
+        const placeholderH = 400;
+        canvas.width = placeholderW;
+        canvas.height = placeholderH;
+        ctx.fillStyle = '#0f172a';
+        ctx.fillRect(0, 0, placeholderW, placeholderH);
+        ctx.fillStyle = '#f59e0b';
+        ctx.font = 'bold 15px "Montserrat", sans-serif';
+        ctx.textAlign = 'center';
+        ctx.fillText('📷 Evidence image unavailable', placeholderW / 2, 185);
+        ctx.fillStyle = '#94a3b8';
+        ctx.font = '12px "Montserrat", sans-serif';
+        ctx.fillText(message || 'Source photographic file could not be retrieved from storage.', placeholderW / 2, 215);
+    },
+
     drawReviewCanvas(imageUrl, aiData) {
         const canvas = document.getElementById('reviewCanvas');
         if (!canvas) return;
@@ -517,28 +634,50 @@ const Review = {
         const resolvedUrl = window.Api?.resolveImageUrl(imageUrl) || imageUrl;
 
         if (!resolvedUrl) {
-            canvas.width = 640;
-            canvas.height = 400;
-            ctx.fillStyle = '#0f172a';
-            ctx.fillRect(0, 0, 640, 400);
-            ctx.fillStyle = '#f59e0b';
-            ctx.font = 'bold 15px "Montserrat", sans-serif';
-            ctx.textAlign = 'center';
-            ctx.fillText('📷 Evidence image unavailable', 320, 185);
-            ctx.fillStyle = '#94a3b8';
-            ctx.font = '12px "Montserrat", sans-serif';
-            ctx.fillText('Source photographic file is not stored for this historical report.', 320, 215);
+            this.renderImageUnavailablePlaceholder(canvas, 'Source photographic file is not stored for this report.');
             return;
         }
 
         const img = new Image();
         img.crossOrigin = 'anonymous';
         img.onload = () => {
-            const origW = img.naturalWidth || img.width;
-            const origH = img.naturalHeight || img.height;
+            const origW = img.naturalWidth;
+            const origH = img.naturalHeight;
+
+            // Strict image load guard: do NOT draw bounding boxes if image dimensions are invalid
+            if (!origW || !origH || origW === 0 || origH === 0) {
+                this.renderImageUnavailablePlaceholder(canvas, 'Source photographic evidence could not be decoded.');
+                return;
+            }
+
             canvas.width = origW;
             canvas.height = origH;
             ctx.drawImage(img, 0, 0, origW, origH);
+
+            // Optional Crack-Region Grouping Presentation Envelope
+            if (aiData.crack_regions && Array.isArray(aiData.crack_regions)) {
+                aiData.crack_regions.forEach(region => {
+                    const env = region.pixel_envelope;
+                    if (!env) return;
+                    const rw = env.xmax - env.xmin;
+                    const rh = env.ymax - env.ymin;
+                    ctx.save();
+                    ctx.strokeStyle = '#f59e0b';
+                    ctx.lineWidth = Math.max(2, Math.round(origW / 300));
+                    ctx.setLineDash([8, 6]);
+                    ctx.strokeRect(env.xmin - 4, env.ymin - 4, rw + 8, rh + 8);
+                    
+                    // Region label banner
+                    const regLabel = `[ ${region.label || 'Crack Region'} ]`;
+                    ctx.font = `bold ${Math.max(12, Math.round(origW * 0.018))}px "Montserrat", sans-serif`;
+                    const rtw = ctx.measureText(regLabel).width;
+                    ctx.fillStyle = 'rgba(15, 23, 42, 0.9)';
+                    ctx.fillRect(env.xmin - 4, Math.max(0, env.ymin - 26), rtw + 12, 22);
+                    ctx.fillStyle = '#f59e0b';
+                    ctx.fillText(regLabel, env.xmin + 2, Math.max(16, env.ymin - 10));
+                    ctx.restore();
+                });
+            }
 
             const detections = (aiData.detections && aiData.detections.length > 0)
                 ? aiData.detections
@@ -641,19 +780,7 @@ const Review = {
         };
 
         img.onerror = () => {
-            const placeholderW = 640;
-            const placeholderH = 400;
-            canvas.width = placeholderW;
-            canvas.height = placeholderH;
-            ctx.fillStyle = '#0f172a';
-            ctx.fillRect(0, 0, placeholderW, placeholderH);
-            ctx.fillStyle = '#f59e0b';
-            ctx.font = 'bold 15px "Montserrat", sans-serif';
-            ctx.textAlign = 'center';
-            ctx.fillText('📷 Evidence image unavailable', 320, 185);
-            ctx.fillStyle = '#94a3b8';
-            ctx.font = '12px "Montserrat", sans-serif';
-            ctx.fillText('Source photographic evidence could not be retrieved from storage.', 320, 215);
+            this.renderImageUnavailablePlaceholder(canvas, 'Source photographic evidence could not be retrieved from storage.');
         };
 
         img.src = resolvedUrl;

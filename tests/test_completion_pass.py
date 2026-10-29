@@ -340,6 +340,148 @@ class TestCompletionPass(unittest.TestCase):
         g_status = health['google_auth'].get('status')
         self.assertIn(g_status, ['operational', 'configured', 'pending_client_id'])
 
+    def test_09_crack_regions_grouping(self):
+        """Verifies conservative presentation-layer crack-region envelope grouping."""
+        from app.services.inference import InferenceService
+        detections = [
+            {
+                'class_name': 'Crack',
+                'confidence': 0.85,
+                'bounding_box': {'xmin': 10, 'ymin': 10, 'xmax': 50, 'ymax': 50},
+                'normalized_box': [0.03, 0.03, 0.17, 0.17]
+            },
+            {
+                'class_name': 'Crack',
+                'confidence': 0.80,
+                'bounding_box': {'xmin': 40, 'ymin': 40, 'xmax': 80, 'ymax': 80},
+                'normalized_box': [0.13, 0.13, 0.27, 0.27]
+            },
+            {
+                'class_name': 'Pothole',
+                'confidence': 0.90,
+                'bounding_box': {'xmin': 200, 'ymin': 200, 'xmax': 260, 'ymax': 260},
+                'normalized_box': [0.66, 0.66, 0.86, 0.86]
+            }
+        ]
+        regions = InferenceService.group_crack_regions(detections, distance_threshold=0.08)
+        self.assertIsInstance(regions, list)
+        self.assertEqual(len(regions), 1)
+        region = regions[0]
+        self.assertEqual(region['segment_count'], 2)
+        self.assertIn('pixel_envelope', region)
+        self.assertEqual(region['label'], 'Crack region — 2 detected crack segments')
+
+    def test_10_admin_verify_reject_user_endpoint(self):
+        """Verifies PUT /api/admin/users/<user_id>/verify for status transitions."""
+        target_eng_id = f"test_eng_{int(datetime.now().timestamp())}"
+        target_eng = {
+            '_id': target_eng_id,
+            'name': 'Eng. Test Subject',
+            'email': f'{target_eng_id}@kenha.go.ke',
+            'role': 'engineer',
+            'organization': 'KeNHA',
+            'professional_reg_no': 'EBK/PE/TEST/001',
+            'verification_status': 'pending',
+            'is_active': True,
+            'two_factor_enabled': True
+        }
+        db_service.insert('users', target_eng)
+        self.created_users.append(target_eng_id)
+
+        # Admin token
+        admin_id = f"admin_test_{int(datetime.now().timestamp())}"
+        admin_doc = {
+            '_id': admin_id,
+            'name': 'Admin Test',
+            'email': f'{admin_id}@infravision.ke',
+            'role': 'admin',
+            'verification_status': 'verified',
+            'two_factor_enabled': False
+        }
+        db_service.insert('users', admin_doc)
+        self.created_users.append(admin_id)
+
+        with self.app.app_context():
+            token = create_access_token({'user_id': admin_id, 'email': admin_doc['email'], 'role': 'admin'})
+        headers = {'Authorization': f'Bearer {token}', 'Content-Type': 'application/json'}
+
+        # 1. Verify engineer
+        put_res = self.client.put(f'/api/admin/users/{target_eng_id}/verify', json={'status': 'verified'}, headers=headers)
+        self.assertEqual(put_res.status_code, 200)
+        data = put_res.get_json()
+        self.assertEqual(data.get('verification_status'), 'verified')
+
+        updated = db_service.find_one('users', {'_id': target_eng_id})
+        self.assertEqual(updated['verification_status'], 'verified')
+
+        # 2. Reject engineer
+        reject_res = self.client.put(f'/api/admin/users/{target_eng_id}/verify', json={'status': 'rejected'}, headers=headers)
+        self.assertEqual(reject_res.status_code, 200)
+        data_rej = reject_res.get_json()
+        self.assertEqual(data_rej.get('verification_status'), 'rejected')
+
+        updated_rej = db_service.find_one('users', {'_id': target_eng_id})
+        self.assertEqual(updated_rej['verification_status'], 'rejected')
+
+    def test_11_image_serving_cors_and_headers(self):
+        """Verifies GET /api/reports/images/<filename> includes CORS and cache headers."""
+        res = self.client.get('/api/reports/images/seed_pothole.jpg')
+        if res.status_code == 200:
+            self.assertEqual(res.headers.get('Access-Control-Allow-Origin'), '*')
+            self.assertIn('max-age', res.headers.get('Cache-Control', ''))
+
+    def test_12_multi_image_mode_submission(self):
+        """Verifies report creation with multi_image_mode stores correct relationship metadata."""
+        import io
+        from werkzeug.datastructures import MultiDict
+
+        cit_id = f"citizen_multi_{int(datetime.now().timestamp())}"
+        cit_doc = {
+            '_id': cit_id,
+            'name': 'Multi-Image Citizen',
+            'email': f'{cit_id}@strathmore.edu',
+            'role': 'citizen',
+            'verification_status': 'verified'
+        }
+        db_service.insert('users', cit_doc)
+        self.created_users.append(cit_id)
+
+        with self.app.app_context():
+            token = create_access_token({'user_id': cit_id, 'email': cit_doc['email'], 'role': 'citizen'})
+        headers = {'Authorization': f'Bearer {token}'}
+
+        test_img_path = os.path.abspath(os.path.join(
+            os.path.dirname(__file__), '..', 'backend', 'uploads', 'seed_pothole.jpg'
+        ))
+
+        with open(test_img_path, 'rb') as f:
+            b = f.read()
+
+        data = MultiDict([
+            ('images', (io.BytesIO(b), 'photo1.jpg')),
+            ('images', (io.BytesIO(b), 'photo2.jpg')),
+            ('latitude', '-1.286389'),
+            ('longitude', '36.817223'),
+            ('location', 'Kenyatta Avenue, Nairobi'),
+            ('asset_type', 'Road / Pavement'),
+            ('description', 'Multi-angle observation of major pavement crack'),
+            ('multi_image_mode', 'same_defect')
+        ])
+        res = self.client.post('/api/reports', data=data, content_type='multipart/form-data', headers=headers)
+
+        self.assertEqual(res.status_code, 201)
+        resp_data = res.get_json()
+        report_id = resp_data.get('report_id')
+        self.created_reports.append(report_id)
+
+        rep_doc = db_service.find_one('infrastructure_reports', {'_id': report_id})
+        self.assertIsNotNone(rep_doc)
+        meta = rep_doc.get('metadata', {})
+        self.assertEqual(meta.get('multi_image_mode'), 'same_defect')
+        self.assertEqual(meta.get('image_count'), 2)
+        self.assertIn('Multiple views of the same defect', meta.get('image_relationship', ''))
+
 
 if __name__ == '__main__':
     unittest.main()
+

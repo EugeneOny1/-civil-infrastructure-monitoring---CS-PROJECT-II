@@ -327,9 +327,16 @@ const App = {
             btnGoogle.addEventListener('click', async () => {
                 try {
                     if (window.google?.accounts?.id && this.authConfig?.google_client_id) {
+                        // Check if rendered button exists in container
+                        const renderedBtn = document.querySelector('#googleSignInContainer [role="button"], #googleSignInContainer iframe');
+                        if (renderedBtn) {
+                            this.showToast("Please use the Google Sign-In button displayed above.");
+                        }
                         window.google.accounts.id.prompt((notification) => {
                             if (notification.isNotDisplayed() || notification.isSkippedMoment()) {
-                                console.log("[Google GIS] Native prompt skipped or closed:", notification.getNotDisplayedReason?.() || notification.getSkippedReason?.());
+                                const reason = notification.getNotDisplayedReason?.() || notification.getSkippedReason?.() || 'browser_policy';
+                                console.log("[Google GIS] Native prompt skipped or closed:", reason);
+                                this.showToast("Google prompt was suppressed by browser. Please use the 'Sign in with Google' button above or ensure third-party sign-in is allowed.", true);
                             }
                         });
                     } else if (!this.authConfig?.google_client_id) {
@@ -1056,6 +1063,23 @@ const App = {
         }
     },
 
+    async handleVerifyUser(userId, status) {
+        if (!userId) return;
+        try {
+            const result = await window.Api.verifyUser(userId, status);
+            this.showToast(result.message || `Engineer accreditation status updated to '${status}'.`);
+            // Refresh User Governance Table
+            await this.loadAdminData();
+            // Refresh Admin Dashboard stats if loaded
+            if (typeof this.loadAdminDashboard === 'function') {
+                this.loadAdminDashboard().catch(() => {});
+            }
+        } catch (err) {
+            console.error("Admin verification error:", err);
+            this.showToast(err.message || "Failed to update user verification status.", true);
+        }
+    },
+
     bindAccountDropdown() {
         const badge = document.getElementById('userProfileBadge');
         const menu = document.getElementById('accountDropdownMenu');
@@ -1327,31 +1351,59 @@ const App = {
     },
 
     initGoogleIdentity() {
-        if (window.google?.accounts?.id && this.authConfig?.google_client_id) {
-            try {
-                window.google.accounts.id.initialize({
-                    client_id: this.authConfig.google_client_id,
-                    callback: async (response) => {
-                        if (response.credential) {
-                            try {
-                                const data = await window.Api.loginWithGoogle(response.credential);
-                                if (data.require_2fa) {
-                                    this.show2FAChallenge(data);
-                                    return;
-                                }
-                                this.currentUser = data.user;
-                                this.updateSessionUI();
-                                this.showToast(`Signed in with Google as ${data.user.name || data.user.email}!`);
-                                this.routeUserAfterAuth(data.user);
-                            } catch (err) {
-                                this.showToast(err.message || "Google sign in failed.", true);
+        if (!window.google?.accounts?.id) {
+            let attempts = 0;
+            const checkGis = setInterval(() => {
+                attempts++;
+                if (window.google?.accounts?.id) {
+                    clearInterval(checkGis);
+                    this.setupGoogleIdentity();
+                } else if (attempts >= 10) {
+                    clearInterval(checkGis);
+                }
+            }, 300);
+            return;
+        }
+        this.setupGoogleIdentity();
+    },
+
+    setupGoogleIdentity() {
+        if (!window.google?.accounts?.id || !this.authConfig?.google_client_id) return;
+        try {
+            window.google.accounts.id.initialize({
+                client_id: this.authConfig.google_client_id,
+                callback: async (response) => {
+                    if (response.credential) {
+                        try {
+                            const data = await window.Api.loginWithGoogle(response.credential);
+                            if (data.require_2fa) {
+                                this.show2FAChallenge(data);
+                                return;
                             }
+                            this.currentUser = data.user;
+                            this.updateSessionUI();
+                            this.showToast(`Signed in with Google as ${data.user.name || data.user.email}!`);
+                            this.routeUserAfterAuth(data.user);
+                        } catch (err) {
+                            this.showToast(err.message || "Google sign in failed.", true);
                         }
                     }
+                }
+            });
+
+            const googleContainer = document.getElementById('googleSignInContainer');
+            if (googleContainer) {
+                googleContainer.innerHTML = '';
+                window.google.accounts.id.renderButton(googleContainer, {
+                    theme: 'outline',
+                    size: 'large',
+                    text: 'continue_with',
+                    shape: 'rectangular',
+                    width: 280
                 });
-            } catch (e) {
-                console.warn("GIS initialization warning:", e);
             }
+        } catch (e) {
+            console.warn("GIS initialization warning:", e);
         }
     },
 

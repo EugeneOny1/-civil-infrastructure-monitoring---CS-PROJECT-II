@@ -294,6 +294,78 @@ class InferenceService:
 
         return surviving
 
+    @classmethod
+    def group_crack_regions(cls, detections: List[Dict[str, Any]], distance_threshold: float = 0.08) -> List[Dict[str, Any]]:
+        """
+        Conservative presentation-layer grouping for connected crack detections.
+        Groups adjacent/overlapping Crack segments into an envelope display region
+        while preserving all raw neural network detections and confidence scores for audit.
+        """
+        crack_dets = [d for d in detections if d.get('class_name') == 'Crack']
+        if len(crack_dets) <= 1:
+            return []
+
+        def boxes_adjacent_or_overlapping(box_a, box_b, dist_thresh):
+            y1_a, x1_a, y2_a, x2_a = box_a
+            y1_b, x1_b, y2_b, x2_b = box_b
+            dx = max(0.0, max(x1_a, x1_b) - min(x2_a, x2_b))
+            dy = max(0.0, max(y1_a, y1_b) - min(y2_a, y2_b))
+            return dx <= dist_thresh and dy <= dist_thresh
+
+        visited = set()
+        clusters = []
+
+        for i, det_a in enumerate(crack_dets):
+            if i in visited:
+                continue
+            cluster = [det_a]
+            visited.add(i)
+            queue = [det_a]
+
+            while queue:
+                current = queue.pop(0)
+                box_curr = current.get('normalized_box')
+                for j, det_b in enumerate(crack_dets):
+                    if j not in visited:
+                        box_b = det_b.get('normalized_box')
+                        if boxes_adjacent_or_overlapping(box_curr, box_b, distance_threshold):
+                            visited.add(j)
+                            cluster.append(det_b)
+                            queue.append(det_b)
+
+            if len(cluster) > 1:
+                clusters.append(cluster)
+
+        regions = []
+        for cluster in clusters:
+            all_boxes = [d.get('normalized_box') for d in cluster]
+            min_y = min(b[0] for b in all_boxes)
+            min_x = min(b[1] for b in all_boxes)
+            max_y = max(b[2] for b in all_boxes)
+            max_x = max(b[3] for b in all_boxes)
+
+            all_px = [d.get('bounding_box') for d in cluster]
+            min_px_x = min(b['xmin'] for b in all_px)
+            min_px_y = min(b['ymin'] for b in all_px)
+            max_px_x = max(b['xmax'] for b in all_px)
+            max_px_y = max(b['ymax'] for b in all_px)
+
+            regions.append({
+                'region_type': 'crack_cluster',
+                'label': f"Crack region — {len(cluster)} detected crack segments",
+                'segment_count': len(cluster),
+                'normalized_envelope': [round(min_y, 4), round(min_x, 4), round(max_y, 4), round(max_x, 4)],
+                'pixel_envelope': {
+                    'xmin': min_px_x,
+                    'ymin': min_px_y,
+                    'xmax': max_px_x,
+                    'ymax': max_px_y
+                },
+                'segments': cluster
+            })
+
+        return regions
+
     def detect_defects(self, image_input, confidence_threshold=None, iou_threshold=None):
         """
         Executes structural defect detection using the loaded TensorFlow SavedModel.
@@ -401,6 +473,7 @@ class InferenceService:
 
         # Apply class-aware duplicate suppression (preserves overlapping different classes e.g. Crack + Pothole)
         detections = self.suppress_class_aware_duplicates(raw_detections, iou_threshold=nms_iou)
+        crack_regions = self.group_crack_regions(detections)
 
         # Handle zero detections or aggregate assessment
         if detections:
@@ -452,6 +525,7 @@ class InferenceService:
             'relative_area': effective_area,
             'area_percentage': area_percentage,
             'detections': detections,
+            'crack_regions': crack_regions,
             'raw_detection_count': len(raw_detections),
             'suppressed_count': len(raw_detections) - len(detections),
             'image_dimensions': {'width': orig_w, 'height': orig_h},

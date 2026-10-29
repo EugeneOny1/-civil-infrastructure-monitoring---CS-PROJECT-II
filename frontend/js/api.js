@@ -57,18 +57,22 @@ const Api = {
         if (url.startsWith('http://') || url.startsWith('https://') || url.startsWith('data:') || url.startsWith('blob:')) {
             return url;
         }
-        if (url.startsWith('/api')) {
-            const apiBase = getApiBase();
-            if (apiBase.startsWith('http://') || apiBase.startsWith('https://')) {
-                try {
-                    const hostOrigin = new URL(apiBase).origin;
-                    return `${hostOrigin}${url}`;
-                } catch {
-                    return url;
-                }
+        let clean = url.replace(/\\/g, '/');
+        if (clean.startsWith('backend/uploads/')) clean = clean.substring('backend/uploads/'.length);
+        if (clean.startsWith('uploads/')) clean = clean.substring('uploads/'.length);
+        if (!clean.startsWith('/api/')) {
+            clean = `/api/reports/images/${clean.replace(/^\/+/, '')}`;
+        }
+        const apiBase = getApiBase();
+        if (apiBase.startsWith('http://') || apiBase.startsWith('https://')) {
+            try {
+                const hostOrigin = new URL(apiBase).origin;
+                return `${hostOrigin}${clean}`;
+            } catch {
+                return clean;
             }
         }
-        return url;
+        return clean;
     },
 
     getHeaders(isFormData = false) {

@@ -422,6 +422,11 @@ const Submission = {
                 addRow.classList.add('hidden');
             }
         }
+
+        const relGroup = document.getElementById('multiImageRelationshipGroup');
+        if (relGroup) {
+            relGroup.classList.toggle('hidden', count <= 1);
+        }
     },
 
     removeFile(index) {
@@ -525,6 +530,11 @@ const Submission = {
         formData.append('location', location);
         formData.append('description', notes);
 
+        if (this.selectedFiles.length > 1) {
+            const relChoice = document.querySelector('input[name="multiImageRelationship"]:checked')?.value || 'same_defect';
+            formData.append('multi_image_mode', relChoice);
+        }
+
         if (this.selectedCoordinates) {
             formData.append('latitude', this.selectedCoordinates.latitude);
             formData.append('longitude', this.selectedCoordinates.longitude);
@@ -562,9 +572,18 @@ const Submission = {
             defectName = ai.defect_class;
         }
 
+        const isSameDefect = (data.multi_image_mode === 'same_defect' || data.report?.metadata?.multi_image_mode === 'same_defect');
+        const isMultiDefect = (data.multi_image_mode === 'multi_defect' || data.report?.metadata?.multi_image_mode === 'multi_defect');
+
         const sev = data.overall_visual_severity || ai.relative_severity || ai.severity || 'Low';
         const sevEl = document.getElementById('resSeverity');
-        sevEl.textContent = `[ ${sev.toUpperCase()} ]`;
+        if (isSameDefect) {
+            sevEl.textContent = `[ COMBINED SEVERITY: ${sev.toUpperCase()} ]`;
+        } else if (isMultiDefect) {
+            sevEl.textContent = `[ CORRIDOR SEVERITY: ${sev.toUpperCase()} ]`;
+        } else {
+            sevEl.textContent = `[ ${sev.toUpperCase()} ]`;
+        }
         sevEl.className = `severity-pill ${sev.toLowerCase()}`;
 
         document.getElementById('resDefectClass').textContent = defectName;

@@ -69,6 +69,10 @@ def submit_report(current_user):
     user_id = str(current_user.get('_id') or current_user.get('user_id'))
 
     # Run independent inference on each submitted photograph
+    multi_image_mode = request.form.get('multi_image_mode')
+    if len(uploaded_files) > 1 and not multi_image_mode:
+        multi_image_mode = 'same_defect'
+
     processed_images = []
     for file in uploaded_files:
         try:
@@ -193,6 +197,8 @@ def submit_report(current_user):
             'confidence': highest_confidence,
             'relative_severity': overall_visual_severity,
             'image_count': len(processed_images),
+            'multi_image_mode': multi_image_mode,
+            'image_relationship': 'Multiple views of the same defect' if multi_image_mode == 'same_defect' else ('Different defect observations' if multi_image_mode == 'multi_defect' else 'Single image'),
             'is_unusual': validation_result['is_unusual'],
             'requires_engineer_review': validation_result.get('requires_engineer_review', True),
             'validation_status': validation_result.get('validation_status', 'valid'),
@@ -482,21 +488,23 @@ def get_report_detail(current_user, report_id):
         if legacy_image_id:
             legacy_img = db_service.find_one('submitted_images', {'_id': legacy_image_id})
             if legacy_img:
+                clean_leg = os.path.basename(str(legacy_img.get('image_path', '')).replace('\\', '/'))
                 primary_image = {
                     'image_id': legacy_img['_id'],
-                    'url': f"/api/reports/images/{legacy_img['image_path']}",
-                    'filename': legacy_img['image_path'],
+                    'url': f"/api/reports/images/{clean_leg}",
+                    'filename': clean_leg,
                     'original_filename': legacy_img.get('original_filename', ''),
                     'file_size': legacy_img.get('file_size', 0),
                     'dimensions': legacy_img.get('dimensions', {})
                 }
                 image_list = [primary_image]
         elif legacy_image_path:
+            clean_leg = os.path.basename(str(legacy_image_path).replace('\\', '/'))
             primary_image = {
                 'image_id': 'legacy',
-                'url': f"/api/reports/images/{legacy_image_path}",
-                'filename': legacy_image_path,
-                'original_filename': legacy_image_path,
+                'url': f"/api/reports/images/{clean_leg}",
+                'filename': clean_leg,
+                'original_filename': clean_leg,
                 'file_size': 0,
                 'dimensions': {}
             }
@@ -732,12 +740,19 @@ def serve_image(filename):
     file_path = os.path.join(canonical_upload_dir, clean_filename)
 
     # 4. Resolve in canonical directory, or fallback to root workspace uploads directory
+    target_dir = None
     if os.path.exists(file_path):
-        return send_from_directory(canonical_upload_dir, clean_filename)
+        target_dir = canonical_upload_dir
+    else:
+        root_uploads_dir = os.path.abspath(os.path.join(canonical_upload_dir, '..', '..', 'uploads'))
+        fallback_path = os.path.join(root_uploads_dir, clean_filename)
+        if os.path.exists(fallback_path):
+            target_dir = root_uploads_dir
 
-    root_uploads_dir = os.path.abspath(os.path.join(canonical_upload_dir, '..', '..', 'uploads'))
-    fallback_path = os.path.join(root_uploads_dir, clean_filename)
-    if os.path.exists(fallback_path):
-        return send_from_directory(root_uploads_dir, clean_filename)
+    if target_dir:
+        resp = send_from_directory(target_dir, clean_filename)
+        resp.headers['Access-Control-Allow-Origin'] = '*'
+        resp.headers['Cache-Control'] = 'public, max-age=86400'
+        return resp
 
     return jsonify({'error': 'Evidence image unavailable in storage.'}), 404

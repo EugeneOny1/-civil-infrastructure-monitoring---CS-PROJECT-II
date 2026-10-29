@@ -141,6 +141,8 @@
 
                     <!-- Login Form -->
                     <form id="loginForm" class="auth-form">
+                        <!-- Native Google Identity Services Button Container -->
+                        <div id="googleSignInContainer" style="display: flex; justify-content: center; min-height: 44px; margin-bottom: 0.5rem; width: 100%;"></div>
                         <button type="button" class="btn-google" id="btnGoogleSignIn" title="Sign in with verified Google account">
                             <svg class="google-icon" viewBox="0 0 24 24">
                                 <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
@@ -365,6 +367,26 @@
                                     <button type="button" class="btn-micro" id="btnAddMorePhotos">
                                         <span>➕</span> Add Another Photo (up to 3)
                                     </button>
+                                </div>
+
+                                <!-- Multi-Image Relationship Specification (FR: Coordinator Requirement) -->
+                                <div class="multi-image-relationship-box hidden" id="multiImageRelationshipGroup" style="margin-top: 0.85rem; background: rgba(15, 23, 42, 0.75); border: 1px solid #334155; border-radius: 8px; padding: 0.85rem 1rem;">
+                                    <span style="font-size: 0.8rem; font-weight: 700; color: #38bdf8; display: block; margin-bottom: 0.35rem; letter-spacing: 0.04em;">
+                                        WHAT DO THESE PHOTOS SHOW?
+                                    </span>
+                                    <div style="display: flex; flex-direction: column; gap: 0.5rem; margin-top: 0.25rem;">
+                                        <label style="display: flex; align-items: flex-start; gap: 0.6rem; cursor: pointer; font-size: 0.82rem; color: #f1f5f9;">
+                                            <input type="radio" name="multiImageRelationship" value="same_defect" checked style="margin-top: 2px;">
+                                            <span><strong>Multiple views of the same defect / location</strong><br><small style="color: #94a3b8;">Multiple angles, close-up, and wide perspectives combined into one defect assessment.</small></span>
+                                        </label>
+                                        <label style="display: flex; align-items: flex-start; gap: 0.6rem; cursor: pointer; font-size: 0.82rem; color: #f1f5f9;">
+                                            <input type="radio" name="multiImageRelationship" value="multi_defect" style="margin-top: 2px;">
+                                            <span><strong>Different defects or observations in this report</strong><br><small style="color: #94a3b8;">Distinct defect types or separate observations along the same infrastructure corridor.</small></span>
+                                        </label>
+                                    </div>
+                                    <p style="margin: 0.6rem 0 0 0; font-size: 0.75rem; color: #cbd5e1; border-top: 1px dashed #334155; padding-top: 0.4rem;">
+                                        ℹ️ <em>Upload several photos when they show the same defect, nearby defects, or the same infrastructure location. Defects from different locations should be submitted as separate reports.</em>
+                                    </p>
                                 </div>
                             </div>
                         </div>
@@ -920,13 +942,23 @@
                 <div class="terminal-split-view">
                     <!-- Left: Visual Image & Bounding Box Viewer -->
                     <div class="terminal-left-pane">
-                        <div class="terminal-canvas-wrapper">
+                        <div class="terminal-canvas-wrapper" style="position: relative;">
                             <canvas id="reviewCanvas" class="review-canvas"></canvas>
+                            <!-- Polished Gallery Navigation Buttons Overlay -->
+                            <div id="reviewCarouselNav" class="review-carousel-nav hidden" style="position: absolute; top: 50%; transform: translateY(-50%); width: 100%; display: flex; justify-content: space-between; padding: 0 0.5rem; pointer-events: none; z-index: 10;">
+                                <button type="button" id="btnReviewPrev" class="carousel-nav-btn" title="Previous photo (ArrowLeft)" style="pointer-events: auto; background: rgba(15, 23, 42, 0.85); color: #f8fafc; border: 1px solid #475569; border-radius: 50%; width: 38px; height: 38px; font-size: 1.25rem; line-height: 1; cursor: pointer; display: flex; align-items: center; justify-content: center; box-shadow: 0 4px 6px rgba(0,0,0,0.3); transition: background 0.15s ease;">‹</button>
+                                <button type="button" id="btnReviewNext" class="carousel-nav-btn" title="Next photo (ArrowRight)" style="pointer-events: auto; background: rgba(15, 23, 42, 0.85); color: #f8fafc; border: 1px solid #475569; border-radius: 50%; width: 38px; height: 38px; font-size: 1.25rem; line-height: 1; cursor: pointer; display: flex; align-items: center; justify-content: center; box-shadow: 0 4px 6px rgba(0,0,0,0.3); transition: background 0.15s ease;">›</button>
+                            </div>
                         </div>
-                        <!-- Multi-Image Review Angle Switcher -->
-                        <div id="reviewImageGallery" class="review-gallery-strip hidden" style="display:none; align-items:center; gap:0.5rem; margin-top:0.65rem; background:#0f172a; padding:0.5rem; border-radius:6px; border:1px solid #1e293b;">
-                            <span style="font-size:0.75rem; color:#94a3b8; font-weight:600; text-transform:uppercase; letter-spacing:0.05em; margin-right:0.25rem;">Angles:</span>
-                            <div id="reviewThumbnailList" style="display:flex; gap:0.5rem; overflow-x:auto;"></div>
+                        <!-- Multi-Image Review Angle Switcher & Carousel Controls -->
+                        <div id="reviewImageGallery" class="review-gallery-strip hidden" style="display:none; flex-direction:column; gap:0.5rem; margin-top:0.65rem; background:#0f172a; padding:0.65rem 0.75rem; border-radius:6px; border:1px solid #1e293b;">
+                            <div style="display: flex; align-items: center; justify-content: space-between; width: 100%;">
+                                <span style="font-size:0.75rem; color:#94a3b8; font-weight:600; text-transform:uppercase; letter-spacing:0.05em;" id="reviewGalleryTitle">Evidence Views:</span>
+                                <span style="font-size:0.75rem; color:#38bdf8; font-weight:600;" id="reviewGalleryCounter">Photo 1 of 1</span>
+                            </div>
+                            <div id="reviewThumbnailList" style="display:flex; gap:0.5rem; overflow-x:auto; padding: 2px 0;"></div>
+                            <!-- Pagination Dots -->
+                            <div id="reviewPaginationDots" style="display: flex; justify-content: center; gap: 6px; margin-top: 2px;"></div>
                         </div>
                         <div class="telemetry-bar">
                             <div class="telemetry-box">
