@@ -7,7 +7,7 @@ class User:
     Roles: 'citizen', 'engineer', 'admin'
     Verification status: 'pending', 'verified', 'rejected'
     """
-    def __init__(self, name, email, password=None, password_hash=None, role='citizen', verification_status=None, user_id=None, created_at=None, organization=None, professional_reg_no=None, phone=None, two_factor_enabled=False):
+    def __init__(self, name, email, password=None, password_hash=None, role='citizen', verification_status=None, user_id=None, created_at=None, organization=None, professional_reg_no=None, phone=None, two_factor_enabled=False, rejection_reason=None, rejection_notes=None, rejected_at=None, verified_at=None):
         self.user_id = str(user_id) if user_id else None
         self.name = name
         self.email = email.lower().strip() if email else ''
@@ -31,6 +31,10 @@ class User:
             self.verification_status = 'verified' if role == 'citizen' else 'pending'
             
         self.created_at = created_at or datetime.utcnow().isoformat()
+        self.rejection_reason = rejection_reason
+        self.rejection_notes = rejection_notes
+        self.rejected_at = rejected_at
+        self.verified_at = verified_at
 
     def check_password(self, password):
         return check_password_hash(self.password_hash, password)
@@ -48,6 +52,12 @@ class User:
             'verification_status': self.verification_status,
             'created_at': self.created_at
         }
+        if self.verification_status == 'rejected':
+            data['rejection_reason'] = self.rejection_reason
+            data['rejection_notes'] = self.rejection_notes
+            data['rejected_at'] = self.rejected_at
+        elif self.verification_status == 'verified':
+            data['verified_at'] = self.verified_at
         if include_sensitive:
             data['password_hash'] = self.password_hash
         return data
@@ -67,7 +77,11 @@ class User:
             phone=data.get('phone', ''),
             two_factor_enabled=data.get('two_factor_enabled', False),
             verification_status=data.get('verification_status', 'verified'),
-            created_at=data.get('created_at')
+            created_at=data.get('created_at'),
+            rejection_reason=data.get('rejection_reason'),
+            rejection_notes=data.get('rejection_notes'),
+            rejected_at=data.get('rejected_at'),
+            verified_at=data.get('verified_at')
         )
 
 

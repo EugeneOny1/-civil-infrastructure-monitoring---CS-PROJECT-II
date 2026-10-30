@@ -141,17 +141,18 @@
 
                     <!-- Login Form -->
                     <form id="loginForm" class="auth-form">
-                        <!-- Native Google Identity Services Button Container -->
-                        <div id="googleSignInContainer" style="display: flex; justify-content: center; min-height: 44px; margin-bottom: 0.5rem; width: 100%;"></div>
-                        <button type="button" class="btn-google" id="btnGoogleSignIn" title="Sign in with verified Google account">
-                            <svg class="google-icon" viewBox="0 0 24 24">
-                                <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
-                                <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/>
-                                <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.63z"/>
-                                <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z"/>
-                            </svg>
-                            Continue with Google
-                        </button>
+                        <!-- Google Identity Services Sign-In Button Container -->
+                        <div id="googleSignInContainer" class="google-signin-wrapper">
+                            <button type="button" class="btn-google" id="btnGoogleSignIn" title="Sign in with verified Google account">
+                                <svg class="google-icon" viewBox="0 0 24 24">
+                                    <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
+                                    <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/>
+                                    <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.63z"/>
+                                    <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z"/>
+                                </svg>
+                                Continue with Google
+                            </button>
+                        </div>
                         <div class="auth-divider"><span>or sign in with email</span></div>
 
                         <div class="form-group">
@@ -1050,6 +1051,9 @@
                             <button type="button" class="btn-primary btn-signoff" id="btnSubmitSignOff">
                                 <span>🔒 [ Submit Professional Validation ]</span>
                             </button>
+                            <button type="button" class="btn-secondary" id="btnOpenSafetyAdvisory" style="width: 100%; margin-top: 0.75rem; display: flex; align-items: center; justify-content: center; gap: 0.5rem; border: 1px solid #f59e0b; color: #b45309; background: #fffbeb;">
+                                <span>⚠️</span> Issue Safety Advisory
+                            </button>
                         </form>
                     </div>
                 </div>
@@ -1237,6 +1241,9 @@
                             <option value="citizen">Citizens Only</option>
                             <option value="admin">Admins Only</option>
                         </select>
+                        <button type="button" class="btn-micro btn-accent" id="btnOpenAdminNotice" style="padding: 0.45rem 0.85rem; font-size: 0.78rem;">
+                            <span>📢</span> Send Notice
+                        </button>
                     </div>
                 </div>
                 <div class="table-container">
@@ -1292,6 +1299,127 @@
             <div class="modal-footer">
                 <button type="button" class="btn-secondary" id="btnCancelLocationPicker">Cancel</button>
                 <button type="button" class="btn-primary" id="btnConfirmLocationPicker">Confirm Location</button>
+            </div>
+        </div>
+    <!-- Engineer Application Rejection Modal (Sections I, J, K, L) -->
+    <div class="modal-backdrop" id="engineerRejectionModal" role="dialog" aria-modal="true" aria-labelledby="rejectionModalTitle">
+        <div class="modal-dialog" style="max-width: 480px;">
+            <div class="modal-header">
+                <h3 class="modal-title" id="rejectionModalTitle" style="color: #dc2626;">
+                    <span>✕</span> Reject Engineer Verification
+                </h3>
+                <button type="button" class="modal-close-btn" id="btnCloseRejectionModal" aria-label="Close modal">✕</button>
+            </div>
+            <div class="modal-body">
+                <p style="font-size: 0.85rem; color: #475569; margin-bottom: 1rem;">
+                    You are declining professional engineer accreditation for <strong id="rejectionTargetName">Engineer</strong> (<span id="rejectionTargetEmail">email</span>). The applicant will receive an operational notification explaining the decision.
+                </p>
+                <div class="form-group">
+                    <label for="rejectionReasonSelect" class="field-label">REJECTION REASON *</label>
+                    <select id="rejectionReasonSelect" class="field-input">
+                        <option value="Unable to verify submitted EBK registration" selected>Unable to verify submitted EBK registration</option>
+                        <option value="EBK number appears incorrect">EBK number appears incorrect</option>
+                        <option value="Engineer details do not match submitted registration">Engineer details do not match submitted registration</option>
+                        <option value="Required professional information is incomplete">Required professional information is incomplete</option>
+                        <option value="Duplicate / conflicting Engineer application">Duplicate / conflicting Engineer application</option>
+                        <option value="Other">Other</option>
+                    </select>
+                </div>
+                <div class="form-group" style="margin-bottom: 0;">
+                    <label for="rejectionNotesText" class="field-label">SUPPLEMENTARY NOTE / REASON DETAILS</label>
+                    <textarea id="rejectionNotesText" class="field-textarea" rows="3" placeholder="Optional brief guidance for the applicant (or required if 'Other' is selected)..."></textarea>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn-secondary" id="btnCancelRejection">Cancel</button>
+                <button type="button" class="btn-danger" id="btnConfirmRejection" style="background: #dc2626; color: #ffffff; border: none; padding: 0.6rem 1.25rem; border-radius: var(--radius-sm); font-weight: 600; cursor: pointer;">Confirm Rejection</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Engineer Safety Advisory Modal (Section S) -->
+    <div class="modal-backdrop" id="safetyAdvisoryModal" role="dialog" aria-modal="true" aria-labelledby="safetyAdvisoryTitle">
+        <div class="modal-dialog" style="max-width: 480px;">
+            <div class="modal-header">
+                <h3 class="modal-title" id="safetyAdvisoryTitle" style="color: #d97706;">
+                    <span>⚠️</span> Issue Operational Safety Advisory
+                </h3>
+                <button type="button" class="modal-close-btn" id="btnCloseSafetyAdvisory" aria-label="Close modal">✕</button>
+            </div>
+            <div class="modal-body">
+                <p style="font-size: 0.85rem; color: #475569; margin-bottom: 1rem;">
+                    Publish a report-linked safety advisory for <strong id="advisoryLocationName">Infrastructure Location</strong>. This advisory will be dispatched as an operational alert to citizens and engineers monitoring this corridor.
+                </p>
+                <div class="form-group">
+                    <label for="advisoryCategorySelect" class="field-label">ADVISORY CATEGORY *</label>
+                    <select id="advisoryCategorySelect" class="field-input">
+                        <option value="Exercise caution" selected>Exercise caution</option>
+                        <option value="Avoid this area">Avoid this area</option>
+                        <option value="Dangerous road defect">Dangerous road defect</option>
+                        <option value="Reduce speed / drive with caution">Reduce speed / drive with caution</option>
+                        <option value="Inspection underway">Inspection underway</option>
+                        <option value="Temporary access concern">Temporary access concern</option>
+                    </select>
+                </div>
+                <div class="form-group" style="margin-bottom: 0;">
+                    <label for="advisoryNoteText" class="field-label">PROFESSIONAL NOTE / GUIDANCE</label>
+                    <textarea id="advisoryNoteText" class="field-textarea" rows="3" placeholder="e.g. Severe pavement depression on westbound lane. Drive with caution pending site repairs."></textarea>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn-secondary" id="btnCancelSafetyAdvisory">Cancel</button>
+                <button type="button" class="btn-primary" id="btnConfirmSafetyAdvisory" style="background: #d97706; border-color: #d97706;">Publish Advisory</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Admin Operational Notice Modal (Section T) -->
+    <div class="modal-backdrop" id="adminNoticeModal" role="dialog" aria-modal="true" aria-labelledby="adminNoticeTitle">
+        <div class="modal-dialog" style="max-width: 500px;">
+            <div class="modal-header">
+                <h3 class="modal-title" id="adminNoticeTitle">
+                    <span>📢</span> Send Administrative Notice
+                </h3>
+                <button type="button" class="modal-close-btn" id="btnCloseAdminNotice" aria-label="Close modal">✕</button>
+            </div>
+            <div class="modal-body">
+                <div class="form-row">
+                    <div class="form-group flex-1">
+                        <label for="adminNoticeMode" class="field-label">NOTICE TYPE</label>
+                        <select id="adminNoticeMode" class="field-input">
+                            <option value="targeted" selected>Targeted User Notice</option>
+                            <option value="broadcast">System Announcement (All Users)</option>
+                        </select>
+                    </div>
+                    <div class="form-group flex-1" id="adminNoticeTargetGroup">
+                        <label for="adminNoticeTargetUser" class="field-label">RECIPIENT USER</label>
+                        <select id="adminNoticeTargetUser" class="field-input">
+                            <option value="">Select recipient...</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label for="adminNoticeCategory" class="field-label">CATEGORY / TEMPLATE</label>
+                    <select id="adminNoticeCategory" class="field-input">
+                        <option value="Credential Issue" selected>Credential Issue</option>
+                        <option value="Account Security Reminder">Account Security Reminder</option>
+                        <option value="Professional Verification Update">Professional Verification Update</option>
+                        <option value="Scheduled Platform Maintenance">Scheduled Platform Maintenance</option>
+                        <option value="Important Usage Guidance">Important Usage Guidance</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label for="adminNoticeTitleInput" class="field-label">NOTICE TITLE *</label>
+                    <input type="text" id="adminNoticeTitleInput" class="field-input" placeholder="e.g. Professional Registration Clarification Required">
+                </div>
+                <div class="form-group" style="margin-bottom: 0;">
+                    <label for="adminNoticeMessage" class="field-label">MESSAGE CONTENT *</label>
+                    <textarea id="adminNoticeMessage" class="field-textarea" rows="3" placeholder="Enter concise operational notification message..."></textarea>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn-secondary" id="btnCancelAdminNotice">Cancel</button>
+                <button type="button" class="btn-primary" id="btnConfirmAdminNotice">Dispatch Notice</button>
             </div>
         </div>
     </div>

@@ -520,6 +520,100 @@ const Api = {
             throw new Error(data.error || 'Direct report review failed.');
         }
         return data;
+    },
+
+    // Admin User Verification & Governance (FR-10, Sections I, J, K, L)
+    async getUsers(params = {}) {
+        const query = new URLSearchParams(params).toString();
+        const res = await this.safeFetch(`${API_BASE}/admin/users${query ? '?' + query : ''}`, {
+            headers: this.getHeaders()
+        });
+        if (!res.ok) {
+            const err = await res.json();
+            throw new Error(err.error || 'Failed to fetch users list.');
+        }
+        return res.json();
+    },
+
+    async verifyUser(userId, status, rejectionReason = '', rejectionNotes = '') {
+        const payload = { status };
+        if (status === 'rejected') {
+            payload.rejection_reason = rejectionReason;
+            payload.rejection_notes = rejectionNotes;
+        }
+        const res = await this.safeFetch(`${API_BASE}/admin/users/${userId}/verify`, {
+            method: 'PUT',
+            headers: this.getHeaders(false),
+            body: JSON.stringify(payload)
+        });
+        const data = await res.json();
+        if (!res.ok) {
+            throw new Error(data.error || 'Failed to update user verification status.');
+        }
+        return data;
+    },
+
+    // Admin Operational Notices (Section T)
+    async sendAdminNotice(noticeData) {
+        const res = await this.safeFetch(`${API_BASE}/admin/notifications/send`, {
+            method: 'POST',
+            headers: this.getHeaders(false),
+            body: JSON.stringify(noticeData)
+        });
+        const data = await res.json();
+        if (!res.ok) {
+            throw new Error(data.error || 'Failed to dispatch administrative notice.');
+        }
+        return data;
+    },
+
+    // Engineer Safety Advisories (Section S)
+    async issueSafetyAdvisory(reportId, category, note = '') {
+        const res = await this.safeFetch(`${API_BASE}/reviews/${reportId}/safety-advisory`, {
+            method: 'POST',
+            headers: this.getHeaders(false),
+            body: JSON.stringify({ category, note })
+        });
+        const data = await res.json();
+        if (!res.ok) {
+            throw new Error(data.error || 'Failed to issue safety advisory.');
+        }
+        return data;
+    },
+
+    // Operational Role-based Notifications (FR-11, Sections O, P, Q, R, U)
+    async getNotifications() {
+        const res = await this.safeFetch(`${API_BASE}/users/notifications`, {
+            headers: this.getHeaders()
+        });
+        if (!res.ok) {
+            return { notifications: [], unread_count: 0 };
+        }
+        return res.json();
+    },
+
+    async markNotificationRead(notificationId) {
+        const res = await this.safeFetch(`${API_BASE}/users/notifications/${notificationId}/read`, {
+            method: 'POST',
+            headers: this.getHeaders(false)
+        });
+        const data = await res.json();
+        if (!res.ok) {
+            throw new Error(data.error || 'Failed to mark notification as read.');
+        }
+        return data;
+    },
+
+    async markAllNotificationsRead() {
+        const res = await this.safeFetch(`${API_BASE}/users/notifications/mark-all-read`, {
+            method: 'POST',
+            headers: this.getHeaders(false)
+        });
+        const data = await res.json();
+        if (!res.ok) {
+            throw new Error(data.error || 'Failed to mark all notifications as read.');
+        }
+        return data;
     }
 };
 

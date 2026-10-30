@@ -16,6 +16,8 @@ const App = {
         this.bindEbkCategorySelector();
         this.bindAccountDropdown();
         this.bindProfileEvents();
+        this.bindRejectionModal();
+        this.bindAdminNoticeModal();
         
         // Initialize submodules
         if (window.Submission) window.Submission.init();
@@ -321,32 +323,30 @@ const App = {
             }
         });
 
-        // Real Google Identity Services Sign-In (Section 5)
+        // Real Google Identity Services Sign-In
         const btnGoogle = document.getElementById('btnGoogleSignIn');
         if (btnGoogle) {
             btnGoogle.addEventListener('click', async () => {
                 try {
-                    if (window.google?.accounts?.id && this.authConfig?.google_client_id) {
-                        // Check if rendered button exists in container
-                        const renderedBtn = document.querySelector('#googleSignInContainer [role="button"], #googleSignInContainer iframe');
+                    if (!this.authConfig?.google_client_id) {
+                        this.showToast("Google Sign-In is not configured: Missing GOOGLE_CLIENT_ID.", true);
+                        return;
+                    }
+                    if (window.google?.accounts?.id) {
+                        this.setupGoogleIdentity();
+                        // Find rendered Google button iframe or button
+                        const renderedBtn = document.querySelector('#googleSignInContainer iframe, #googleSignInContainer [role="button"]');
                         if (renderedBtn) {
+                            renderedBtn.click();
+                        } else {
                             this.showToast("Please use the Google Sign-In button displayed above.");
                         }
-                        window.google.accounts.id.prompt((notification) => {
-                            if (notification.isNotDisplayed() || notification.isSkippedMoment()) {
-                                const reason = notification.getNotDisplayedReason?.() || notification.getSkippedReason?.() || 'browser_policy';
-                                console.log("[Google GIS] Native prompt skipped or closed:", reason);
-                                this.showToast("Google prompt was suppressed by browser. Please use the 'Sign in with Google' button above or ensure third-party sign-in is allowed.", true);
-                            }
-                        });
-                    } else if (!this.authConfig?.google_client_id) {
-                        this.showToast("Google Sign-In is not configured: Missing GOOGLE_CLIENT_ID.", true);
                     } else {
-                        this.showToast("Google Identity Services library is loading. Please try again in a few moments.", true);
+                        this.showToast("Google Identity Services is initializing. Please try again in a few moments.", true);
                     }
                 } catch (err) {
                     console.error("Google sign-in error:", err);
-                    this.showToast(err.message || "Google sign in was cancelled or failed.", true);
+                    this.showToast("Google Sign-In could not be completed. Please try again or sign in using email.", true);
                 }
             });
         }
@@ -1031,6 +1031,8 @@ const App = {
                 const uid = u.user_id || u._id;
                 const orgInfo = u.organization ? `${u.organization} ${u.professional_reg_no ? '(' + u.professional_reg_no + ')' : ''}` : (u.professional_reg_no || '—');
                 const has2fa = u.two_factor_enabled ? '<span style="color:#16a34a; font-weight:600;">🔐 Enabled</span>' : '<span style="color:#86868b;">Disabled</span>';
+                const verifClass = isVerified ? 'verified' : (u.verification_status === 'rejected' ? 'rejected' : 'pending');
+                const reasonTooltip = u.rejection_reason ? `title="Rejection Reason: ${u.rejection_reason}"` : '';
 
                 return `
                     <tr>
@@ -1040,7 +1042,7 @@ const App = {
                         <td><span style="font-size:0.82rem; color: #515154;">${orgInfo}</span></td>
                         <td>${has2fa}</td>
                         <td>
-                            <span class="verification-badge ${isVerified ? 'verified' : 'pending'}">
+                            <span class="verification-badge ${verifClass}" ${reasonTooltip}>
                                 ${u.verification_status.toUpperCase()}
                             </span>
                         </td>
@@ -1049,9 +1051,10 @@ const App = {
                                 <button type="button" class="btn-action-verify" onclick="App.handleVerifyUser('${uid}', 'verified')">
                                     ✓ Verify Engineer
                                 </button>
-                                <button type="button" class="btn-action-reject" onclick="App.handleVerifyUser('${uid}', 'rejected')">
+                                ${u.verification_status !== 'rejected' ? `
+                                <button type="button" class="btn-action-reject" onclick="App.openRejectionModal('${uid}', '${(u.name || 'Engineer').replace(/'/g, "\\'")}', '${u.email}')">
                                     ✕ Reject
-                                </button>
+                                </button>` : ''}
                             ` : `<span style="color: #86868b; font-size: 0.8rem;">Active</span>`}
                         </td>
                     </tr>
@@ -1060,6 +1063,164 @@ const App = {
         } catch (e) {
             console.error("Admin data load error:", e);
             tbody.innerHTML = `<tr><td colspan="7" style="text-align:center; padding: 2rem; color: #dc2626;">Admin access required. Please authenticate as administrator.</td></tr>`;
+        }
+    },
+
+    openRejectionModal(userId, name, email) {
+        this.pendingRejectionUserId = userId;
+        const modal = document.getElementById('engineerRejectionModal');
+        const nameEl = document.getElementById('rejectionTargetName');
+        const emailEl = document.getElementById('rejectionTargetEmail');
+        const selectEl = document.getElementById('rejectionReasonSelect');
+        const notesEl = document.getElementById('rejectionNotesText');
+
+        if (nameEl) nameEl.textContent = name || 'Engineer';
+        if (emailEl) emailEl.textContent = email || '';
+        if (selectEl) selectEl.value = 'Unable to verify submitted EBK registration';
+        if (notesEl) notesEl.value = '';
+
+        if (modal) modal.classList.add('active');
+    },
+
+    bindRejectionModal() {
+        const modal = document.getElementById('engineerRejectionModal');
+        const btnCancel = document.getElementById('btnCancelRejection');
+        const btnClose = document.getElementById('btnCloseRejectionModal');
+        const btnConfirm = document.getElementById('btnConfirmRejection');
+        const reasonSelect = document.getElementById('rejectionReasonSelect');
+        const notesText = document.getElementById('rejectionNotesText');
+
+        const closeModal = () => {
+            if (modal) modal.classList.remove('active');
+            this.pendingRejectionUserId = null;
+        };
+
+        if (btnCancel) btnCancel.addEventListener('click', closeModal);
+        if (btnClose) btnClose.addEventListener('click', closeModal);
+
+        if (btnConfirm) {
+            btnConfirm.addEventListener('click', async () => {
+                if (!this.pendingRejectionUserId) return;
+                const reason = reasonSelect ? reasonSelect.value : 'Unable to verify submitted EBK registration';
+                const notes = notesText ? notesText.value.trim() : '';
+
+                if (reason === 'Other' && !notes) {
+                    this.showToast("Please provide explanation notes when 'Other' reason is selected.", true);
+                    if (notesText) notesText.focus();
+                    return;
+                }
+
+                try {
+                    btnConfirm.disabled = true;
+                    btnConfirm.textContent = 'Processing...';
+                    const result = await window.Api.verifyUser(this.pendingRejectionUserId, 'rejected', reason, notes);
+                    this.showToast(result.message || "Engineer application rejected and applicant notified.");
+                    closeModal();
+                    await this.loadAdminData();
+                    if (typeof this.loadAdminDashboard === 'function') {
+                        this.loadAdminDashboard().catch(() => {});
+                    }
+                } catch (err) {
+                    console.error("Rejection error:", err);
+                    this.showToast(err.message || "Failed to submit rejection decision.", true);
+                } finally {
+                    btnConfirm.disabled = false;
+                    btnConfirm.textContent = 'Confirm Rejection';
+                }
+            });
+        }
+    },
+
+    bindAdminNoticeModal() {
+        const modal = document.getElementById('adminNoticeModal');
+        const btnOpen = document.getElementById('btnOpenAdminNotice');
+        const btnCancel = document.getElementById('btnCancelAdminNotice');
+        const btnClose = document.getElementById('btnCloseAdminNotice');
+        const btnConfirm = document.getElementById('btnConfirmAdminNotice');
+        const modeSelect = document.getElementById('adminNoticeMode');
+        const targetGroup = document.getElementById('adminNoticeTargetGroup');
+        const targetUserSelect = document.getElementById('adminNoticeTargetUser');
+        const catSelect = document.getElementById('adminNoticeCategory');
+        const titleInput = document.getElementById('adminNoticeTitleInput');
+        const msgText = document.getElementById('adminNoticeMessage');
+
+        const closeModal = () => {
+            if (modal) modal.classList.remove('active');
+        };
+
+        if (btnOpen) {
+            btnOpen.addEventListener('click', async () => {
+                try {
+                    const data = await window.Api.getUsers();
+                    const users = data.users || [];
+                    if (targetUserSelect) {
+                        targetUserSelect.innerHTML = `<option value="">Select recipient...</option>` +
+                            users.map(u => `<option value="${u.user_id || u._id}">${u.name} (${u.email}) [${u.role.toUpperCase()}]</option>`).join('');
+                    }
+                } catch (e) {
+                    console.warn("Failed to load users for notice target:", e);
+                }
+                if (titleInput) titleInput.value = 'Professional Registration Notice';
+                if (msgText) msgText.value = '';
+                if (modal) modal.classList.add('active');
+            });
+        }
+
+        if (modeSelect) {
+            modeSelect.addEventListener('change', (e) => {
+                if (targetGroup) {
+                    targetGroup.style.display = e.target.value === 'broadcast' ? 'none' : 'block';
+                }
+            });
+        }
+
+        if (catSelect) {
+            catSelect.addEventListener('change', (e) => {
+                if (titleInput) {
+                    titleInput.value = `InfraVision: ${e.target.value}`;
+                }
+            });
+        }
+
+        if (btnCancel) btnCancel.addEventListener('click', closeModal);
+        if (btnClose) btnClose.addEventListener('click', closeModal);
+
+        if (btnConfirm) {
+            btnConfirm.addEventListener('click', async () => {
+                const mode = modeSelect ? modeSelect.value : 'targeted';
+                const targetId = targetUserSelect ? targetUserSelect.value : '';
+                const category = catSelect ? catSelect.value : 'Administrative Notice';
+                const title = titleInput ? titleInput.value.trim() : '';
+                const message = msgText ? msgText.value.trim() : '';
+
+                if (mode === 'targeted' && !targetId) {
+                    this.showToast("Please select a recipient user for targeted notice.", true);
+                    return;
+                }
+                if (!message) {
+                    this.showToast("Please enter a notice message.", true);
+                    return;
+                }
+
+                try {
+                    btnConfirm.disabled = true;
+                    btnConfirm.textContent = 'Dispatching...';
+                    const res = await window.Api.sendAdminNotice({
+                        type: mode,
+                        target_user_id: targetId,
+                        category,
+                        title,
+                        message
+                    });
+                    this.showToast(res.message || "Notice dispatched successfully!");
+                    closeModal();
+                } catch (err) {
+                    this.showToast(err.message || "Failed to dispatch notice.", true);
+                } finally {
+                    btnConfirm.disabled = false;
+                    btnConfirm.textContent = 'Dispatch Notice';
+                }
+            });
         }
     },
 
@@ -1370,36 +1531,44 @@ const App = {
     setupGoogleIdentity() {
         if (!window.google?.accounts?.id || !this.authConfig?.google_client_id) return;
         try {
-            window.google.accounts.id.initialize({
-                client_id: this.authConfig.google_client_id,
-                callback: async (response) => {
-                    if (response.credential) {
-                        try {
-                            const data = await window.Api.loginWithGoogle(response.credential);
-                            if (data.require_2fa) {
-                                this.show2FAChallenge(data);
-                                return;
+            if (!this._gisInitialized) {
+                window.google.accounts.id.initialize({
+                    client_id: this.authConfig.google_client_id,
+                    auto_select: false,
+                    callback: async (response) => {
+                        if (response.credential) {
+                            try {
+                                const data = await window.Api.loginWithGoogle(response.credential);
+                                if (data.require_2fa) {
+                                    this.show2FAChallenge(data);
+                                    return;
+                                }
+                                this.currentUser = data.user;
+                                this.updateSessionUI();
+                                this.showToast(`Signed in with Google as ${data.user.name || data.user.email}!`);
+                                this.routeUserAfterAuth(data.user);
+                            } catch (err) {
+                                console.error("[Google Auth Error]", err);
+                                this.showToast("Google Sign-In could not be completed. Please try again or sign in using email.", true);
                             }
-                            this.currentUser = data.user;
-                            this.updateSessionUI();
-                            this.showToast(`Signed in with Google as ${data.user.name || data.user.email}!`);
-                            this.routeUserAfterAuth(data.user);
-                        } catch (err) {
-                            this.showToast(err.message || "Google sign in failed.", true);
                         }
                     }
-                }
-            });
+                });
+                this._gisInitialized = true;
+            }
 
             const googleContainer = document.getElementById('googleSignInContainer');
             if (googleContainer) {
+                // Responsive width between 280 and 380
+                const computedWidth = Math.min(380, Math.max(280, googleContainer.offsetWidth || 380));
                 googleContainer.innerHTML = '';
                 window.google.accounts.id.renderButton(googleContainer, {
                     theme: 'outline',
                     size: 'large',
                     text: 'continue_with',
                     shape: 'rectangular',
-                    width: 280
+                    width: computedWidth,
+                    logo_alignment: 'left'
                 });
             }
         } catch (e) {

@@ -26,12 +26,15 @@ def list_users(current_user):
     sanitized = [User.from_dict(u).to_dict() for u in users]
     return jsonify({'users': sanitized, 'count': len(sanitized)}), 200
 
+from ..services.notification_service import notification_service
+
 @admin_bp.route('/users/<user_id>/verify', methods=['PUT'])
 @role_required('admin')
 def verify_professional_user(current_user, user_id):
     """
     FR-10: Administrator verification of professional engineer or inspector accounts.
     Verification statuses: 'verified', 'rejected', 'pending'.
+    Saves rejection reason, notes, audit metadata, and dispatches applicant notification.
     """
     data = request.get_json() or {}
     new_status = data.get('status', 'verified')
@@ -40,15 +43,142 @@ def verify_professional_user(current_user, user_id):
 
     target = db_service.find_one('users', {'_id': user_id})
     if not target:
+        target = db_service.find_one('users', {'user_id': user_id})
+    if not target:
         return jsonify({'error': 'User not found.'}), 404
 
-    db_service.update_one('users', {'_id': user_id}, {'verification_status': new_status})
+    target_id = str(target['_id'])
+    now_iso = datetime.now(timezone.utc).isoformat()
+    admin_id = str(current_user.get('_id') or current_user.get('user_id') or 'admin')
 
-    return jsonify({
-        'message': f"Professional account verification status updated to '{new_status}'.",
-        'user_id': user_id,
-        'verification_status': new_status
-    }), 200
+    if new_status == 'rejected':
+        rejection_reason = data.get('rejection_reason', '').strip() or 'Unable to verify submitted EBK registration'
+        rejection_notes = data.get('rejection_notes', '').strip()
+
+        update_fields = {
+            'verification_status': 'rejected',
+            'rejection_reason': rejection_reason,
+            'rejection_notes': rejection_notes,
+            'rejected_at': now_iso,
+            'rejected_by': admin_id
+        }
+        db_service.update_one('users', {'_id': target['_id']}, update_fields)
+
+        # Operational notification to the applicant
+        msg_body = (
+            f"We were unable to verify your submitted professional registration.\n\n"
+            f"Reason:\n{rejection_reason}.\n\n"
+        )
+        if rejection_notes:
+            msg_body += f"Supplementary Note:\n{rejection_notes}\n\n"
+        msg_body += "Please review your Engineer registration details and submit the correct information."
+
+        notification_service.create_notification(
+            user_id=target_id,
+            report_id=None,
+            event_type='engineer_verification_decision',
+            title="Engineer verification requires attention",
+            message=msg_body,
+            metadata={'status': 'rejected', 'reason': rejection_reason}
+        )
+
+        return jsonify({
+            'message': "Engineer application rejected and applicant notified.",
+            'user_id': target_id,
+            'verification_status': 'rejected',
+            'rejection_reason': rejection_reason
+        }), 200
+
+    elif new_status == 'verified':
+        update_fields = {
+            'verification_status': 'verified',
+            'verified_at': now_iso,
+            'verified_by': admin_id,
+            'rejection_reason': None,
+            'rejection_notes': None
+        }
+        db_service.update_one('users', {'_id': target['_id']}, update_fields)
+
+        notification_service.create_notification(
+            user_id=target_id,
+            report_id=None,
+            event_type='engineer_verification_decision',
+            title="Engineer Account Verified",
+            message="Your professional engineer credentials have been verified by the administrator. You now have full access to defect assessment, validation, and safety advisory tools.",
+            metadata={'status': 'verified'}
+        )
+
+        return jsonify({
+            'message': f"Professional account verified successfully.",
+            'user_id': target_id,
+            'verification_status': 'verified'
+        }), 200
+
+    else:
+        db_service.update_one('users', {'_id': target['_id']}, {'verification_status': 'pending'})
+        return jsonify({
+            'message': f"Professional account reset to pending status.",
+            'user_id': target_id,
+            'verification_status': 'pending'
+        }), 200
+
+@admin_bp.route('/notifications/send', methods=['POST'])
+@role_required('admin')
+def send_admin_notice(current_user):
+    """
+    FR-10 / Section T: Admin Operational Notice.
+    - Targeted account notice: send to ONE user (e.g., credential issue, account reminder)
+    - System announcement: send to active users (broadcast)
+    """
+    data = request.get_json() or {}
+    mode = data.get('type', 'targeted').strip().lower()
+    category = data.get('category', 'Administrative Notice').strip()
+    title = data.get('title', '').strip() or f"InfraVision Notice: {category}"
+    message = data.get('message', '').strip()
+
+    if not message:
+        return jsonify({'error': 'Message content is required.'}), 400
+
+    admin_id = str(current_user.get('_id') or current_user.get('user_id') or 'admin')
+
+    if mode == 'broadcast':
+        audience = data.get('audience', 'all')
+        count = notification_service.broadcast_notification(
+            audience=audience,
+            title=title,
+            message=message,
+            sender_id=admin_id,
+            event_type='system_announcement',
+            metadata={'category': category, 'broadcast': True}
+        )
+        return jsonify({
+            'message': f'System announcement broadcast successfully to {count} users.',
+            'recipients_count': count
+        }), 200
+    else:
+        target_user_id = data.get('target_user_id')
+        if not target_user_id:
+            return jsonify({'error': 'Target user ID is required for targeted notice.'}), 400
+
+        target = db_service.find_one('users', {'_id': target_user_id})
+        if not target:
+            target = db_service.find_one('users', {'user_id': target_user_id})
+        if not target:
+            return jsonify({'error': 'Target user not found.'}), 404
+
+        actual_id = str(target.get('_id') or target.get('user_id'))
+        doc = notification_service.create_notification(
+            user_id=actual_id,
+            report_id=None,
+            event_type='admin_notice',
+            title=title,
+            message=message,
+            metadata={'category': category, 'sender_id': admin_id}
+        )
+        return jsonify({
+            'message': f"Targeted notice sent to {target.get('email', actual_id)}.",
+            'notification': doc
+        }), 200
 
 @admin_bp.route('/stats', methods=['GET'])
 @role_required('admin')
