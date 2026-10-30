@@ -247,3 +247,71 @@ def get_review(current_user, assessment_id):
     if not review:
         return jsonify({'message': 'No review completed for this assessment yet.', 'review': None}), 200
     return jsonify({'review': review}), 200
+
+@reviews_bp.route('/<report_id>/safety-advisory', methods=['POST'])
+@role_required('engineer', 'admin')
+def issue_safety_advisory(current_user, report_id):
+    """
+    FR-06 / Section S: Engineer-issued Report-Linked Safety Advisory.
+    Controlled categories:
+    - Exercise caution
+    - Avoid this area
+    - Dangerous road defect
+    - Reduce speed / drive with caution
+    - Inspection underway
+    - Temporary access concern
+    """
+    import uuid
+    from ..services.notification_service import notification_service
+
+    ALLOWED_CATEGORIES = [
+        'Exercise caution',
+        'Avoid this area',
+        'Dangerous road defect',
+        'Reduce speed / drive with caution',
+        'Inspection underway',
+        'Temporary access concern'
+    ]
+
+    data = request.get_json() or {}
+    category = data.get('category', '').strip()
+    note = data.get('note', '').strip()
+
+    if category not in ALLOWED_CATEGORIES:
+        return jsonify({
+            'error': f"Invalid advisory category. Permitted: {', '.join(ALLOWED_CATEGORIES)}"
+        }), 400
+
+    report = db_service.find_one('infrastructure_reports', {'_id': report_id})
+    if not report:
+        return jsonify({'error': 'Infrastructure report not found.'}), 404
+
+    now_iso = datetime.now(timezone.utc).isoformat()
+    eng_id = str(current_user.get('_id') or current_user.get('user_id'))
+    eng_name = current_user.get('name', 'Civil Engineer')
+
+    advisory_doc = {
+        'advisory_id': f"adv_{uuid.uuid4().hex[:10]}",
+        'report_id': report_id,
+        'category': category,
+        'professional_note': note,
+        'location_name': report.get('location_name', 'Monitored Infrastructure'),
+        'latitude': report.get('latitude'),
+        'longitude': report.get('longitude'),
+        'issued_by_id': eng_id,
+        'issued_by_name': eng_name,
+        'issued_at': now_iso
+    }
+
+    # Store in report metadata
+    meta = report.get('metadata') or {}
+    meta['safety_advisory'] = advisory_doc
+    db_service.update_one('infrastructure_reports', {'_id': report_id}, {'metadata': meta})
+
+    # Record and dispatch operational notification
+    notification_service.create_safety_advisory(advisory_doc)
+
+    return jsonify({
+        'message': 'Safety advisory published successfully.',
+        'advisory': advisory_doc
+    }), 201

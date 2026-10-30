@@ -89,6 +89,59 @@ const Review = {
         if (btnResolved) {
             btnResolved.addEventListener('click', () => this.handleLifecycleTransition('Resolved', 'Infrastructure defect remediation and road maintenance confirmed resolved.'));
         }
+
+        // Engineer Report-Linked Safety Advisory (Section S)
+        const btnAdvisory = document.getElementById('btnOpenSafetyAdvisory');
+        const modalAdvisory = document.getElementById('safetyAdvisoryModal');
+        const btnCloseAdvisory = document.getElementById('btnCloseSafetyAdvisory');
+        const btnCancelAdvisory = document.getElementById('btnCancelSafetyAdvisory');
+        const btnConfirmAdvisory = document.getElementById('btnConfirmSafetyAdvisory');
+
+        const closeAdvisory = () => {
+            if (modalAdvisory) modalAdvisory.classList.remove('active');
+        };
+
+        if (btnAdvisory) {
+            btnAdvisory.addEventListener('click', () => {
+                if (!this.currentReport) {
+                    window.App?.showToast("Please select a report first to issue a safety advisory.", true);
+                    return;
+                }
+                const locEl = document.getElementById('advisoryLocationName');
+                if (locEl) {
+                    locEl.textContent = this.currentReport.location_name || this.currentReport.metadata?.location_name || 'Corridor Asset';
+                }
+                if (modalAdvisory) modalAdvisory.classList.add('active');
+            });
+        }
+
+        if (btnCloseAdvisory) btnCloseAdvisory.addEventListener('click', closeAdvisory);
+        if (btnCancelAdvisory) btnCancelAdvisory.addEventListener('click', closeAdvisory);
+
+        if (btnConfirmAdvisory) {
+            btnConfirmAdvisory.addEventListener('click', async () => {
+                if (!this.currentReport) return;
+                const reportId = this.currentReport.report_id || this.currentReport._id;
+                const category = document.getElementById('advisoryCategorySelect')?.value || 'Exercise caution';
+                const note = document.getElementById('advisoryNoteText')?.value.trim() || '';
+
+                try {
+                    btnConfirmAdvisory.disabled = true;
+                    btnConfirmAdvisory.textContent = 'Publishing...';
+                    await window.Api.issueSafetyAdvisory(reportId, category, note);
+                    window.App?.showToast(`Safety Advisory (${category}) published successfully!`);
+                    closeAdvisory();
+                    if (document.getElementById('advisoryNoteText')) {
+                        document.getElementById('advisoryNoteText').value = '';
+                    }
+                } catch (err) {
+                    window.App?.showToast(err.message || 'Failed to publish advisory.', true);
+                } finally {
+                    btnConfirmAdvisory.disabled = false;
+                    btnConfirmAdvisory.textContent = 'Publish Advisory';
+                }
+            });
+        }
     },
 
     async loadCaseworkList(preselectReportId = null) {
