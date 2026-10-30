@@ -1,0 +1,340 @@
+import unittest
+from datetime import datetime, timezone, timedelta
+from backend.app import create_app
+from backend.app.services.database import db_service
+from backend.app.services.notification_service import notification_service
+from backend.app.utils.auth_helpers import create_access_token
+
+class TestFinalAcceptancePass(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        cls.app = create_app('testing')
+        cls.client = cls.app.test_client()
+
+    def setUp(self):
+        self.created_users = []
+        self.created_reports = []
+
+    def tearDown(self):
+        for uid in self.created_users:
+            db_service.db['users'].delete_one({'_id': uid})
+            db_service.db['citizen_notifications'].delete_many({'user_id': uid})
+        for rid in self.created_reports:
+            db_service.db['infrastructure_reports'].delete_one({'_id': rid})
+            db_service.db['safety_advisories'].delete_many({'report_id': rid})
+
+    # =========================================================================
+    # 1. GOOGLE SIGN-IN TESTS
+    # =========================================================================
+    def test_01_google_auth_creates_citizen_only(self):
+        """Verifies Google Sign-In creates new user with citizen role ONLY."""
+        test_email = f"google_cit_{int(datetime.now().timestamp())}@strathmore.edu"
+        res = self.client.post('/api/auth/google', json={
+            'email': test_email,
+            'name': 'New Google Citizen',
+            'sub': 'google_sub_cit_9988'
+        })
+        self.assertEqual(res.status_code, 200)
+        data = res.get_json()
+        self.assertIn('token', data)
+        user = data.get('user', {})
+        self.assertEqual(user.get('role'), 'citizen')
+        self.assertEqual(user.get('email'), test_email)
+        self.created_users.append(user.get('user_id') or user.get('_id'))
+
+    def test_02_google_auth_links_existing_citizen_without_duplication(self):
+        """Verifies Google Sign-In safely links to existing user without creating duplicates."""
+        test_email = f"existing_cit_{int(datetime.now().timestamp())}@strathmore.edu"
+        user_doc = {
+            '_id': f"usr_{int(datetime.now().timestamp())}",
+            'email': test_email,
+            'name': 'Existing Citizen',
+            'role': 'citizen',
+            'verification_status': 'verified',
+            'two_factor_enabled': False
+        }
+        db_service.insert('users', user_doc)
+        self.created_users.append(user_doc['_id'])
+
+        res = self.client.post('/api/auth/google', json={
+            'email': test_email,
+            'name': 'Existing Citizen Google Linked',
+            'sub': 'google_sub_link_123'
+        })
+        self.assertEqual(res.status_code, 200)
+        data = res.get_json()
+        self.assertFalse(data.get('require_2fa', False))
+        
+        # Verify user record updated with google_id
+        updated = db_service.find_one('users', {'email': test_email})
+        self.assertEqual(updated.get('google_id'), 'google_sub_link_123')
+
+    def test_03_google_auth_privileged_account_triggers_2fa(self):
+        """Verifies existing Engineer/Admin logging in with Google triggers mandatory 2FA OTP."""
+        test_email = f"eng_google_{int(datetime.now().timestamp())}@kenha.go.ke"
+        user_doc = {
+            '_id': f"usr_{int(datetime.now().timestamp())}",
+            'email': test_email,
+            'name': 'Eng. Privileged',
+            'role': 'engineer',
+            'verification_status': 'verified',
+            'two_factor_enabled': True
+        }
+        db_service.insert('users', user_doc)
+        self.created_users.append(user_doc['_id'])
+
+        res = self.client.post('/api/auth/google', json={
+            'email': test_email,
+            'name': 'Eng. Privileged',
+            'sub': 'google_sub_eng_7766'
+        })
+        self.assertEqual(res.status_code, 200)
+        data = res.get_json()
+        self.assertTrue(data.get('require_2fa'))
+        self.assertEqual(data.get('role'), 'engineer')
+        self.assertIn('two-factor', data.get('message', '').lower())
+
+    def test_04_google_auth_missing_credential_error(self):
+        """Verifies request without credential token returns 400 error."""
+        res = self.client.post('/api/auth/google', json={})
+        self.assertEqual(res.status_code, 400)
+        self.assertIn('credential', res.get_json().get('error', '').lower())
+
+    # =========================================================================
+    # 2. ENGINEER GOVERNANCE & REJECTION REASON WORKFLOW
+    # =========================================================================
+    def test_05_admin_verify_engineer_approval(self):
+        """Verifies Admin can approve pending engineer and notification is dispatched."""
+        eng_id = f"eng_appr_{int(datetime.now().timestamp())}"
+        admin_id = f"admin_usr_{int(datetime.now().timestamp())}"
+        
+        eng_doc = {
+            '_id': eng_id,
+            'email': f"{eng_id}@kenha.go.ke",
+            'name': 'Eng. Candidate',
+            'role': 'engineer',
+            'verification_status': 'pending',
+            'professional_reg_no': 'EBK/PE/2026/0101-DEMO'
+        }
+        admin_doc = {
+            '_id': admin_id,
+            'email': f"{admin_id}@infravision.ke",
+            'name': 'Administrator',
+            'role': 'admin'
+        }
+        db_service.insert('users', eng_doc)
+        db_service.insert('users', admin_doc)
+        self.created_users.extend([eng_id, admin_id])
+
+        with self.app.app_context():
+            token = create_access_token({'user_id': admin_id, 'email': admin_doc['email'], 'role': 'admin'})
+        headers = {'Authorization': f'Bearer {token}', 'Content-Type': 'application/json'}
+
+        res = self.client.put(f'/api/admin/users/{eng_id}/verify', json={'status': 'verified'}, headers=headers)
+        self.assertEqual(res.status_code, 200)
+        
+        updated = db_service.find_one('users', {'_id': eng_id})
+        self.assertEqual(updated.get('verification_status'), 'verified')
+        self.assertIsNotNone(updated.get('verified_at'))
+
+        # Check notification dispatched to the engineer
+        notifs = notification_service.get_user_notifications(eng_id)
+        self.assertTrue(any('Verified' in n.get('title', '') for n in notifs))
+
+    def test_06_admin_reject_engineer_with_reason_and_notes(self):
+        """Verifies Admin rejection persists reason, notes, audit, and dispatches explanation notice."""
+        eng_id = f"eng_rej_{int(datetime.now().timestamp())}"
+        admin_id = f"admin_usr_{int(datetime.now().timestamp())}"
+
+        eng_doc = {
+            '_id': eng_id,
+            'email': f"{eng_id}@kenha.go.ke",
+            'name': 'Eng. Incomplete',
+            'role': 'engineer',
+            'verification_status': 'pending',
+            'professional_reg_no': 'EBK/PE/2026/INVALID'
+        }
+        admin_doc = {
+            '_id': admin_id,
+            'email': f"{admin_id}@infravision.ke",
+            'name': 'System Administrator',
+            'role': 'admin'
+        }
+        db_service.insert('users', eng_doc)
+        db_service.insert('users', admin_doc)
+        self.created_users.extend([eng_id, admin_id])
+
+        with self.app.app_context():
+            token = create_access_token({'user_id': admin_id, 'email': admin_doc['email'], 'role': 'admin'})
+        headers = {'Authorization': f'Bearer {token}', 'Content-Type': 'application/json'}
+
+        rejection_payload = {
+            'status': 'rejected',
+            'rejection_reason': 'EBK number appears incorrect',
+            'rejection_notes': 'Please check with EBK secretariat and provide valid registration certificate.'
+        }
+        res = self.client.put(f'/api/admin/users/{eng_id}/verify', json=rejection_payload, headers=headers)
+        self.assertEqual(res.status_code, 200)
+        data = res.get_json()
+        self.assertEqual(data.get('verification_status'), 'rejected')
+
+        updated = db_service.find_one('users', {'_id': eng_id})
+        self.assertEqual(updated.get('verification_status'), 'rejected')
+        self.assertEqual(updated.get('rejection_reason'), 'EBK number appears incorrect')
+        self.assertEqual(updated.get('rejection_notes'), rejection_payload['rejection_notes'])
+        self.assertIsNotNone(updated.get('rejected_at'))
+        self.assertEqual(updated.get('rejected_by'), admin_id)
+
+        # Check notification
+        notifs = notification_service.get_user_notifications(eng_id)
+        self.assertTrue(len(notifs) >= 1)
+        rejection_notif = notifs[0]
+        self.assertEqual(rejection_notif.get('title'), "Engineer verification requires attention")
+        self.assertIn("EBK number appears incorrect", rejection_notif.get('message', ''))
+        self.assertIn("Please check with EBK secretariat", rejection_notif.get('message', ''))
+
+    def test_07_unauthorized_non_admin_cannot_verify_users(self):
+        """Verifies citizens and unverified engineers cannot access user verification endpoint."""
+        cit_id = f"cit_unauth_{int(datetime.now().timestamp())}"
+        cit_doc = {'_id': cit_id, 'email': f"{cit_id}@strathmore.edu", 'role': 'citizen'}
+        db_service.insert('users', cit_doc)
+        self.created_users.append(cit_id)
+
+        with self.app.app_context():
+            token = create_access_token({'user_id': cit_id, 'email': cit_doc['email'], 'role': 'citizen'})
+        headers = {'Authorization': f'Bearer {token}', 'Content-Type': 'application/json'}
+
+        res = self.client.put(f'/api/admin/users/{cit_id}/verify', json={'status': 'verified'}, headers=headers)
+        self.assertEqual(res.status_code, 403)
+
+    # =========================================================================
+    # 3. OPERATIONAL NOTIFICATIONS & NOTIFICATION CENTER
+    # =========================================================================
+    def test_08_notification_center_mark_read_and_mark_all_read(self):
+        """Verifies notification center lifecycle: get, mark read, mark all read."""
+        user_id = f"user_nc_{int(datetime.now().timestamp())}"
+        user_doc = {'_id': user_id, 'email': f"{user_id}@strathmore.edu", 'role': 'citizen'}
+        db_service.insert('users', user_doc)
+        self.created_users.append(user_id)
+
+        # Create two notifications
+        n1 = notification_service.create_notification(user_id, 'REP-01', 'verified', 'Report Verified', 'Test message 1')
+        n2 = notification_service.create_notification(user_id, 'REP-02', 'override', 'Severity Updated', 'Test message 2')
+
+        with self.app.app_context():
+            token = create_access_token({'user_id': user_id, 'email': user_doc['email'], 'role': 'citizen'})
+        headers = {'Authorization': f'Bearer {token}'}
+
+        # GET notifications
+        res = self.client.get('/api/users/notifications', headers=headers)
+        self.assertEqual(res.status_code, 200)
+        data = res.get_json()
+        self.assertEqual(data.get('unread_count'), 2)
+        self.assertEqual(len(data.get('notifications', [])), 2)
+
+        # Mark single as read
+        read_res = self.client.post(f"/api/users/notifications/{n1['_id']}/read", headers=headers)
+        self.assertEqual(read_res.status_code, 200)
+
+        # Check unread count is now 1
+        res2 = self.client.get('/api/users/notifications', headers=headers)
+        self.assertEqual(res2.get_json().get('unread_count'), 1)
+
+        # Mark all read
+        mark_all_res = self.client.post('/api/users/notifications/mark-all-read', headers=headers)
+        self.assertEqual(mark_all_res.status_code, 200)
+
+        # Check unread count is 0
+        res3 = self.client.get('/api/users/notifications', headers=headers)
+        self.assertEqual(res3.get_json().get('unread_count'), 0)
+
+    # =========================================================================
+    # 4. SAFETY ADVISORIES & ADMIN NOTICES
+    # =========================================================================
+    def test_09_engineer_safety_advisory_creation_and_broadcast(self):
+        """Verifies verified engineer can issue report-linked safety advisory with controlled categories."""
+        eng_id = f"eng_adv_{int(datetime.now().timestamp())}"
+        rep_id = f"REP-ADV-{int(datetime.now().timestamp())}"
+
+        eng_doc = {
+            '_id': eng_id,
+            'email': f"{eng_id}@kenha.go.ke",
+            'name': 'Eng. Inspector',
+            'role': 'engineer',
+            'verification_status': 'verified'
+        }
+        rep_doc = {
+            '_id': rep_id,
+            'report_id': rep_id,
+            'location_name': 'Uhuru Highway / Nyayo Roundabout',
+            'latitude': -1.298,
+            'longitude': 36.822,
+            'status': 'Under Review',
+            'metadata': {}
+        }
+        db_service.insert('users', eng_doc)
+        db_service.insert('infrastructure_reports', rep_doc)
+        self.created_users.append(eng_id)
+        self.created_reports.append(rep_id)
+
+        with self.app.app_context():
+            token = create_access_token({'user_id': eng_id, 'email': eng_doc['email'], 'role': 'engineer'})
+        headers = {'Authorization': f'Bearer {token}', 'Content-Type': 'application/json'}
+
+        # Valid safety advisory
+        advisory_payload = {
+            'category': 'Dangerous road defect',
+            'note': 'Deep longitudinal trench on inner lane. Reduce speed to 30km/h.'
+        }
+        res = self.client.post(f'/api/reviews/{rep_id}/safety-advisory', json=advisory_payload, headers=headers)
+        self.assertEqual(res.status_code, 201)
+        data = res.get_json()
+        self.assertEqual(data.get('advisory', {}).get('category'), 'Dangerous road defect')
+
+        # Invalid category should be rejected
+        bad_res = self.client.post(f'/api/reviews/{rep_id}/safety-advisory', json={'category': 'Invalid Category'}, headers=headers)
+        self.assertEqual(bad_res.status_code, 400)
+
+    def test_10_admin_notice_targeted_and_broadcast(self):
+        """Verifies admin notice endpoint supports targeted user notices and broadcast announcements."""
+        admin_id = f"admin_msg_{int(datetime.now().timestamp())}"
+        target_id = f"target_usr_{int(datetime.now().timestamp())}"
+
+        admin_doc = {'_id': admin_id, 'email': f"{admin_id}@infravision.ke", 'role': 'admin'}
+        target_doc = {'_id': target_id, 'email': f"{target_id}@kenha.go.ke", 'role': 'engineer', 'name': 'Target Eng', 'is_active': True}
+
+        db_service.insert('users', admin_doc)
+        db_service.insert('users', target_doc)
+        self.created_users.extend([admin_id, target_id])
+
+        with self.app.app_context():
+            token = create_access_token({'user_id': admin_id, 'email': admin_doc['email'], 'role': 'admin'})
+        headers = {'Authorization': f'Bearer {token}', 'Content-Type': 'application/json'}
+
+        # Targeted notice
+        targeted_payload = {
+            'type': 'targeted',
+            'target_user_id': target_id,
+            'category': 'Credential Issue',
+            'title': 'EBK License Renewal Required',
+            'message': 'Please update your annual practicing license before Nov 30.'
+        }
+        res_t = self.client.post('/api/admin/notifications/send', json=targeted_payload, headers=headers)
+        self.assertEqual(res_t.status_code, 200)
+
+        notifs = notification_service.get_user_notifications(target_id)
+        self.assertTrue(any('EBK License Renewal' in n.get('title', '') for n in notifs))
+
+        # Broadcast announcement
+        broadcast_payload = {
+            'type': 'broadcast',
+            'category': 'Scheduled Platform Maintenance',
+            'title': 'Platform Maintenance Notice',
+            'message': 'InfraVision will undergo scheduled maintenance this Sunday between 02:00 and 04:00 EAT.'
+        }
+        res_b = self.client.post('/api/admin/notifications/send', json=broadcast_payload, headers=headers)
+        self.assertEqual(res_b.status_code, 200)
+        self.assertGreater(res_b.get_json().get('recipients_count', 0), 0)
+
+if __name__ == '__main__':
+    unittest.main()
