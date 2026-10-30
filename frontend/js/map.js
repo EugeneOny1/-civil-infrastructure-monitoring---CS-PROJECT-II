@@ -33,11 +33,11 @@ const DefectMap = {
     heatLayer: null,
     showHotspotLayer: true,
     heatGradient: {
-        0.25: '#10b981', // Clean low-density green (#10b981 / #2ecc71)
-        0.50: '#f59e0b', // Moderate yellow/amber (#f59e0b / #f1c40f)
-        0.70: '#ea580c', // Higher orange (#ea580c / #e67e22)
-        0.88: '#ef4444', // Highest red (#ef4444 / #e74c3c)
-        1.00: '#991b1b'  // Peak hotspot crimson (#991b1b / #c0392b)
+        0.30: '#10b981', // Clean low-density green
+        0.55: '#f59e0b', // Moderate yellow/amber
+        0.75: '#ea580c', // Higher orange
+        0.90: '#ef4444', // Concentrated core red
+        1.00: '#991b1b'  // Peak hotspot crimson
     },
 
     getZoomHeatOptions(zoom) {
@@ -45,16 +45,16 @@ const DefectMap = {
         // Prevents country-scale ballooning and city-scale foggy halos.
         if (zoom <= 7) {
             // Far / country scale: strongly attenuated to prevent misleading nationwide clouds
-            return { radius: 12, blur: 10, minOpacity: 0.08, attenuated: true };
+            return { radius: 10, blur: 8, minOpacity: 0.05, attenuated: true };
         } else if (zoom <= 10) {
             // Regional / greater Nairobi view
-            return { radius: 16, blur: 14, minOpacity: 0.12, attenuated: false };
+            return { radius: 14, blur: 10, minOpacity: 0.10, attenuated: false };
         } else if (zoom <= 13) {
-            // City / Nairobi default scale (zoom 11-13)
-            return { radius: 24, blur: 18, minOpacity: 0.20, attenuated: false };
+            // City / Nairobi default scale (zoom 11-13) - crisp point concentration, visible roads
+            return { radius: 18, blur: 12, minOpacity: 0.18, attenuated: false };
         } else {
             // Street / neighbourhood scale (zoom >= 14)
-            return { radius: 34, blur: 22, minOpacity: 0.24, attenuated: false };
+            return { radius: 26, blur: 16, minOpacity: 0.22, attenuated: false };
         }
     },
 
@@ -62,6 +62,7 @@ const DefectMap = {
         if (!this.map || !this.heatLayer) return;
         const currentZoom = this.map.getZoom();
         const opts = this.getZoomHeatOptions(currentZoom);
+        const heatPane = this.map.getPane('heatmapPane');
 
         // Update existing layer options without recreating instances
         this.heatLayer.setOptions({
@@ -76,13 +77,23 @@ const DefectMap = {
         // and restore automatically when zooming back in.
         if (this.showHotspotLayer) {
             if (opts.attenuated) {
+                if (heatPane) heatPane.style.display = 'none';
                 if (this.map.hasLayer(this.heatLayer)) {
                     this.map.removeLayer(this.heatLayer);
                 }
             } else {
+                if (heatPane) heatPane.style.display = '';
                 if (!this.map.hasLayer(this.heatLayer)) {
                     this.heatLayer.addTo(this.map);
                 }
+                if (typeof this.heatLayer.redraw === 'function') {
+                    this.heatLayer.redraw();
+                }
+            }
+        } else {
+            if (heatPane) heatPane.style.display = 'none';
+            if (this.map.hasLayer(this.heatLayer)) {
+                this.map.removeLayer(this.heatLayer);
             }
         }
     },
@@ -437,19 +448,28 @@ const DefectMap = {
         this.showHotspotLayer = !this.showHotspotLayer;
         this.syncHotspotButtonState();
 
+        const heatPane = this.map ? this.map.getPane('heatmapPane') : null;
+
         if (this.heatLayer && this.map) {
             const currentZoom = this.map.getZoom();
             const opts = this.getZoomHeatOptions(currentZoom);
 
             if (this.showHotspotLayer && !opts.attenuated) {
+                if (heatPane) heatPane.style.display = '';
                 if (!this.map.hasLayer(this.heatLayer)) {
                     this.heatLayer.addTo(this.map);
                 }
+                if (typeof this.heatLayer.redraw === 'function') {
+                    this.heatLayer.redraw();
+                }
             } else {
+                if (heatPane) heatPane.style.display = 'none';
                 if (this.map.hasLayer(this.heatLayer)) {
                     this.map.removeLayer(this.heatLayer);
                 }
             }
+        } else if (heatPane) {
+            heatPane.style.display = this.showHotspotLayer ? '' : 'none';
         }
     },
 
@@ -561,6 +581,7 @@ const DefectMap = {
         if (typeof L.heatLayer === 'function') {
             const currentZoom = this.map ? this.map.getZoom() : (this.config.default_zoom || 12);
             const zoomOpts = this.getZoomHeatOptions(currentZoom);
+            const heatPane = this.map ? this.map.getPane('heatmapPane') : null;
 
             if (!this.heatLayer) {
                 this.heatLayer = L.heatLayer(heatPoints, {
@@ -574,7 +595,10 @@ const DefectMap = {
                     gradient: this.heatGradient
                 });
                 if (this.showHotspotLayer && !zoomOpts.attenuated && this.map) {
+                    if (heatPane) heatPane.style.display = '';
                     this.heatLayer.addTo(this.map);
+                } else if (heatPane) {
+                    heatPane.style.display = 'none';
                 }
             } else {
                 this.heatLayer.setLatLngs(heatPoints);
@@ -584,10 +608,19 @@ const DefectMap = {
                     minOpacity: zoomOpts.minOpacity,
                     gradient: this.heatGradient
                 });
-                if (this.showHotspotLayer && !zoomOpts.attenuated && this.map && !this.map.hasLayer(this.heatLayer)) {
-                    this.heatLayer.addTo(this.map);
-                } else if ((!this.showHotspotLayer || zoomOpts.attenuated) && this.map && this.map.hasLayer(this.heatLayer)) {
-                    this.map.removeLayer(this.heatLayer);
+                if (this.showHotspotLayer && !zoomOpts.attenuated && this.map) {
+                    if (heatPane) heatPane.style.display = '';
+                    if (!this.map.hasLayer(this.heatLayer)) {
+                        this.heatLayer.addTo(this.map);
+                    }
+                    if (typeof this.heatLayer.redraw === 'function') {
+                        this.heatLayer.redraw();
+                    }
+                } else {
+                    if (heatPane) heatPane.style.display = 'none';
+                    if (this.map && this.map.hasLayer(this.heatLayer)) {
+                        this.map.removeLayer(this.heatLayer);
+                    }
                 }
             }
         }
