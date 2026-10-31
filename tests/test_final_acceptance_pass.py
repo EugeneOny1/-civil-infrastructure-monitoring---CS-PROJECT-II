@@ -336,5 +336,141 @@ class TestFinalAcceptancePass(unittest.TestCase):
         self.assertEqual(res_b.status_code, 200)
         self.assertGreater(res_b.get_json().get('recipients_count', 0), 0)
 
+    def test_11_review_next_action_and_follow_up_date_persistence(self):
+        """Verifies professional review and lifecycle endpoints persist next_action and follow_up_date."""
+        eng_id = f"eng_rev_{int(datetime.now().timestamp())}"
+        rep_id = f"REP-NA-{int(datetime.now().timestamp())}"
+        img_id = f"img_na_{int(datetime.now().timestamp())}"
+        ass_id = f"ass_na_{int(datetime.now().timestamp())}"
+
+        eng_doc = {'_id': eng_id, 'email': f"{eng_id}@kenha.go.ke", 'name': 'Eng. Reviewer', 'role': 'engineer', 'verification_status': 'verified'}
+        rep_doc = {'_id': rep_id, 'report_id': rep_id, 'status': 'Under Review', 'metadata': {}}
+        img_doc = {'_id': img_id, 'report_id': rep_id, 'image_path': 'seed_pothole.jpg'}
+        ass_doc = {'_id': ass_id, 'image_id': img_id, 'defect_class': 'Pothole', 'relative_severity': 'Critical'}
+
+        db_service.insert('users', eng_doc)
+        db_service.insert('infrastructure_reports', rep_doc)
+        db_service.insert('submitted_images', img_doc)
+        db_service.insert('ai_assessments', ass_doc)
+
+        self.created_users.append(eng_id)
+        self.created_reports.append(rep_id)
+
+        with self.app.app_context():
+            token = create_access_token({'user_id': eng_id, 'email': eng_doc['email'], 'role': 'engineer'})
+        headers = {'Authorization': f'Bearer {token}', 'Content-Type': 'application/json'}
+
+        # 1. Update lifecycle status with next action and target date
+        status_payload = {
+            'target_status': 'Verified',
+            'notes': 'Defect confirmed during on-site survey.',
+            'next_action': 'On-site inspection recommended',
+            'follow_up_date': '2026-11-15'
+        }
+        res = self.client.post(f'/api/reviews/report/{rep_id}', json=status_payload, headers=headers)
+        self.assertEqual(res.status_code, 200)
+
+        # Check DB metadata
+        updated_rep = db_service.find_one('infrastructure_reports', {'_id': rep_id})
+        self.assertEqual(updated_rep.get('status'), 'Verified')
+        self.assertEqual(updated_rep.get('metadata', {}).get('next_action'), 'On-site inspection recommended')
+        self.assertEqual(updated_rep.get('metadata', {}).get('follow_up_date'), '2026-11-15')
+
+        # 2. Check rejection of invalid next action
+        bad_payload = {
+            'target_status': 'Verified',
+            'next_action': 'Invalid Nonexistent Action'
+        }
+        bad_res = self.client.post(f'/api/reviews/report/{rep_id}', json=bad_payload, headers=headers)
+        self.assertEqual(bad_res.status_code, 400)
+
+    def test_12_user_reports_enrichment_with_reviews(self):
+        """Verifies /api/users/reports returns citizen reports enriched with review details."""
+        cit_id = f"cit_track_{int(datetime.now().timestamp())}"
+        rep_id = f"REP-CIT-{int(datetime.now().timestamp())}"
+        img_id = f"img_cit_{int(datetime.now().timestamp())}"
+        ass_id = f"ass_cit_{int(datetime.now().timestamp())}"
+        rev_id = f"rev_cit_{int(datetime.now().timestamp())}"
+
+        cit_doc = {'_id': cit_id, 'email': f"{cit_id}@gmail.com", 'name': 'Citizen Submitter', 'role': 'citizen', 'is_active': True}
+        rep_doc = {
+            '_id': rep_id,
+            'report_id': rep_id,
+            'user_id': cit_id,
+            'status': 'Verified',
+            'metadata': {'location_name': 'Haile Selassie Avenue', 'next_action': 'Routine maintenance plan'}
+        }
+        img_doc = {'_id': img_id, 'report_id': rep_id, 'image_path': 'seed_crack.jpg'}
+        ass_doc = {'_id': ass_id, 'image_id': img_id, 'defect_class': 'Crack', 'relative_severity': 'Low'}
+        rev_doc = {
+            '_id': rev_id,
+            'report_id': rep_id,
+            'assessment_id': ass_id,
+            'reviewer_name': 'Eng. P. Njuguna, PE',
+            'decision': 'Confirmed',
+            'next_action': 'Routine maintenance plan',
+            'comments': 'Verified surface crack.'
+        }
+
+        db_service.insert('users', cit_doc)
+        db_service.insert('infrastructure_reports', rep_doc)
+        db_service.insert('submitted_images', img_doc)
+        db_service.insert('ai_assessments', ass_doc)
+        db_service.insert('professional_reviews', rev_doc)
+
+        self.created_users.append(cit_id)
+        self.created_reports.append(rep_id)
+
+        with self.app.app_context():
+            token = create_access_token({'user_id': cit_id, 'email': cit_doc['email'], 'role': 'citizen'})
+        headers = {'Authorization': f'Bearer {token}'}
+
+        res = self.client.get('/api/users/reports', headers=headers)
+        self.assertEqual(res.status_code, 200)
+        reports = res.get_json().get('reports', [])
+        target = next((r for r in reports if r['report']['_id'] == rep_id), None)
+        self.assertIsNotNone(target)
+        self.assertIn('review', target)
+        self.assertEqual(target['review'].get('reviewer_name'), 'Eng. P. Njuguna, PE')
+        self.assertEqual(target['review'].get('next_action'), 'Routine maintenance plan')
+
+    def test_13_admin_broadcast_audience_filtering(self):
+        """Verifies broadcast notifications respect target audience role scoping."""
+        admin_id = f"admin_bcast_{int(datetime.now().timestamp())}"
+        cit_id = f"cit_aud_{int(datetime.now().timestamp())}"
+        eng_id = f"eng_aud_{int(datetime.now().timestamp())}"
+
+        admin_doc = {'_id': admin_id, 'email': f"{admin_id}@infravision.ke", 'role': 'admin'}
+        cit_doc = {'_id': cit_id, 'email': f"{cit_id}@gmail.com", 'role': 'citizen', 'is_active': True}
+        eng_doc = {'_id': eng_id, 'email': f"{eng_id}@kenha.go.ke", 'role': 'engineer', 'is_active': True}
+
+        db_service.insert('users', admin_doc)
+        db_service.insert('users', cit_doc)
+        db_service.insert('users', eng_doc)
+        self.created_users.extend([admin_id, cit_id, eng_id])
+
+        with self.app.app_context():
+            token = create_access_token({'user_id': admin_id, 'email': admin_doc['email'], 'role': 'admin'})
+        headers = {'Authorization': f'Bearer {token}', 'Content-Type': 'application/json'}
+
+        # Broadcast to engineers only
+        payload = {
+            'type': 'broadcast',
+            'audience': 'engineer',
+            'category': 'Operational Guidance',
+            'title': 'Engineer Protocol Update',
+            'message': 'New protocol for bridge joint inspection.'
+        }
+        res = self.client.post('/api/admin/notifications/send', json=payload, headers=headers)
+        self.assertEqual(res.status_code, 200)
+
+        # Engineer received it
+        eng_notifs = notification_service.get_user_notifications(eng_id)
+        self.assertTrue(any('Engineer Protocol Update' in n.get('title', '') for n in eng_notifs))
+
+        # Citizen did not receive it
+        cit_notifs = notification_service.get_user_notifications(cit_id)
+        self.assertFalse(any('Engineer Protocol Update' in n.get('title', '') for n in cit_notifs))
+
 if __name__ == '__main__':
     unittest.main()
