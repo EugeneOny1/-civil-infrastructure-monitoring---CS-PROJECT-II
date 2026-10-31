@@ -7,21 +7,35 @@ from ..utils.auth_helpers import role_required
 
 reviews_bp = Blueprint('reviews', __name__, url_prefix='/api/reviews')
 
+VALID_NEXT_ACTIONS = [
+    'Continue monitoring',
+    'On-site inspection recommended',
+    'Refer to maintenance / responsible asset team',
+    'Issue Safety Advisory',
+    'No further action required at this stage'
+]
+
 @reviews_bp.route('/<assessment_id>', methods=['POST'])
 @role_required('engineer', 'admin')
 def submit_review(current_user, assessment_id):
     """
     FR-06: Engineer Defect Review & Assessment Validation.
     Allows verified civil engineers/inspectors to review, validate, or override
-    automated AI detection and relative visual severity, adding professional review notes.
+    automated AI detection and relative visual severity, adding professional review notes
+    and next action recommendations.
     """
     data = request.get_json() or {}
     decision = data.get('decision', ProfessionalReview.DECISION_CONFIRMED)
     comments = data.get('comments', '').strip()
     override_details = data.get('override_details', {})
+    next_action = data.get('next_action', '').strip()
+    follow_up_date = data.get('follow_up_date', '').strip()
 
     if decision not in [ProfessionalReview.DECISION_CONFIRMED, ProfessionalReview.DECISION_OVERRIDDEN]:
         return jsonify({'error': 'Invalid decision. Must be Confirmed or Overridden.'}), 400
+
+    if next_action and next_action not in VALID_NEXT_ACTIONS:
+        return jsonify({'error': f"Invalid next action. Permitted options: {', '.join(VALID_NEXT_ACTIONS)}"}), 400
 
     reviewer_id = str(current_user.get('_id') or current_user.get('user_id'))
 
@@ -73,6 +87,7 @@ def submit_review(current_user, assessment_id):
 
             history = meta.get('status_history', [])
             note_prefix = "Engineer (Self-submitted inspection)" if is_self_review else "Engineer"
+            action_log = f" [Next Action: {next_action}]" if next_action else ""
             history.append({
                 'status': InfrastructureReport.STATUS_VERIFIED,
                 'timestamp': now_iso,
@@ -80,7 +95,9 @@ def submit_review(current_user, assessment_id):
                 'submitter_id': submitter_id,
                 'reviewer_id': reviewer_id,
                 'is_self_review': is_self_review,
-                'note': f"{note_prefix} {decision}: {comments or 'Concurred with automated assessment.'}"
+                'next_action': next_action,
+                'follow_up_date': follow_up_date if next_action == 'On-site inspection recommended' else '',
+                'note': f"{note_prefix} {decision}: {comments or 'Concurred with automated assessment.'}{action_log}"
             })
             meta['status_history'] = history
             meta['engineer_decision'] = decision
@@ -91,10 +108,17 @@ def submit_review(current_user, assessment_id):
             meta['reviewed_at'] = now_iso
             meta['is_self_review'] = is_self_review
             meta['requires_engineer_review'] = False
+            if next_action:
+                meta['next_action'] = next_action
+            if follow_up_date and next_action == 'On-site inspection recommended':
+                meta['follow_up_date'] = follow_up_date
+
             meta['engineer_assessment'] = {
                 'decision': decision,
                 'override_details': override_details,
                 'comments': comments,
+                'next_action': next_action,
+                'follow_up_date': follow_up_date if next_action == 'On-site inspection recommended' else '',
                 'reviewer_id': reviewer_id,
                 'reviewer_name': reviewer_name,
                 'reviewed_at': now_iso
@@ -108,6 +132,8 @@ def submit_review(current_user, assessment_id):
             # Citizen feedback notification on professional review
             if submitter_id:
                 from ..services.notification_service import notification_service
+                action_text = f" Next Action: {next_action}." if next_action else ""
+                date_text = f" Target Inspection: {follow_up_date}." if (follow_up_date and next_action == 'On-site inspection recommended') else ""
                 if decision == ProfessionalReview.DECISION_OVERRIDDEN:
                     orig_class = assessment.get('defect_class', 'Defect')
                     orig_sev = assessment.get('relative_severity', 'Low')
@@ -119,18 +145,20 @@ def submit_review(current_user, assessment_id):
                     if corr_sev != orig_sev:
                         changes.append(f"{orig_sev} → {corr_sev}")
                     change_str = ", ".join(changes) if changes else f"{corr_class} ({corr_sev})"
-                    reason_str = f" Reason: {comments}" if comments else ""
-                    msg = f"Engineer assessment updated: {change_str}.{reason_str}"
+                    reason_str = f" Reason: {comments}." if comments else ""
+                    msg = f"Engineer assessment updated: {change_str}.{reason_str}{action_text}{date_text}"
                     notification_service.create_notification(submitter_id, report_id, 'override', 'Assessment Updated', msg)
                 else:
-                    feedback_str = f" Engineer feedback: {comments}" if comments and comments != 'Confirmed' else ""
-                    msg = f"Your report has been professionally verified.{feedback_str}"
+                    feedback_str = f" Engineer feedback: {comments}." if comments and comments != 'Confirmed' else ""
+                    msg = f"Your report has been professionally verified.{feedback_str}{action_text}{date_text}"
                     notification_service.create_notification(submitter_id, report_id, 'verified', 'Report Verified', msg)
 
     return jsonify({
         'message': 'Engineer review and assessment validation submitted successfully.',
         'review_id': review_id,
         'decision': decision,
+        'next_action': next_action,
+        'follow_up_date': follow_up_date,
         'status': InfrastructureReport.STATUS_VERIFIED
     }), 200
 
@@ -146,8 +174,13 @@ def review_by_report(current_user, report_id):
     decision = data.get('decision', 'Confirmed')
     target_status = data.get('target_status', InfrastructureReport.STATUS_VERIFIED)
     notes = data.get('notes', data.get('comments', '')).strip()
+    next_action = data.get('next_action', '').strip()
+    follow_up_date = data.get('follow_up_date', '').strip()
     reviewer_id = str(current_user.get('_id') or current_user.get('user_id'))
     reviewer_name = current_user.get('name', 'Civil Engineer')
+
+    if next_action and next_action not in VALID_NEXT_ACTIONS:
+        return jsonify({'error': f"Invalid next action. Permitted options: {', '.join(VALID_NEXT_ACTIONS)}"}), 400
 
     report = db_service.find_one('infrastructure_reports', {'_id': report_id})
     if not report:
@@ -169,6 +202,7 @@ def review_by_report(current_user, report_id):
 
     history = meta.get('status_history', [])
     note_prefix = "Review (Self-submitted report)" if is_self_review else "Review"
+    action_log = f" [Next Action: {next_action}]" if next_action else ""
     history.append({
         'status': target_status,
         'timestamp': now_iso,
@@ -176,7 +210,9 @@ def review_by_report(current_user, report_id):
         'submitter_id': submitter_id,
         'reviewer_id': reviewer_id,
         'is_self_review': is_self_review,
-        'note': f"{note_prefix} {decision}: {notes or 'Status updated by reviewing engineer.'}"
+        'next_action': next_action,
+        'follow_up_date': follow_up_date if next_action == 'On-site inspection recommended' else '',
+        'note': f"{note_prefix} {decision}: {notes or 'Status updated by reviewing engineer.'}{action_log}"
     })
     meta['status_history'] = history
     meta['engineer_decision'] = decision
@@ -190,10 +226,17 @@ def review_by_report(current_user, report_id):
     if target_status in [InfrastructureReport.STATUS_VERIFIED, InfrastructureReport.STATUS_RESOLVED]:
         meta['requires_engineer_review'] = False
 
+    if next_action:
+        meta['next_action'] = next_action
+    if follow_up_date and next_action == 'On-site inspection recommended':
+        meta['follow_up_date'] = follow_up_date
+
     meta['engineer_assessment'] = {
         'decision': decision,
         'override_details': override_details,
         'notes': notes,
+        'next_action': next_action,
+        'follow_up_date': follow_up_date if next_action == 'On-site inspection recommended' else '',
         'reviewer_id': reviewer_id,
         'reviewer_name': reviewer_name,
         'reviewed_at': now_iso
@@ -207,6 +250,8 @@ def review_by_report(current_user, report_id):
     # Dispatch citizen report feedback notification
     if submitter_id:
         from ..services.notification_service import notification_service
+        action_text = f" Next Action: {next_action}." if next_action else ""
+        date_text = f" Target Inspection: {follow_up_date}." if (follow_up_date and next_action == 'On-site inspection recommended') else ""
         if target_status == InfrastructureReport.STATUS_RESOLVED:
             feedback_str = f" Note: {notes}" if notes else ""
             msg = f"Your infrastructure report has been marked resolved.{feedback_str}"
@@ -222,12 +267,12 @@ def review_by_report(current_user, report_id):
             if corr_sev and corr_sev != orig_sev:
                 changes.append(f"{orig_sev} → {corr_sev}")
             change_str = ", ".join(changes) if changes else (f"{corr_class} ({corr_sev})" if corr_class else "Updated")
-            reason_str = f" Reason: {notes}" if notes else ""
-            msg = f"Engineer assessment updated: {change_str}.{reason_str}"
+            reason_str = f" Reason: {notes}." if notes else ""
+            msg = f"Engineer assessment updated: {change_str}.{reason_str}{action_text}{date_text}"
             notification_service.create_notification(submitter_id, report_id, 'override', 'Assessment Updated', msg)
         elif target_status == InfrastructureReport.STATUS_VERIFIED:
-            feedback_str = f" Engineer feedback: {notes}" if notes and notes != 'Confirmed' else ""
-            msg = f"Your report has been professionally verified.{feedback_str}"
+            feedback_str = f" Engineer feedback: {notes}." if notes and notes != 'Confirmed' else ""
+            msg = f"Your report has been professionally verified.{feedback_str}{action_text}{date_text}"
             notification_service.create_notification(submitter_id, report_id, 'verified', 'Report Verified', msg)
 
     return jsonify({
@@ -236,6 +281,8 @@ def review_by_report(current_user, report_id):
         'previous_status': current_status,
         'status': target_status,
         'engineer_decision': decision,
+        'next_action': next_action,
+        'follow_up_date': follow_up_date,
         'updated_at': now_iso
     }), 200
 

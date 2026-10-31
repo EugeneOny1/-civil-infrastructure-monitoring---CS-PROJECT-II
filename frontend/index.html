@@ -15,6 +15,8 @@
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="" />
     <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.css" />
     <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.Default.css" />
+    <!-- Boxicons CSS Library -->
+    <link href="https://unpkg.com/boxicons@2.1.4/css/boxicons.min.css" rel="stylesheet">
     <!-- Google Identity Services (GIS) Client Library -->
     <script src="https://accounts.google.com/gsi/client" async defer></script>
 </head>
@@ -780,13 +782,13 @@
                     <span class="kpi-footer">Awaiting engineer validation</span>
                 </div>
 
-                <div class="kpi-card">
+                <div class="kpi-card" id="kpiCardVerified" style="cursor: pointer;" title="Click to filter prioritized queue by verified inspections">
                     <span class="kpi-label">VERIFIED INSPECTIONS</span>
                     <div class="kpi-value-row">
                         <span class="kpi-number" id="kpiVerifiedCount">0</span>
                         <span class="kpi-unit">Records</span>
                     </div>
-                    <span class="kpi-footer">Validated by professional engineers</span>
+                    <span class="kpi-footer">Validated by professional engineers (click to filter)</span>
                 </div>
 
                 <div class="kpi-card">
@@ -831,7 +833,8 @@
                         <div class="filter-controls">
                             <select id="filterSeveritySelect" class="filter-select">
                                 <option value="">All Reports</option>
-                                <option value="Flagged">⚠️ Flagged for Review Only</option>
+                                <option value="Flagged">Flagged for Review Only</option>
+                                <option value="Verified">Verified Inspections</option>
                                 <option value="Critical">Critical Severity</option>
                                 <option value="Medium">Medium Severity</option>
                                 <option value="Low">Low Severity</option>
@@ -883,14 +886,14 @@
 
                 <div class="lifecycle-btn-group" style="margin-left:auto;">
                     <span class="map-filter-label" style="align-self:center; margin-right:4px;">Lifecycle:</span>
-                    <button type="button" class="btn-lifecycle action-review" id="btnMoveUnderReview" title="Mark inspection as Under Review">
-                        ⏳ Under Review
-                    </button>
                     <button type="button" class="btn-lifecycle action-verify" id="btnMarkVerified" title="Verify reported defect">
-                        ✓ Verify Defect
+                        <i class='bx bx-check-circle'></i> Verify Defect
+                    </button>
+                    <button type="button" class="btn-lifecycle action-review" id="btnMoveUnderReview" title="Mark inspection as Under Review">
+                        <i class='bx bx-time'></i> Under Review
                     </button>
                     <button type="button" class="btn-lifecycle action-resolve" id="btnMarkResolved" title="Close/Resolve infrastructure issue">
-                        ✓ Mark Resolved
+                        <i class='bx bx-check-double'></i> Mark Resolved
                     </button>
                 </div>
             </div>
@@ -994,7 +997,7 @@
 
                             <div class="action-matrix-card">
                                 <span class="matrix-tag">RELATIVE VISUAL SEVERITY</span>
-                                <p class="matrix-severity" id="reviewCalculatedSeverity">[ RELATIVE SEVERITY: — ]</p>
+                                <p class="matrix-severity" id="reviewCalculatedSeverity">RELATIVE SEVERITY: —</p>
                                 <p class="matrix-sla">Subject to professional civil engineering validation & sign-off</p>
                             </div>
                         </div>
@@ -1048,11 +1051,27 @@
                                 <textarea id="engineerNotes" class="field-textarea" rows="3" placeholder="Enter professional engineering review findings, maintenance recommendations, or field observations..."></textarea>
                             </div>
 
+                            <!-- Professional Next Action Recommendation -->
+                            <div class="form-group" style="margin-top: 0.75rem;">
+                                <label for="reviewNextAction" class="field-label">NEXT ACTION RECOMMENDATION *</label>
+                                <select id="reviewNextAction" class="field-input">
+                                    <option value="Continue monitoring" selected>Continue monitoring</option>
+                                    <option value="On-site inspection recommended">On-site inspection recommended</option>
+                                    <option value="Refer to maintenance / responsible asset team">Refer to maintenance / responsible asset team</option>
+                                    <option value="Issue Safety Advisory">Issue Safety Advisory</option>
+                                    <option value="No further action required at this stage">No further action required at this stage</option>
+                                </select>
+                            </div>
+                            <div class="form-group hidden" id="followUpDateGroup" style="margin-top: 0.5rem;">
+                                <label for="reviewFollowUpDate" class="field-label">TARGET INSPECTION DATE (OPTIONAL)</label>
+                                <input type="date" id="reviewFollowUpDate" class="field-input">
+                            </div>
+
                             <button type="button" class="btn-primary btn-signoff" id="btnSubmitSignOff">
-                                <span>🔒 [ Submit Professional Validation ]</span>
+                                <i class='bx bx-check-shield'></i> Submit Professional Validation
                             </button>
                             <button type="button" class="btn-secondary" id="btnOpenSafetyAdvisory" style="width: 100%; margin-top: 0.75rem; display: flex; align-items: center; justify-content: center; gap: 0.5rem; border: 1px solid #f59e0b; color: #b45309; background: #fffbeb;">
-                                <span>⚠️</span> Issue Safety Advisory
+                                <i class='bx bx-error-circle'></i> Issue Safety Advisory
                             </button>
                         </form>
                     </div>

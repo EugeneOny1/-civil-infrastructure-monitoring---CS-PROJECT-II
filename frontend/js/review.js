@@ -41,6 +41,16 @@ const Review = {
             });
         });
 
+        const nextActionSelect = document.getElementById('reviewNextAction');
+        const followUpGroup = document.getElementById('followUpDateGroup');
+        if (nextActionSelect) {
+            nextActionSelect.addEventListener('change', (e) => {
+                if (followUpGroup) {
+                    followUpGroup.classList.toggle('hidden', e.target.value !== 'On-site inspection recommended');
+                }
+            });
+        }
+
         const reportSelect = document.getElementById('reviewReportSelect');
         if (reportSelect) {
             reportSelect.addEventListener('change', (e) => {
@@ -196,7 +206,7 @@ const Review = {
             const shortId = repId.length > 18 ? repId.slice(0, 16) + '...' : repId;
             const sev = (ai.relative_severity || rep.metadata?.relative_severity || 'Low').toUpperCase();
 
-            return `<option value="${repId}">${shortId} — ${defect} [${status} • ${sev}] • ${loc}</option>`;
+            return `<option value="${repId}">${shortId} — ${defect} (${status} • ${sev}) • ${loc}</option>`;
         }).join('');
     },
 
@@ -431,6 +441,25 @@ const Review = {
                 if (bResolve) bResolve.disabled = false;
             }
 
+            // Next Action & Follow-up Inspection controls
+            const nextActionEl = document.getElementById('reviewNextAction');
+            const followUpDateEl = document.getElementById('reviewFollowUpDate');
+            const followUpGroup = document.getElementById('followUpDateGroup');
+            const curNextAction = data.report.metadata?.next_action || (data.report.metadata?.engineer_assessment?.next_action) || 'Continue monitoring';
+            const curFollowUpDate = data.report.metadata?.follow_up_date || (data.report.metadata?.engineer_assessment?.follow_up_date) || '';
+
+            if (nextActionEl) {
+                nextActionEl.value = curNextAction;
+                nextActionEl.disabled = isResolved;
+            }
+            if (followUpDateEl) {
+                followUpDateEl.value = curFollowUpDate;
+                followUpDateEl.disabled = isResolved;
+            }
+            if (followUpGroup) {
+                followUpGroup.classList.toggle('hidden', curNextAction !== 'On-site inspection recommended');
+            }
+
             // Canonical Status & Validation Flags
             const isUnusual = data.report.metadata?.is_unusual === true || data.report.validation_status === 'unusual';
             const statusEl = document.getElementById('reviewHeaderStatus');
@@ -444,7 +473,7 @@ const Review = {
                 if (badgeDot) badgeDot.className = 'badge-dot success';
                 if (notesEl && !notesEl.value) notesEl.value = data.review.comments || '';
             } else if (isUnusual) {
-                if (statusEl) statusEl.textContent = `Status: ${status} ⚠️ Unusual Pairing Flagged`;
+                if (statusEl) statusEl.textContent = `Status: ${status} — Unusual Pairing Flagged`;
                 if (badgeDot) badgeDot.className = 'badge-dot warning';
                 if (notesEl && !notesEl.value) notesEl.value = data.report.metadata?.advisory_notes || '';
             } else {
@@ -648,7 +677,7 @@ const Review = {
         const predClassEl = document.getElementById('reviewPredictedClass');
         const calcSevEl = document.getElementById('reviewCalculatedSeverity');
         if (predClassEl) predClassEl.textContent = defectClass;
-        if (calcSevEl) calcSevEl.textContent = `[ RELATIVE SEVERITY: ${severity} ]`;
+        if (calcSevEl) calcSevEl.textContent = `RELATIVE SEVERITY: ${severity}`;
 
         const confEl = document.getElementById('telemConfidence');
         const sevEl = document.getElementById('telemSeverity');
@@ -673,7 +702,7 @@ const Review = {
         ctx.fillStyle = '#f59e0b';
         ctx.font = 'bold 15px "Montserrat", sans-serif';
         ctx.textAlign = 'center';
-        ctx.fillText('📷 Evidence image unavailable', placeholderW / 2, 185);
+        ctx.fillText('Evidence image unavailable', placeholderW / 2, 185);
         ctx.fillStyle = '#94a3b8';
         ctx.font = '12px "Montserrat", sans-serif';
         ctx.fillText(message || 'Source photographic file could not be retrieved from storage.', placeholderW / 2, 215);
@@ -743,7 +772,7 @@ const Review = {
                 ctx.fillStyle = '#10b981';
                 const fontSize = Math.max(14, Math.round(origW * 0.024));
                 ctx.font = `600 ${fontSize}px "Montserrat", sans-serif`;
-                ctx.fillText('[ ✓ No Structural Defects Detected (Confidence >= 30%) ]', 16, Math.round(bannerH * 0.65));
+                ctx.fillText('No Structural Defects Detected (Confidence >= 30%)', 16, Math.round(bannerH * 0.65));
                 return;
             }
 
@@ -800,8 +829,8 @@ const Review = {
                 const confText = Math.round(confVal * 100);
                 const sevVal = det.severity || det.relative_severity || '';
                 const labelText = sevVal
-                    ? `[ ${defectClass} • ${confText}% • ${sevVal} ]`
-                    : `[ ${defectClass} • ${confText}% ]`;
+                    ? `${defectClass} • ${confText}% • ${sevVal}`
+                    : `${defectClass} • ${confText}%`;
 
                 const fontSize = Math.max(13, Math.round(origW * 0.022));
                 ctx.font = `bold ${fontSize}px "JetBrains Mono", monospace`;
@@ -897,11 +926,16 @@ const Review = {
             override_severity: document.getElementById('overrideSeveritySelect').value
         } : {};
 
+        const nextAction = document.getElementById('reviewNextAction')?.value || 'Continue monitoring';
+        const followUpDate = document.getElementById('reviewFollowUpDate')?.value || '';
+
         try {
             await window.Api.reviewReportDirect(reportId, {
                 decision,
                 comments,
-                override_details: overrideDetails
+                override_details: overrideDetails,
+                next_action: nextAction,
+                follow_up_date: followUpDate
             });
 
             // Automatically transition status to Verified

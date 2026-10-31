@@ -12,6 +12,26 @@ const Dashboard = {
         if (filterSelect) {
             filterSelect.addEventListener('change', () => this.loadReportsList());
         }
+
+        const kpiVerified = document.getElementById('kpiCardVerified');
+        const kpiVerifiedCount = document.getElementById('kpiVerifiedCount');
+        const triggerVerifiedFilter = () => {
+            const select = document.getElementById('filterSeveritySelect');
+            if (select) {
+                select.value = 'Verified';
+                this.loadReportsList();
+                const queueCard = document.querySelector('.queue-card');
+                if (queueCard && typeof queueCard.scrollIntoView === 'function') {
+                    queueCard.scrollIntoView({ behavior: 'smooth' });
+                }
+            }
+        };
+
+        if (kpiVerified) kpiVerified.addEventListener('click', triggerVerifiedFilter);
+        if (kpiVerifiedCount) kpiVerifiedCount.addEventListener('click', (e) => {
+            e.stopPropagation();
+            triggerVerifiedFilter();
+        });
     },
 
     async loadDashboardData() {
@@ -96,7 +116,7 @@ const Dashboard = {
         ctx.setLineDash([]);
 
         ctx.fillStyle = '#b91c1c';
-        ctx.fillText(`[ Review Threshold: ${threshold} ]`, width - padR - 165, threshY - 6);
+        ctx.fillText(`Review Threshold: ${threshold}`, width - padR - 165, threshY - 6);
 
         if (!trendData || trendData.length === 0) return;
 
@@ -148,16 +168,25 @@ const Dashboard = {
         const filterVal = document.getElementById('filterSeveritySelect')?.value || '';
 
         try {
-            const params = { exclude_status: 'Resolved' };
-            if (filterVal && filterVal !== 'Flagged') {
-                params.severity = filterVal;
+            const params = {};
+            if (filterVal === 'Verified') {
+                params.status = 'Verified';
+            } else {
+                params.exclude_status = 'Resolved';
+                if (filterVal && filterVal !== 'Flagged') {
+                    params.severity = filterVal;
+                }
             }
 
             const data = await window.Api.getReports(params);
             let reports = data.reports || [];
 
-            // Exclude resolved reports from active priority queue
-            reports = reports.filter(r => (r.status || '').toLowerCase() !== 'resolved');
+            if (filterVal === 'Verified') {
+                reports = reports.filter(r => (r.status || '') === 'Verified');
+            } else {
+                // Exclude resolved reports from active priority queue
+                reports = reports.filter(r => (r.status || '').toLowerCase() !== 'resolved');
+            }
 
             if (filterVal === 'Flagged') {
                 reports = reports.filter(r => r.validation_status === 'unusual' || r.requires_engineer_review === true || r.metadata?.is_unusual === true);
@@ -186,9 +215,9 @@ const Dashboard = {
                             <div style="display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap;">
                                 <span class="queue-item-title">${location}</span>
                                 <span class="status-chip ${statusSlug}">${status}</span>
-                                ${isFlagged ? `<span class="badge-tag flagged">⚠️ Unusual Pairing</span>` : ''}
+                                ${isFlagged ? `<span class="badge-tag flagged"><i class='bx bx-error'></i> Unusual Pairing</span>` : ''}
                             </div>
-                            <span class="queue-item-meta">${assetType} • ${defectClass} • [ ${frameId} ]</span>
+                            <span class="queue-item-meta">${assetType} • ${defectClass} • #${frameId}</span>
                             ${isFlagged && r.metadata?.advisory_notes ? `<span style="font-size: 0.72rem; color: #b45309;">${r.metadata.advisory_notes}</span>` : ''}
                         </div>
                         <div class="queue-item-actions">
