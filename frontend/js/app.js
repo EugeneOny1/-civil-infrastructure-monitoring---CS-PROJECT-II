@@ -1316,7 +1316,7 @@ const App = {
 
         if (nameEl) nameEl.textContent = name || 'Engineer';
         if (emailEl) emailEl.textContent = email || '';
-        if (selectEl) selectEl.value = 'Unable to verify submitted EBK registration';
+        if (selectEl) selectEl.value = 'Unable to verify EBK registration';
         if (notesEl) notesEl.value = '';
 
         if (modal) modal.classList.add('active');
@@ -1341,7 +1341,7 @@ const App = {
         if (btnConfirm) {
             btnConfirm.addEventListener('click', async () => {
                 if (!this.pendingRejectionUserId) return;
-                const reason = reasonSelect ? reasonSelect.value : 'Unable to verify submitted EBK registration';
+                const reason = reasonSelect ? reasonSelect.value : 'Unable to verify EBK registration';
                 const notes = notesText ? notesText.value.trim() : '';
 
                 if (reason === 'Other' && !notes) {
@@ -1371,15 +1371,90 @@ const App = {
         }
     },
 
+    async openTargetedNotice(userId, name, email) {
+        const modal = document.getElementById('adminNoticeModal');
+        const modeSelect = document.getElementById('adminNoticeMode');
+        const targetGroup = document.getElementById('adminNoticeTargetGroup');
+        const audienceGroup = document.getElementById('adminNoticeAudienceGroup');
+        const targetUserSelect = document.getElementById('adminNoticeTargetUser');
+        const catSelect = document.getElementById('adminNoticeCategory');
+        const titleInput = document.getElementById('adminNoticeTitleInput');
+        const msgText = document.getElementById('adminNoticeMessage');
+
+        if (modeSelect) modeSelect.value = 'targeted';
+        if (targetGroup) targetGroup.classList.remove('hidden');
+        if (audienceGroup) audienceGroup.classList.add('hidden');
+
+        if (catSelect) {
+            catSelect.innerHTML = `
+                <option value="Credential correction request" selected>Credential correction request</option>
+                <option value="Verification information">Verification information</option>
+                <option value="Account / security notice">Account / security notice</option>
+                <option value="Administrative account message">Administrative account message</option>
+            `;
+        }
+
+        try {
+            const data = await window.Api.getUsers();
+            const users = data.users || [];
+            if (targetUserSelect) {
+                targetUserSelect.innerHTML = `<option value="">Select recipient...</option>` +
+                    users.map(u => {
+                        const uid = u.user_id || u._id;
+                        return `<option value="${uid}" ${uid === userId ? 'selected' : ''}>${u.name} (${u.email}) [${u.role.toUpperCase()}]</option>`;
+                    }).join('');
+                if (userId) targetUserSelect.value = userId;
+            }
+        } catch (e) {
+            console.warn("Failed to load users for targeted notice:", e);
+        }
+
+        if (titleInput) titleInput.value = `Credential correction request: ${name || 'User'}`;
+        if (msgText) msgText.value = '';
+        if (modal) modal.classList.add('active');
+    },
+
+    openSystemNotice() {
+        const modal = document.getElementById('adminNoticeModal');
+        const modeSelect = document.getElementById('adminNoticeMode');
+        const targetGroup = document.getElementById('adminNoticeTargetGroup');
+        const audienceGroup = document.getElementById('adminNoticeAudienceGroup');
+        const audienceSelect = document.getElementById('adminNoticeAudience');
+        const catSelect = document.getElementById('adminNoticeCategory');
+        const titleInput = document.getElementById('adminNoticeTitleInput');
+        const msgText = document.getElementById('adminNoticeMessage');
+
+        if (modeSelect) modeSelect.value = 'broadcast';
+        if (targetGroup) targetGroup.classList.add('hidden');
+        if (audienceGroup) audienceGroup.classList.remove('hidden');
+        if (audienceSelect) audienceSelect.value = 'all';
+
+        if (catSelect) {
+            catSelect.innerHTML = `
+                <option value="Platform Announcement" selected>Platform Announcement</option>
+                <option value="Scheduled Maintenance">Scheduled Maintenance</option>
+                <option value="Emergency / Weather Infrastructure Advisory">Emergency / Weather Infrastructure Advisory</option>
+                <option value="Operational Notice">Operational Notice</option>
+            `;
+        }
+
+        if (titleInput) titleInput.value = 'InfraVision: Platform Announcement';
+        if (msgText) msgText.value = '';
+        if (modal) modal.classList.add('active');
+    },
+
     bindAdminNoticeModal() {
         const modal = document.getElementById('adminNoticeModal');
         const btnOpen = document.getElementById('btnOpenAdminNotice');
+        const btnOpenSystem = document.getElementById('btnOpenSystemNotice');
         const btnCancel = document.getElementById('btnCancelAdminNotice');
         const btnClose = document.getElementById('btnCloseAdminNotice');
         const btnConfirm = document.getElementById('btnConfirmAdminNotice');
         const modeSelect = document.getElementById('adminNoticeMode');
         const targetGroup = document.getElementById('adminNoticeTargetGroup');
+        const audienceGroup = document.getElementById('adminNoticeAudienceGroup');
         const targetUserSelect = document.getElementById('adminNoticeTargetUser');
+        const audienceSelect = document.getElementById('adminNoticeAudience');
         const catSelect = document.getElementById('adminNoticeCategory');
         const titleInput = document.getElementById('adminNoticeTitleInput');
         const msgText = document.getElementById('adminNoticeMessage');
@@ -1389,27 +1464,42 @@ const App = {
         };
 
         if (btnOpen) {
-            btnOpen.addEventListener('click', async () => {
-                try {
-                    const data = await window.Api.getUsers();
-                    const users = data.users || [];
-                    if (targetUserSelect) {
-                        targetUserSelect.innerHTML = `<option value="">Select recipient...</option>` +
-                            users.map(u => `<option value="${u.user_id || u._id}">${u.name} (${u.email}) [${u.role.toUpperCase()}]</option>`).join('');
-                    }
-                } catch (e) {
-                    console.warn("Failed to load users for notice target:", e);
-                }
-                if (titleInput) titleInput.value = 'Professional Registration Notice';
-                if (msgText) msgText.value = '';
-                if (modal) modal.classList.add('active');
-            });
+            btnOpen.addEventListener('click', () => this.openTargetedNotice());
+        }
+
+        if (btnOpenSystem) {
+            btnOpenSystem.addEventListener('click', () => this.openSystemNotice());
         }
 
         if (modeSelect) {
             modeSelect.addEventListener('change', (e) => {
+                const isBroadcast = e.target.value === 'broadcast';
                 if (targetGroup) {
-                    targetGroup.style.display = e.target.value === 'broadcast' ? 'none' : 'block';
+                    if (isBroadcast) targetGroup.classList.add('hidden');
+                    else targetGroup.classList.remove('hidden');
+                }
+                if (audienceGroup) {
+                    if (isBroadcast) audienceGroup.classList.remove('hidden');
+                    else audienceGroup.classList.add('hidden');
+                }
+                if (catSelect) {
+                    if (isBroadcast) {
+                        catSelect.innerHTML = `
+                            <option value="Platform Announcement" selected>Platform Announcement</option>
+                            <option value="Scheduled Maintenance">Scheduled Maintenance</option>
+                            <option value="Emergency / Weather Infrastructure Advisory">Emergency / Weather Infrastructure Advisory</option>
+                            <option value="Operational Notice">Operational Notice</option>
+                        `;
+                        if (titleInput) titleInput.value = 'InfraVision: Platform Announcement';
+                    } else {
+                        catSelect.innerHTML = `
+                            <option value="Credential correction request" selected>Credential correction request</option>
+                            <option value="Verification information">Verification information</option>
+                            <option value="Account / security notice">Account / security notice</option>
+                            <option value="Administrative account message">Administrative account message</option>
+                        `;
+                        if (titleInput) titleInput.value = 'InfraVision: Credential correction request';
+                    }
                 }
             });
         }
@@ -1429,6 +1519,7 @@ const App = {
             btnConfirm.addEventListener('click', async () => {
                 const mode = modeSelect ? modeSelect.value : 'targeted';
                 const targetId = targetUserSelect ? targetUserSelect.value : '';
+                const audience = audienceSelect ? audienceSelect.value : 'all';
                 const category = catSelect ? catSelect.value : 'Administrative Notice';
                 const title = titleInput ? titleInput.value.trim() : '';
                 const message = msgText ? msgText.value.trim() : '';
@@ -1448,6 +1539,7 @@ const App = {
                     const res = await window.Api.sendAdminNotice({
                         type: mode,
                         target_user_id: targetId,
+                        audience: audience,
                         category,
                         title,
                         message

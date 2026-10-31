@@ -48,8 +48,9 @@ class NotificationService:
         Audience options: 'all', 'citizen', 'engineer', 'admin'.
         """
         user_query = {'is_active': {'$ne': False}}
-        if audience and audience != 'all':
-            user_query['role'] = audience
+        if audience and audience.lower() != 'all':
+            aud = audience.lower().rstrip('s')
+            user_query['role'] = aud
 
         target_users = db_service.find('users', user_query)
         if not target_users:
