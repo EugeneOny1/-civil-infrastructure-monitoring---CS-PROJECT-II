@@ -438,22 +438,6 @@ const Api = {
         return data;
     },
 
-    async loginWithGoogle(credential) {
-        const res = await this.safeFetch(`${API_BASE}/auth/google`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ credential })
-        });
-        const data = await res.json();
-        if (!res.ok) {
-            throw new Error(data.error || 'Google sign-in failed.');
-        }
-        if (data.token && data.user) {
-            this.setSession(data.token, data.user);
-        }
-        return data;
-    },
-
     async changePassword(old_password, new_password) {
         const res = await this.safeFetch(`${API_BASE}/auth/change-password`, {
             method: 'POST',

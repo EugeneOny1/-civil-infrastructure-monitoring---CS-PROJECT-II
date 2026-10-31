@@ -481,33 +481,55 @@ def google_auth():
     else:
         return jsonify({'error': 'Google credential token is required.'}), 400
 
-    if not email:
-        return jsonify({'error': 'Verified email address is required from Google Identity Service.'}), 400
+    now_iso = datetime.now(timezone.utc).isoformat()
 
-    existing_user = db_service.find_one('users', {'email': email})
+    # Section 4: Check whether this Google identity is ALREADY linked to an InfraVision account
+    # via Google's stable 'sub' claim identifier.
+    existing_user = db_service.find_one('users', {'google_sub': google_id}) or db_service.find_one('users', {'google_id': google_id})
 
     if existing_user:
-        # Link Google ID to existing account without duplicate creation
+        # IF linked: Authenticate that existing InfraVision account
         db_service.update_one('users', {'_id': existing_user['_id']}, {
-            'google_id': google_id,
-            'last_google_login': datetime.now(timezone.utc).isoformat()
+            'last_google_login': now_iso
         })
         user = User.from_dict(existing_user)
+        user_data = existing_user
     else:
-        # Create new account strictly as Citizen
-        user = User(
-            name=name,
-            email=email,
-            password=None,
-            password_hash=None,
-            role='citizen',  # Google auth NEVER grants engineer or admin privileges
-            verification_status='verified'
-        )
-        user_dict = user.to_dict(include_sensitive=True)
-        user_dict['google_id'] = google_id
-        user_dict['must_change_password'] = False
-        user_id = db_service.insert('users', user_dict)
-        user.user_id = str(user_id)
+        # IF not linked: check if the VERIFIED Google email exactly matches an existing InfraVision account
+        user_by_email = db_service.find_one('users', {'email': email})
+
+        if user_by_email:
+            # Safely link the Google identity to that account without overwriting existing role/profile
+            db_service.update_one('users', {'_id': user_by_email['_id']}, {
+                'google_id': google_id,
+                'google_sub': google_id,
+                'auth_provider': user_by_email.get('auth_provider') or 'google',
+                'last_google_login': now_iso
+            })
+            # Preserve existing InfraVision display name, role, verification state, etc.
+            user = User.from_dict(user_by_email)
+            user_data = user_by_email
+        else:
+            # Otherwise create a new Citizen InfraVision account (defaults strictly to Citizen)
+            new_user = User(
+                name=name,
+                email=email,
+                password=None,
+                password_hash=None,
+                role='citizen',  # New Google users are STRICTLY Citizen
+                verification_status='verified'
+            )
+            user_dict = new_user.to_dict(include_sensitive=True)
+            user_dict['google_id'] = google_id
+            user_dict['google_sub'] = google_id
+            user_dict['auth_provider'] = 'google'
+            user_dict['must_change_password'] = False
+            user_dict['created_at'] = now_iso
+            user_dict['last_google_login'] = now_iso
+            inserted_id = db_service.insert('users', user_dict)
+            new_user.user_id = str(inserted_id)
+            user = new_user
+            user_data = user_dict
 
     # Enforce mandatory 2FA for privileged accounts (engineer, admin) or if user enabled 2FA
     is_privileged = user.role in ['engineer', 'admin']

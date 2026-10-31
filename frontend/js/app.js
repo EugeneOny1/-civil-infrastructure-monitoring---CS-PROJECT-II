@@ -1549,7 +1549,7 @@ const App = {
                                 this.routeUserAfterAuth(data.user);
                             } catch (err) {
                                 console.error("[Google Auth Error]", err);
-                                this.showToast("Google Sign-In could not be completed. Please try again or sign in using email.", true);
+                                this.showToast(err.message || "Google identity was verified, but InfraVision could not complete sign-in. Please try again.", true);
                             }
                         }
                     }
