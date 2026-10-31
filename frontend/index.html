@@ -565,7 +565,7 @@
                             <option value="Building">Building / Wall</option>
                         </select>
                         <button type="button" class="btn-micro" id="btnResetMapFilters" title="Clear all filters">Reset</button>
-                        <button type="button" class="btn-micro active-hotspot" id="btnToggleHotspot" title="Hide defect density hotspot surface" aria-pressed="true">🔥 Hide Hotspots</button>
+                        <button type="button" class="btn-micro active-hotspot" id="btnToggleHotspot" title="Hide defect density hotspot surface" aria-pressed="true"><i class="bx bxs-hot"></i> Hide Hotspots</button>
                     </div>
                 </div>
                 <div class="map-container" id="infrastructureMapContainer">
@@ -584,14 +584,14 @@
                     <div class="map-legend-item">
                         <span class="map-legend-dot" style="background: #059669; display: inline-flex; align-items: center; justify-content: center; color: #ffffff; font-size: 8px; font-weight: 700;">✓</span> Resolved
                     </div>
-                    <div class="map-legend-item" id="hotspotLegendItem" style="display: none; align-items: center; gap: 4px; padding-left: 8px; border-left: 1px solid var(--border-color);">
-                        <span style="font-size: 0.72rem; font-weight: 600; color: #475569;">Heatmap Density:</span>
+                    <div class="map-legend-item" id="hotspotLegendItem" style="display: none; align-items: center; gap: 6px; padding-left: 8px; border-left: 1px solid var(--border-color);">
+                        <span style="font-size: 0.72rem; font-weight: 600; color: #475569;">Active Defect Density / Monitoring Priority:</span>
                         <span class="map-legend-dot" style="background: #10b981;"></span> Low
-                        <span class="map-legend-dot" style="background: #f59e0b;"></span> Amber
-                        <span class="map-legend-dot" style="background: #ef4444;"></span> High Hotspot
+                        <span class="map-legend-dot" style="background: #f59e0b;"></span> Moderate
+                        <span class="map-legend-dot" style="background: #ef4444;"></span> High Priority Hotspot
                     </div>
                     <div class="map-legend-item" style="margin-left: auto; color: #86868b; font-size: 0.72rem;">
-                        🔒 Citizen Privacy Mode: Personal reporter identities are protected.
+                        <i class="bx bx-lock-alt"></i> Citizen Privacy Mode: Personal reporter identities are protected.
                     </div>
                 </div>
             </div>

@@ -104,12 +104,12 @@ const DefectMap = {
         if (btn) {
             if (this.showHotspotLayer) {
                 btn.classList.add('active-hotspot');
-                btn.innerHTML = '🔥 Hide Hotspots';
+                btn.innerHTML = "<i class='bx bxs-hot'></i> Hide Hotspots";
                 btn.setAttribute('aria-pressed', 'true');
                 btn.title = 'Hide defect density hotspot surface';
             } else {
                 btn.classList.remove('active-hotspot');
-                btn.innerHTML = '🔥 Show Hotspots';
+                btn.innerHTML = "<i class='bx bxs-hot'></i> Show Hotspots";
                 btn.setAttribute('aria-pressed', 'false');
                 btn.title = 'Display defect density hotspot surface';
             }
@@ -551,24 +551,24 @@ const DefectMap = {
 
             markers.push(marker);
 
-            // Defect Report Density / Monitoring Priority intensity mapping (Section 4):
-            // Low      = 0.35
-            // Medium   = 0.65
-            // Critical = 1.00
-            const sev = (point.relative_severity || 'Low').toLowerCase();
-            let intensity = 0.35; // Low severity baseline
-            if (sev === 'critical') {
-                intensity = 1.00;
-            } else if (sev === 'medium' || sev === 'moderate') {
-                intensity = 0.65;
-            }
+            // Section 11: Exclude Resolved reports from active hotspot density!
+            // Resolved reports remain visible as historical pins, but MUST NOT contribute active heat.
+            const isResolved = point.status === 'Resolved' || String(point.status).toLowerCase() === 'resolved';
+            if (!isResolved) {
+                // Defect Report Density / Monitoring Priority intensity mapping:
+                // Low      = 0.35
+                // Medium   = 0.65
+                // Critical = 1.00
+                const sev = (point.relative_severity || 'Low').toLowerCase();
+                let intensity = 0.35; // Low severity baseline
+                if (sev === 'critical') {
+                    intensity = 1.00;
+                } else if (sev === 'medium' || sev === 'moderate') {
+                    intensity = 0.65;
+                }
 
-            // Unresolved defects require active monitoring
-            if (point.status && point.status !== 'Resolved') {
-                intensity = Math.min(intensity + 0.05, 1.0);
+                heatPoints.push([lat, lng, intensity]);
             }
-
-            heatPoints.push([lat, lng, intensity]);
         });
 
         if (typeof this.markerCluster.addLayers === 'function') {
