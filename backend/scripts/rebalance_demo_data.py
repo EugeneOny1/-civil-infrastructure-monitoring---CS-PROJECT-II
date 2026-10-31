@@ -79,10 +79,11 @@ def run_rebalancing():
             'status': 'Received',
             'confidence': 0.88,
             'area_pct': 18.5,
-            'box': [0.35, 0.28, 0.82, 0.76],
+            'box': [0.32, 0.22, 0.82, 0.78],
             'image_file': 'seed_pothole.jpg',
             'desc': 'Severe pothole crater across southbound lane causing vehicle diversion.',
-            'created_at': one_day_ago
+            'created_at': one_day_ago,
+            'next_action': 'Continue monitoring'
         },
         {
             'id': 'REP-DEMO-UHURU-02',
@@ -94,10 +95,11 @@ def run_rebalancing():
             'status': 'Under Review',
             'confidence': 0.85,
             'area_pct': 16.8,
-            'box': [0.40, 0.22, 0.79, 0.68],
-            'image_file': 'infra_86081e55c93c.jpg',
+            'box': [0.32, 0.22, 0.82, 0.78],
+            'image_file': 'seed_pothole.jpg',
             'desc': 'Deep asphalt depression in middle lane with exposed sub-base rock.',
-            'created_at': two_days_ago
+            'created_at': two_days_ago,
+            'next_action': 'On-site inspection recommended'
         },
         {
             'id': 'REP-DEMO-UHURU-03',
@@ -109,10 +111,11 @@ def run_rebalancing():
             'status': 'Received',
             'confidence': 0.91,
             'area_pct': 21.2,
-            'box': [0.25, 0.30, 0.85, 0.80],
-            'image_file': 'infra_455cf260803a.jpg',
+            'box': [0.32, 0.22, 0.82, 0.78],
+            'image_file': 'seed_pothole.jpg',
             'desc': 'Major structural pavement breach requiring emergency cold patching.',
-            'created_at': three_days_ago
+            'created_at': three_days_ago,
+            'next_action': 'Continue monitoring'
         },
         {
             'id': 'REP-DEMO-UHURU-04',
@@ -124,10 +127,11 @@ def run_rebalancing():
             'status': 'Under Review',
             'confidence': 0.79,
             'area_pct': 9.4,
-            'box': [0.30, 0.15, 0.72, 0.85],
-            'image_file': 'infra_ed41eb153395.jpg',
+            'box': [0.25, 0.20, 0.85, 0.75],
+            'image_file': 'seed_crack.jpg',
             'desc': 'Transverse and block cracking adjacent to expansion joint.',
-            'created_at': four_days_ago
+            'created_at': four_days_ago,
+            'next_action': 'On-site inspection recommended'
         },
 
         # --- B. CBD / KENYATTA AVENUE MODERATE AMBER CLUSTER (Score: (2+1+2)/3 = 1.67 -> AMBER) ---
@@ -141,10 +145,11 @@ def run_rebalancing():
             'status': 'Received',
             'confidence': 0.82,
             'area_pct': 11.2,
-            'box': [0.32, 0.25, 0.68, 0.75],
-            'image_file': 'infra_41a26d20422f.jpg',
+            'box': [0.25, 0.20, 0.85, 0.75],
+            'image_file': 'seed_crack.jpg',
             'desc': 'Longitudinal pavement crack extending 4 metres along bus terminal lane.',
-            'created_at': two_days_ago
+            'created_at': two_days_ago,
+            'next_action': 'Continue monitoring'
         },
         {
             'id': 'REP-DEMO-CBD-02',
@@ -156,10 +161,11 @@ def run_rebalancing():
             'status': 'Received',
             'confidence': 0.76,
             'area_pct': 4.3,
-            'box': [0.45, 0.35, 0.65, 0.60],
-            'image_file': 'infra_cd0bfd124bd2.jpg',
+            'box': [0.20, 0.15, 0.85, 0.85],
+            'image_file': 'seed_surface.jpg',
             'desc': 'Bitumen ravelling and surface aggregate stripping on pedestrian crossing.',
-            'created_at': three_days_ago
+            'created_at': three_days_ago,
+            'next_action': 'Continue monitoring'
         },
         {
             'id': 'REP-DEMO-CBD-03',
@@ -171,10 +177,11 @@ def run_rebalancing():
             'status': 'Under Review',
             'confidence': 0.84,
             'area_pct': 12.0,
-            'box': [0.38, 0.28, 0.72, 0.66],
-            'image_file': 'infra_86081e55c93c.jpg',
+            'box': [0.32, 0.22, 0.82, 0.78],
+            'image_file': 'seed_pothole.jpg',
             'desc': 'Shallow pothole forming around utility manhole collar.',
-            'created_at': one_day_ago
+            'created_at': one_day_ago,
+            'next_action': 'On-site inspection recommended'
         },
 
         # --- C. LANGATA / OLE SANGALE LOW SEVERITY GREEN CLUSTER (Score: (1+1+1)/3 = 1.00 -> GREEN) ---
@@ -188,10 +195,11 @@ def run_rebalancing():
             'status': 'Received',
             'confidence': 0.78,
             'area_pct': 3.8,
-            'box': [0.42, 0.30, 0.60, 0.70],
-            'image_file': 'infra_aa21e4786f19.jpg',
+            'box': [0.25, 0.20, 0.85, 0.75],
+            'image_file': 'seed_crack.jpg',
             'desc': 'Hairline shrinkage cracks on newly paved campus access asphalt.',
-            'created_at': two_days_ago
+            'created_at': two_days_ago,
+            'next_action': 'Continue monitoring'
         },
         {
             'id': 'REP-DEMO-LANGATA-02',
@@ -203,10 +211,11 @@ def run_rebalancing():
             'status': 'Received',
             'confidence': 0.74,
             'area_pct': 4.1,
-            'box': [0.35, 0.25, 0.55, 0.65],
-            'image_file': 'infra_fb6eb9d23a69.jpg',
+            'box': [0.25, 0.20, 0.85, 0.75],
+            'image_file': 'seed_crack.jpg',
             'desc': 'Minor edge cracking on drainage kerb line.',
-            'created_at': three_days_ago
+            'created_at': three_days_ago,
+            'next_action': 'Continue monitoring'
         },
         {
             'id': 'REP-DEMO-LANGATA-03',
@@ -218,10 +227,13 @@ def run_rebalancing():
             'status': 'Verified',
             'confidence': 0.77,
             'area_pct': 4.8,
-            'box': [0.40, 0.30, 0.62, 0.68],
-            'image_file': 'infra_b73de7ca0f43.jpg',
+            'box': [0.20, 0.15, 0.85, 0.85],
+            'image_file': 'seed_surface.jpg',
             'desc': 'Weathering and micro-fissures on headwall culvert concrete face.',
-            'created_at': four_days_ago
+            'created_at': four_days_ago,
+            'reviewed_by': 'Eng. P. Njuguna, PE (EBK B4512)',
+            'review_notes': 'Superficial spalling verified; routine monitoring advised for monsoon season.',
+            'next_action': 'Routine maintenance plan'
         },
 
         # --- D. ISOLATED CORRIDOR MONITORED POINTS ---
@@ -235,10 +247,11 @@ def run_rebalancing():
             'status': 'Under Review',
             'confidence': 0.81,
             'area_pct': 10.5,
-            'box': [0.36, 0.30, 0.70, 0.68],
-            'image_file': 'infra_86081e55c93c.jpg',
+            'box': [0.32, 0.22, 0.82, 0.78],
+            'image_file': 'seed_pothole.jpg',
             'desc': 'Pothole on expressway ramp merge lane.',
-            'created_at': two_days_ago
+            'created_at': two_days_ago,
+            'next_action': 'On-site inspection recommended'
         },
         {
             'id': 'REP-DEMO-NGONG-01',
@@ -250,10 +263,11 @@ def run_rebalancing():
             'status': 'Received',
             'confidence': 0.79,
             'area_pct': 8.9,
-            'box': [0.38, 0.22, 0.65, 0.78],
-            'image_file': 'infra_b73de7ca0f43.jpg',
+            'box': [0.20, 0.15, 0.85, 0.85],
+            'image_file': 'seed_surface.jpg',
             'desc': 'Asphalt bleeding and rutting in high-braking bus bay.',
-            'created_at': one_day_ago
+            'created_at': one_day_ago,
+            'next_action': 'Continue monitoring'
         },
         {
             'id': 'REP-DEMO-SOUTHB-01',
@@ -265,10 +279,11 @@ def run_rebalancing():
             'status': 'Received',
             'confidence': 0.75,
             'area_pct': 4.2,
-            'box': [0.44, 0.28, 0.62, 0.72],
-            'image_file': 'infra_fb6eb9d23a69.jpg',
+            'box': [0.25, 0.20, 0.85, 0.75],
+            'image_file': 'seed_crack.jpg',
             'desc': 'Longitudinal settlement crack along service lane shoulder.',
-            'created_at': three_days_ago
+            'created_at': three_days_ago,
+            'next_action': 'Continue monitoring'
         },
         {
             'id': 'REP-DEMO-INDUS-01',
@@ -280,10 +295,11 @@ def run_rebalancing():
             'status': 'Received',
             'confidence': 0.92,
             'area_pct': 19.8,
-            'box': [0.28, 0.25, 0.82, 0.82],
-            'image_file': 'infra_455cf260803a.jpg',
+            'box': [0.32, 0.22, 0.82, 0.78],
+            'image_file': 'seed_pothole.jpg',
             'desc': 'Extensive structural cratering with heavy goods vehicle axle hazard.',
-            'created_at': one_day_ago
+            'created_at': one_day_ago,
+            'next_action': 'Continue monitoring'
         },
 
         # --- E. RESOLVED CASES (Demonstrating completed workflow & read-only review) ---
@@ -297,13 +313,14 @@ def run_rebalancing():
             'status': 'Resolved',
             'confidence': 0.86,
             'area_pct': 13.5,
-            'box': [0.34, 0.28, 0.75, 0.70],
+            'box': [0.32, 0.22, 0.82, 0.78],
             'image_file': 'seed_pothole.jpg',
             'desc': 'Completed asphalt reinstatement and seal coating after water main repair.',
             'created_at': four_days_ago,
             'is_resolved': True,
             'reviewed_by': 'Eng. J. Kamau, PE (EBK A1429)',
-            'review_notes': 'Hot-mix asphalt patch verified, compacted to 98% Marshall density and reopened to traffic.'
+            'review_notes': 'Hot-mix asphalt patch verified, compacted to 98% Marshall density and reopened to traffic.',
+            'next_action': 'No further action required at this stage'
         },
         {
             'id': 'REP-DEMO-RESOLVED-02',
@@ -315,13 +332,14 @@ def run_rebalancing():
             'status': 'Resolved',
             'confidence': 0.77,
             'area_pct': 3.9,
-            'box': [0.42, 0.30, 0.60, 0.65],
-            'image_file': 'infra_aa21e4786f19.jpg',
+            'box': [0.25, 0.20, 0.85, 0.75],
+            'image_file': 'seed_crack.jpg',
             'desc': 'Elastomeric bitumen crack sealant applied along reflective crack joints.',
             'created_at': four_days_ago,
             'is_resolved': True,
             'reviewed_by': 'Eng. A. Omondi, PE (EBK B3891)',
-            'review_notes': 'Bituminous joint sealant confirmed cured with zero water ingress risk.'
+            'review_notes': 'Bituminous joint sealant confirmed cured with zero water ingress risk.',
+            'next_action': 'No further action required at this stage'
         }
     ]
 
@@ -437,8 +455,24 @@ def run_rebalancing():
             meta['engineer_notes'] = item.get('review_notes', 'Assessment confirmed by certified engineer.')
             meta['reviewed_by'] = item.get('reviewed_by', 'Eng. P. Njuguna, PE')
             meta['reviewed_at'] = item['created_at']
+            meta['next_action'] = item.get('next_action', 'Routine maintenance plan')
+
+            if status == 'Verified':
+                rev_doc = {
+                    '_id': review_id,
+                    'report_id': rep_id,
+                    'assessment_id': assessment_id,
+                    'reviewer_id': 'usr_eng_njuguna',
+                    'reviewer_name': item.get('reviewed_by', 'Eng. P. Njuguna, PE (EBK B4512)'),
+                    'decision': 'Confirmed',
+                    'comments': item.get('review_notes', 'Verified structural defect. Maintenance recommended.'),
+                    'next_action': meta['next_action'],
+                    'review_date': item['created_at']
+                }
+                db['professional_reviews'].update_one({'_id': review_id}, {'$set': rev_doc}, upsert=True)
 
         if status == 'Resolved':
+            meta['next_action'] = item.get('next_action', 'No further action required at this stage')
             history.append({
                 'status': InfrastructureReport.STATUS_RESOLVED,
                 'timestamp': now_utc.isoformat(),
@@ -454,6 +488,7 @@ def run_rebalancing():
                 'reviewer_name': item.get('reviewed_by', 'Eng. J. Kamau, PE'),
                 'decision': 'Confirmed',
                 'comments': item.get('review_notes', 'Repairs completed and validated.'),
+                'next_action': meta['next_action'],
                 'review_date': item['created_at']
             }
             db['professional_reviews'].update_one({'_id': review_id}, {'$set': rev_doc}, upsert=True)
