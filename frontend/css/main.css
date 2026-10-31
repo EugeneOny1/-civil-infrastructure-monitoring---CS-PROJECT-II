@@ -772,6 +772,7 @@ body, body.light-theme {
 
 /* ==========================================================================
    Google Sign-In Button
+   ========================================================================== */
 .google-signin-wrapper {
     display: flex;
     justify-content: center;
@@ -819,23 +820,27 @@ body, body.light-theme {
 .auth-divider {
     display: flex;
     align-items: center;
+    justify-content: center;
     text-align: center;
-    margin: 1.25rem 0;
-    color: var(--text-muted);
-    font-size: 0.75rem;
+    width: 100%;
+    margin: 1.15rem 0;
+    color: #8e8e93;
+    font-size: 0.72rem;
+    font-weight: 500;
     text-transform: uppercase;
-    letter-spacing: 0.05em;
+    letter-spacing: 0.06em;
 }
 
 .auth-divider::before,
 .auth-divider::after {
     content: '';
     flex: 1;
-    border-bottom: 1px solid var(--border-color);
+    border-bottom: 1px solid #e5e5ea;
 }
 
 .auth-divider span {
     padding: 0 0.85rem;
+    white-space: nowrap;
 }
 
 /* ==========================================================================
