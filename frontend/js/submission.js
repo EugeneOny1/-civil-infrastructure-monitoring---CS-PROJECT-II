@@ -113,7 +113,7 @@ const Submission = {
                 const taggedBtn = document.getElementById('btnAutoGps');
                 if (taggedBtn) taggedBtn.classList.remove('tagged');
                 const taggedText = document.getElementById('btnAutoGpsText');
-                if (taggedText) taggedText.textContent = '📍 Tag Location';
+                if (taggedText) taggedText.innerHTML = "<i class='bx bx-map-pin'></i> Tag Location";
                 const summaryInput = document.getElementById('pickerLocationSummary');
                 if (summaryInput) {
                     summaryInput.value = '';
@@ -317,7 +317,7 @@ const Submission = {
             gpsBtn.title = "Defect coordinates tagged. Click to re-position.";
         }
         if (gpsBtnText) {
-            gpsBtnText.textContent = `✓ 📍 Tagged (${this.selectedCoordinates.latitude.toFixed(4)}°, ${this.selectedCoordinates.longitude.toFixed(4)}°)`;
+            gpsBtnText.innerHTML = `<i class='bx bx-check-circle'></i> Tagged (${this.selectedCoordinates.latitude.toFixed(4)}°, ${this.selectedCoordinates.longitude.toFixed(4)}°)`;
         }
 
         this.closeLocationPicker();
@@ -400,7 +400,7 @@ const Submission = {
                 const removeBtn = document.createElement('button');
                 removeBtn.type = 'button';
                 removeBtn.className = 'btn-card-remove';
-                removeBtn.innerHTML = '✕ Remove';
+                removeBtn.innerHTML = "<i class='bx bx-trash'></i> Remove";
                 removeBtn.title = 'Remove this photo';
                 removeBtn.addEventListener('click', (e) => {
                     e.stopPropagation();
@@ -542,7 +542,7 @@ const Submission = {
 
         const btn = document.getElementById('btnSubmitAiAnalysis');
         const originalText = btn.innerHTML;
-        btn.innerHTML = `<span>⏳</span> Analyzing ${this.selectedFiles.length} photo(s) with SSD-MobileNetV2...`;
+        btn.innerHTML = `<i class='bx bx-loader-alt bx-spin'></i> Analyzing ${this.selectedFiles.length} photo(s) with SSD-MobileNetV2...`;
         btn.disabled = true;
 
         try {
@@ -690,7 +690,7 @@ const Submission = {
                 ctx.fillStyle = '#10b981';
                 const fontSize = Math.max(14, Math.round(origW * 0.024));
                 ctx.font = `600 ${fontSize}px "Inter", sans-serif`;
-                ctx.fillText('[ ✓ No Structural Defects Detected (Confidence >= 30%) ]', 16, Math.round(bannerH * 0.65));
+                ctx.fillText('No Structural Defects Detected (Confidence >= 30%)', 16, Math.round(bannerH * 0.65));
                 return;
             }
 
@@ -788,7 +788,7 @@ const Submission = {
             ctx.fillStyle = '#f59e0b';
             ctx.font = 'bold 15px "Inter", sans-serif';
             ctx.textAlign = 'center';
-            ctx.fillText('📷 Evidence image unavailable', 320, 185);
+            ctx.fillText('Evidence image unavailable', 320, 185);
             ctx.fillStyle = '#94a3b8';
             ctx.font = '12px "Inter", sans-serif';
             ctx.fillText('Source photographic file could not be loaded.', 320, 215);

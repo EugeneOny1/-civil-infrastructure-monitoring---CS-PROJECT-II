@@ -382,8 +382,8 @@ const DefectMap = {
                         <path d="M15 0C6.7 0 0 6.7 0 15c0 10.5 15 23 15 23s15-12.5 15-23c0-8.3-6.7-15-15-15z" fill="${pinColor}"/>
                         <circle cx="15" cy="14" r="5.5" fill="#ffffff"/>
                     </svg>
-                    ${isUnderReview ? '<span style="position:absolute; top:-3px; right:-4px; font-size:10px; background:#0f172a; border-radius:50%; padding:1px; line-height:1;" title="Under Review">🔍</span>' : ''}
-                    ${isUnusual ? '<span style="position:absolute; top:-3px; right:-3px; font-size:11px;" title="Unusual Pairing Flagged">⚠️</span>' : ''}
+                    ${isUnderReview ? '<span style="position:absolute; top:-4px; right:-5px; font-size:10px; background:#0f172a; border-radius:50%; width:15px; height:15px; display:inline-flex; align-items:center; justify-content:center; color:#38bdf8;" title="Under Review"><i class="bx bx-time"></i></span>' : ''}
+                    ${isUnusual ? '<span style="position:absolute; top:-4px; right:-4px; font-size:11px; background:#fff7ed; border-radius:50%; width:15px; height:15px; display:inline-flex; align-items:center; justify-content:center; color:#c2410c; border:1px solid #fed7aa;" title="Unusual Pairing Flagged"><i class="bx bx-error-circle"></i></span>' : ''}
                 </div>
             `;
         }
@@ -419,19 +419,19 @@ const DefectMap = {
                 </div>
                 ${resolvedImgUrl ? `<div style="width:100%; height:110px; border-radius:6px; overflow:hidden; margin-bottom:8px; background:#0f172a;"><img src="${resolvedImgUrl}" alt="Defect" style="width:100%; height:100%; object-fit:cover;" onerror="this.parentElement.style.display='none'"></div>` : ''}
                 <div style="font-size:0.9rem; font-weight:700; color:#0f172a; margin-bottom:3px;">${defect}</div>
-                <div style="font-size:0.78rem; color:#475569; margin-bottom:6px;">📍 ${location}</div>
+                <div style="font-size:0.78rem; color:#475569; margin-bottom:6px;"><i class='bx bx-map-pin'></i> ${location}</div>
                 <div style="display:flex; justify-content:space-between; align-items:center; font-size:0.75rem; color:#64748b; margin-bottom:8px;">
                     <span>Asset: <strong>${asset}</strong></span>
                     <span class="status-chip ${statusSlug}" style="font-size:0.7rem; padding:2px 8px;">${status}</span>
                 </div>
                 ${point.nearby_report_count > 0 ? `
                     <div style="font-size:0.75rem; color:#0284c7; font-weight:600; margin-bottom:6px; background:#f0f9ff; padding:3px 6px; border-radius:4px; border:1px solid #bae6fd;">
-                        📍 Density: ${point.nearby_report_count} nearby defect report(s) within 50m
+                        <i class='bx bx-layer'></i> Density: ${point.nearby_report_count} nearby defect report(s) within 50m
                     </div>
                 ` : ''}
                 <div style="font-size:0.72rem; color:#94a3b8; border-top:1px solid #f1f5f9; padding-top:6px; display:flex; justify-content:space-between; align-items:center;">
-                    <span>📅 ${dateStr}</span>
-                    <span style="color:#059669; font-weight:600;">🔒 Reporter Protected</span>
+                    <span><i class='bx bx-calendar'></i> ${dateStr}</span>
+                    <span style="color:#059669; font-weight:600;"><i class='bx bx-shield-check'></i> Reporter Protected</span>
                 </div>
                 ${isEngineer ? `
                     <div style="margin-top:8px; border-top:1px solid #f1f5f9; padding-top:6px;">

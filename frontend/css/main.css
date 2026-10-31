@@ -898,12 +898,16 @@ body, body.light-theme {
 }
 
 .strength-item.passed::before {
-    content: '✓';
+    content: '\eb7b';
+    font-family: 'boxicons' !important;
+    font-size: 0.85rem;
     font-weight: 700;
 }
 
 .strength-item.failed::before {
-    content: '○';
+    content: '\ed3a';
+    font-family: 'boxicons' !important;
+    font-size: 0.85rem;
     color: #9ca3af;
 }
 

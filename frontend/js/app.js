@@ -791,7 +791,7 @@ const App = {
                         <td><span class="severity-pill ${sev.toLowerCase()}">${sev.toUpperCase()}</span></td>
                         <td>
                             <span class="status-chip ${statusSlug}">${status}</span>
-                            ${isUnusual ? `<span class="badge-tag" style="background:#fff7ed;color:#c2410c;border:1px solid #fed7aa;margin-left:4px;">⚠️ Unusual Pairing</span>` : ''}
+                            ${isUnusual ? `<span class="badge-tag" style="background:#fff7ed;color:#c2410c;border:1px solid #fed7aa;margin-left:4px;"><i class='bx bx-error-circle'></i> Unusual Pairing</span>` : ''}
                         </td>
                     </tr>
                 `;
@@ -1030,7 +1030,7 @@ const App = {
                 const isEngineer = u.role === 'engineer';
                 const uid = u.user_id || u._id;
                 const orgInfo = u.organization ? `${u.organization} ${u.professional_reg_no ? '(' + u.professional_reg_no + ')' : ''}` : (u.professional_reg_no || '—');
-                const has2fa = u.two_factor_enabled ? '<span style="color:#16a34a; font-weight:600;">🔐 Enabled</span>' : '<span style="color:#86868b;">Disabled</span>';
+                const has2fa = u.two_factor_enabled ? '<span style="color:#16a34a; font-weight:600;"><i class=\'bx bx-shield-quarter\'></i> Enabled</span>' : '<span style="color:#86868b;">Disabled</span>';
                 const verifClass = isVerified ? 'verified' : (u.verification_status === 'rejected' ? 'rejected' : 'pending');
                 const reasonTooltip = u.rejection_reason ? `title="Rejection Reason: ${u.rejection_reason}"` : '';
 
@@ -1047,15 +1047,20 @@ const App = {
                             </span>
                         </td>
                         <td>
-                            ${isEngineer && !isVerified ? `
-                                <button type="button" class="btn-action-verify" onclick="App.handleVerifyUser('${uid}', 'verified')">
-                                    ✓ Verify Engineer
+                            <div style="display:flex; align-items:center; gap:4px; flex-wrap:wrap;">
+                                ${isEngineer && !isVerified ? `
+                                    <button type="button" class="btn-action-verify" onclick="App.handleVerifyUser('${uid}', 'verified')">
+                                        <i class='bx bx-user-check'></i> Verify
+                                    </button>
+                                    ${u.verification_status !== 'rejected' ? `
+                                    <button type="button" class="btn-action-reject" onclick="App.openRejectionModal('${uid}', '${(u.name || 'Engineer').replace(/'/g, "\\'")}', '${u.email}')">
+                                        <i class='bx bx-user-x'></i> Reject
+                                    </button>` : ''}
+                                ` : `<span style="color: #86868b; font-size: 0.8rem;">Active</span>`}
+                                <button type="button" class="btn-micro" style="padding: 2px 6px; font-size: 0.75rem;" title="Send targeted notice to ${u.name}" onclick="App.openTargetedNotice('${uid}', '${(u.name || 'User').replace(/'/g, "\\'")}', '${u.email}')">
+                                    <i class='bx bx-envelope'></i> Notice
                                 </button>
-                                ${u.verification_status !== 'rejected' ? `
-                                <button type="button" class="btn-action-reject" onclick="App.openRejectionModal('${uid}', '${(u.name || 'Engineer').replace(/'/g, "\\'")}', '${u.email}')">
-                                    ✕ Reject
-                                </button>` : ''}
-                            ` : `<span style="color: #86868b; font-size: 0.8rem;">Active</span>`}
+                            </div>
                         </td>
                     </tr>
                 `;
@@ -1452,19 +1457,19 @@ const App = {
 
                 if (critLen) {
                     critLen.className = `criterion ${hasLen ? 'passed' : 'failed'}`;
-                    critLen.textContent = `${hasLen ? '✓' : '✕'} At least 8 characters`;
+                    critLen.innerHTML = `<i class='bx ${hasLen ? 'bx-check' : 'bx-x'}'></i> At least 8 characters`;
                 }
                 if (critNum) {
                     critNum.className = `criterion ${hasNum ? 'passed' : 'failed'}`;
-                    critNum.textContent = `${hasNum ? '✓' : '✕'} At least one number (0-9)`;
+                    critNum.innerHTML = `<i class='bx ${hasNum ? 'bx-check' : 'bx-x'}'></i> At least one number (0-9)`;
                 }
                 if (critSpec) {
                     critSpec.className = `criterion ${hasSpec ? 'passed' : 'failed'}`;
-                    critSpec.textContent = `${hasSpec ? '✓' : '✕'} At least one special symbol (!@#$)`;
+                    critSpec.innerHTML = `<i class='bx ${hasSpec ? 'bx-check' : 'bx-x'}'></i> At least one special symbol (!@#$)`;
                 }
                 if (critCase) {
                     critCase.className = `criterion ${hasCase ? 'passed' : 'failed'}`;
-                    critCase.textContent = `${hasCase ? '✓' : '✕'} Upper & lowercase letters`;
+                    critCase.innerHTML = `<i class='bx ${hasCase ? 'bx-check' : 'bx-x'}'></i> Upper & lowercase letters`;
                 }
             });
         }
@@ -1585,14 +1590,14 @@ const App = {
         const updateDisplay = () => {
             if (!textEl) return;
             if (remaining <= 0) {
-                textEl.textContent = '⏱ Code expired. Please request a new code.';
+                textEl.innerHTML = `<i class='bx bx-time-five'></i> Code expired. Please request a new code.`;
                 textEl.style.color = '#dc2626';
                 if (btnVerify) btnVerify.disabled = true;
                 if (this.otpCountdownTimer) clearInterval(this.otpCountdownTimer);
             } else {
                 const m = Math.floor(remaining / 60);
                 const s = remaining % 60;
-                textEl.textContent = `⏱ Code expires in ${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
+                textEl.innerHTML = `<i class='bx bx-time-five'></i> Code expires in ${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
                 textEl.style.color = remaining < 60 ? '#dc2626' : '#475569';
                 if (btnVerify) btnVerify.disabled = false;
             }
