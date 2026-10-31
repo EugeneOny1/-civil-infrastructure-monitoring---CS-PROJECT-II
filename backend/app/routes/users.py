@@ -62,10 +62,12 @@ def get_user_reports(current_user):
 
         image = db_service.find_one('submitted_images', {'report_id': rep['_id']})
         assessment = db_service.find_one('ai_assessments', {'image_id': image['_id']}) if image else None
+        review = db_service.find_one('professional_reviews', {'assessment_id': assessment['_id']}) if assessment else None
         results.append({
             'report': rep,
             'image_url': f"/api/reports/images/{image['image_path']}" if image else None,
-            'assessment': assessment
+            'assessment': assessment,
+            'review': review
         })
 
     return jsonify({'reports': results, 'count': len(results)}), 200

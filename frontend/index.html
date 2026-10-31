@@ -514,6 +514,7 @@
                                 <th>Detected Defect(s)</th>
                                 <th>Relative Severity</th>
                                 <th>Lifecycle Status</th>
+                                <th>Action</th>
                             </tr>
                         </thead>
                         <tbody id="trackingTableBody">
@@ -521,6 +522,11 @@
                         </tbody>
                     </table>
                 </div>
+            </div>
+
+            <!-- Active Defect Status Progression & Verification Details (FR-08) -->
+            <div class="tracking-active-card glass-card hidden" id="trackingActiveDetailCard">
+                <!-- Populated dynamically via App.selectTrackingReport -->
             </div>
         </section>
 

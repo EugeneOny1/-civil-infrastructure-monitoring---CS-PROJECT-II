@@ -750,28 +750,33 @@ const App = {
         if (!this.currentUser) {
             tbody.innerHTML = `
                 <tr>
-                    <td colspan="6" style="text-align:center; padding: 2.5rem; color: #86868b;">
+                    <td colspan="7" style="text-align:center; padding: 2.5rem; color: #86868b;">
                         Please <button type="button" class="btn-micro btn-accent" onclick="window.App.showAuthView('login')">Sign In</button> to view your submitted infrastructure defect reports.
                     </td>
                 </tr>`;
+            const detailCard = document.getElementById('trackingActiveDetailCard');
+            if (detailCard) detailCard.classList.add('hidden');
             return;
         }
 
         try {
             const data = await window.Api.getMyReports();
             const reports = data.reports || [];
+            this.citizenReports = reports;
 
             if (reports.length === 0) {
                 tbody.innerHTML = `
                     <tr>
-                        <td colspan="6" style="text-align:center; padding: 2.5rem; color: #86868b;">
+                        <td colspan="7" style="text-align:center; padding: 2.5rem; color: #86868b;">
                             No defect reports submitted yet. Use the 'Report Defect' tab to photograph and submit an infrastructure defect!
                         </td>
                     </tr>`;
+                const detailCard = document.getElementById('trackingActiveDetailCard');
+                if (detailCard) detailCard.classList.add('hidden');
                 return;
             }
 
-            tbody.innerHTML = reports.map(item => {
+            tbody.innerHTML = reports.map((item, idx) => {
                 const rep = item.report;
                 const ai = item.assessment || {};
                 const sev = ai.relative_severity || rep.metadata?.relative_severity || 'Low';
@@ -781,24 +786,254 @@ const App = {
                 const dateStr = rep.date_submitted ? new Date(rep.date_submitted).toLocaleDateString() : 'Recent';
                 const location = rep.metadata?.location_name || 'Corridor Asset';
                 const repId = rep.report_id || (rep._id ? rep._id.slice(0, 16) : 'REF');
+                const isFirst = idx === 0;
 
                 return `
-                    <tr>
+                    <tr class="tracking-table-row ${isFirst ? 'selected-tracking-row' : ''}" id="tracking-row-${repId}" style="cursor: pointer;" onclick="App.selectTrackingReport('${repId}')">
                         <td><code>#${repId}</code></td>
                         <td>${dateStr}</td>
                         <td>${location}</td>
-                        <td><strong>${ai.defect_class || 'Pavement Distress'}</strong></td>
+                        <td><strong>${ai.defect_class || rep.metadata?.defect_class || 'Pavement Distress'}</strong></td>
                         <td><span class="severity-pill ${sev.toLowerCase()}">${sev.toUpperCase()}</span></td>
                         <td>
                             <span class="status-chip ${statusSlug}">${status}</span>
                             ${isUnusual ? `<span class="badge-tag" style="background:#fff7ed;color:#c2410c;border:1px solid #fed7aa;margin-left:4px;"><i class='bx bx-error-circle'></i> Unusual Pairing</span>` : ''}
                         </td>
+                        <td>
+                            <button type="button" class="btn-micro btn-accent" onclick="event.stopPropagation(); App.selectTrackingReport('${repId}')">
+                                <i class='bx bx-git-branch'></i> Track
+                            </button>
+                        </td>
                     </tr>
                 `;
             }).join('');
+
+            // Automatically display the first report in the detailed progression stepper
+            const firstId = reports[0].report.report_id || reports[0].report._id;
+            this.selectTrackingReport(firstId, false);
         } catch (e) {
             console.error("Failed to load tracking data:", e);
-            tbody.innerHTML = `<tr><td colspan="6" style="text-align:center; padding: 2rem; color: #dc2626;">Failed to load defect reports.</td></tr>`;
+            tbody.innerHTML = `<tr><td colspan="7" style="text-align:center; padding: 2rem; color: #dc2626;">Failed to load defect reports.</td></tr>`;
+        }
+    },
+
+    selectTrackingReport(reportId, scroll = true) {
+        if (!this.citizenReports || this.citizenReports.length === 0) return;
+        const item = this.citizenReports.find(r => (r.report.report_id === reportId || r.report._id === reportId));
+        if (!item) return;
+
+        // Highlight selected row in table
+        document.querySelectorAll('.tracking-table-row').forEach(r => r.classList.remove('selected-tracking-row'));
+        const rowEl = document.getElementById(`tracking-row-${reportId}`);
+        if (rowEl) rowEl.classList.add('selected-tracking-row');
+
+        const rep = item.report;
+        const ai = item.assessment || {};
+        const rev = item.review || {};
+        const status = rep.status || 'Received';
+        const dateStr = rep.date_submitted ? new Date(rep.date_submitted).toLocaleString() : 'Recently Submitted';
+        const location = rep.metadata?.location_name || 'Corridor Asset';
+        const asset = rep.metadata?.asset_type || 'Road / Pavement';
+        const defect = ai.defect_class || rep.metadata?.defect_class || 'Pavement Distress';
+        const sev = (ai.relative_severity || rep.metadata?.relative_severity || 'Low').toUpperCase();
+        const conf = ai.confidence_score ? `${(ai.confidence_score * 100).toFixed(1)}%` : (rep.metadata?.confidence ? `${(rep.metadata.confidence * 100).toFixed(1)}%` : '—');
+        const areaRatio = ai.bounding_box && Array.isArray(ai.bounding_box) && ai.bounding_box.length === 4
+            ? `${((ai.bounding_box[2] - ai.bounding_box[0]) * (ai.bounding_box[3] - ai.bounding_box[1]) * 100).toFixed(1)}%`
+            : '—';
+        const imgUrl = item.image_url ? (window.Api.resolveImageUrl(item.image_url)) : (rep.metadata?.image_url ? window.Api.resolveImageUrl(rep.metadata.image_url) : '');
+        const lat = rep.metadata?.latitude || (rep.latitude || null);
+        const lng = rep.metadata?.longitude || (rep.longitude || null);
+
+        // Stages: 1: Received, 2: Under Review, 3: Verified, 4: Resolved
+        const stages = ['Received', 'Under Review', 'Verified', 'Resolved'];
+        const currentIdx = stages.indexOf(status) >= 0 ? stages.indexOf(status) : 0;
+        const fillPercent = (currentIdx / 3) * 100;
+
+        // Clear explanation and next steps:
+        let stageSummary = '';
+        let whatHappensNext = '';
+        if (status === 'Received') {
+            stageSummary = 'Report received and registered into the defect monitoring pipeline.';
+            whatHappensNext = 'Your defect report is queued for engineering evaluation. An accredited civil engineer will inspect the photographic evidence, analyze relative severity, and assign inspection priority.';
+        } else if (status === 'Under Review') {
+            stageSummary = 'Active engineering inspection and severity assessment in progress.';
+            whatHappensNext = 'An accredited civil engineer is actively assessing this defect, evaluating visual extent, and determining maintenance priority or dispatch requirements.';
+        } else if (status === 'Verified') {
+            stageSummary = 'Defect confirmed and officially validated by an accredited civil engineer.';
+            whatHappensNext = 'Engineering validation is complete. Remediation or maintenance has been recommended and logged for infrastructure asset servicing.';
+        } else if (status === 'Resolved') {
+            stageSummary = 'Defect remediation verified complete. Case officially closed.';
+            whatHappensNext = 'Remediation and site maintenance have addressed this defect. The infrastructure record is archived as resolved.';
+        }
+
+        // Reviewer Attribution & Professional Actions
+        const reviewerName = rev.reviewer_name || (rep.metadata?.status_history && rep.metadata.status_history.slice(-1)[0]?.updated_by) || (status !== 'Received' ? 'Accredited Civil Engineer' : null);
+        const reviewDate = rev.review_date ? new Date(rev.review_date).toLocaleString() : (rep.metadata?.status_history && rep.metadata.status_history.slice(-1)[0]?.timestamp ? new Date(rep.metadata.status_history.slice(-1)[0].timestamp).toLocaleString() : null);
+        const nextAction = rev.next_action || rep.metadata?.next_action || (status === 'Verified' ? 'Refer to maintenance team' : (status === 'Resolved' ? 'No further action required' : 'Engineering assessment pending'));
+        const followUpDate = rev.follow_up_date || rep.metadata?.follow_up_date || null;
+        const reviewNotes = rev.notes || (rep.metadata?.status_history && rep.metadata.status_history.slice(-1)[0]?.notes) || (status !== 'Received' ? 'Engineering validation in progress.' : 'Awaiting professional assessment.');
+
+        const cardEl = document.getElementById('trackingActiveDetailCard');
+        if (!cardEl) return;
+        cardEl.classList.remove('hidden');
+
+        cardEl.innerHTML = `
+            <div class="tracking-card-header">
+                <div class="tracking-card-title-group">
+                    <h3><i class='bx bx-check-shield' style="color: #0284c7;"></i> Defect Inspection Lifecycle & Tracking</h3>
+                    <p style="margin: 0; font-size: 0.85rem; color: #64748b;">
+                        Case ID: <strong>#REP-${reportId}</strong> &bull; Submitted on <strong>${dateStr}</strong> &bull; Location: <strong>${location}</strong>
+                    </p>
+                </div>
+                <div style="display: flex; gap: 0.5rem; align-items: center;">
+                    <span class="status-chip ${status.toLowerCase().replace(' ', '-')}">${status}</span>
+                    <span class="severity-pill ${sev.toLowerCase()}">${sev}</span>
+                </div>
+            </div>
+
+            <!-- Uber-like Status Progression Stepper -->
+            <div class="tracking-stepper-container">
+                <div class="tracking-stepper">
+                    <div class="tracking-stepper-line">
+                        <div class="tracking-stepper-fill" style="width: ${fillPercent}%;"></div>
+                    </div>
+
+                    <!-- Step 1: Received -->
+                    <div class="tracking-step ${currentIdx > 0 ? 'completed' : (currentIdx === 0 ? 'active' : 'upcoming')}">
+                        <div class="tracking-step-node">
+                            <i class='bx ${currentIdx > 0 ? 'bx-check' : 'bx-clipboard'}'></i>
+                        </div>
+                        <span class="tracking-step-title">1. Received</span>
+                        <span class="tracking-step-sub">AI Registered</span>
+                    </div>
+
+                    <!-- Step 2: Under Review -->
+                    <div class="tracking-step ${currentIdx > 1 ? 'completed' : (currentIdx === 1 ? 'active' : 'upcoming')}">
+                        <div class="tracking-step-node">
+                            <i class='bx ${currentIdx > 1 ? 'bx-check' : 'bx-time'}'></i>
+                        </div>
+                        <span class="tracking-step-title">2. Under Review</span>
+                        <span class="tracking-step-sub">Engineer Assessing</span>
+                    </div>
+
+                    <!-- Step 3: Verified -->
+                    <div class="tracking-step ${currentIdx > 2 ? 'completed' : (currentIdx === 2 ? 'active' : 'upcoming')}">
+                        <div class="tracking-step-node">
+                            <i class='bx ${currentIdx > 2 ? 'bx-check' : 'bx-badge-check'}'></i>
+                        </div>
+                        <span class="tracking-step-title">3. Verified</span>
+                        <span class="tracking-step-sub">Accredited Validation</span>
+                    </div>
+
+                    <!-- Step 4: Resolved -->
+                    <div class="tracking-step ${currentIdx === 3 ? 'completed active' : 'upcoming'}">
+                        <div class="tracking-step-node">
+                            <i class='bx ${currentIdx === 3 ? 'bx-check-double' : 'bx-check-circle'}'></i>
+                        </div>
+                        <span class="tracking-step-title">4. Resolved</span>
+                        <span class="tracking-step-sub">Site Remediated</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Status Summary & What Happens Next -->
+            <div class="tracking-summary-panel">
+                <div style="display: flex; align-items: flex-start; gap: 0.75rem;">
+                    <i class='bx bx-info-circle' style="font-size: 1.35rem; color: #0284c7; line-height: 1.2;"></i>
+                    <div style="flex: 1;">
+                        <div style="font-weight: 700; color: #0f172a; font-size: 0.95rem; margin-bottom: 2px;">
+                            ${stageSummary}
+                        </div>
+                        <div style="color: #475569; font-size: 0.85rem; line-height: 1.45;">
+                            <strong>What happens next:</strong> ${whatHappensNext}
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Details 3-Column Grid -->
+            <div class="tracking-grid-columns">
+                <!-- Box 1: Defect & AI Inspection Metrics -->
+                <div class="tracking-info-box">
+                    <div class="tracking-info-title">
+                        <i class='bx bx-scan'></i> Defect Assessment
+                    </div>
+                    <div style="display: flex; flex-direction: column; gap: 0.5rem; font-size: 0.85rem;">
+                        <div style="display: flex; justify-content: space-between;">
+                            <span style="color: #64748b;">Defect Class:</span>
+                            <strong>${defect}</strong>
+                        </div>
+                        <div style="display: flex; justify-content: space-between;">
+                            <span style="color: #64748b;">Infrastructure:</span>
+                            <span>${asset}</span>
+                        </div>
+                        <div style="display: flex; justify-content: space-between;">
+                            <span style="color: #64748b;">Model Confidence:</span>
+                            <span>${conf} (SSD-MobileNetV2)</span>
+                        </div>
+                        <div style="display: flex; justify-content: space-between;">
+                            <span style="color: #64748b;">Visual Severity:</span>
+                            <span class="severity-pill ${sev.toLowerCase()}">${sev}</span>
+                        </div>
+                        <div style="display: flex; justify-content: space-between;">
+                            <span style="color: #64748b;">Area Extent:</span>
+                            <span>${areaRatio}</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Box 2: Professional Engineer Attribution & Action -->
+                <div class="tracking-info-box">
+                    <div class="tracking-info-title">
+                        <i class='bx bx-user-check'></i> Professional Engineering Review
+                    </div>
+                    <div style="display: flex; flex-direction: column; gap: 0.5rem; font-size: 0.85rem;">
+                        <div style="display: flex; justify-content: space-between;">
+                            <span style="color: #64748b;">Reviewer:</span>
+                            <strong>${reviewerName || 'Queue Pending'}</strong>
+                        </div>
+                        ${reviewDate ? `
+                        <div style="display: flex; justify-content: space-between;">
+                            <span style="color: #64748b;">Last Updated:</span>
+                            <span>${reviewDate}</span>
+                        </div>` : ''}
+                        <div style="display: flex; justify-content: space-between; align-items: center;">
+                            <span style="color: #64748b;">Next Action:</span>
+                            <span style="font-weight: 600; color: #0284c7;">${nextAction}</span>
+                        </div>
+                        ${followUpDate ? `
+                        <div style="display: flex; justify-content: space-between;">
+                            <span style="color: #64748b;">Target Date:</span>
+                            <strong>${followUpDate}</strong>
+                        </div>` : ''}
+                        <div style="border-top: 1px solid #f1f5f9; padding-top: 0.4rem; margin-top: 0.2rem;">
+                            <span style="color: #64748b; font-size: 0.78rem; display: block; margin-bottom: 2px;">Engineer Notes / Observations:</span>
+                            <p style="margin: 0; color: #334155; font-size: 0.82rem; font-style: italic;">
+                                "${reviewNotes}"
+                            </p>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Box 3: Location & Photographic Evidence -->
+                <div class="tracking-info-box">
+                    <div class="tracking-info-title">
+                        <i class='bx bx-map-pin'></i> Geographic Evidence
+                    </div>
+                    ${imgUrl ? `
+                    <div style="width: 100%; height: 110px; border-radius: 6px; overflow: hidden; background: #0f172a; margin-bottom: 0.65rem;">
+                        <img src="${imgUrl}" alt="Evidence" style="width: 100%; height: 100%; object-fit: cover;" onerror="this.parentElement.style.display='none'">
+                    </div>` : ''}
+                    <div style="font-size: 0.82rem; color: #475569;">
+                        <div><strong>Location:</strong> ${location}</div>
+                        ${lat && lng ? `<div style="font-size: 0.75rem; color: #64748b; font-family: var(--font-mono); margin-top: 2px;">GPS: ${Number(lat).toFixed(4)}°, ${Number(lng).toFixed(4)}°</div>` : ''}
+                    </div>
+                </div>
+            </div>
+        `;
+
+        if (scroll) {
+            cardEl.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
         }
     },
 

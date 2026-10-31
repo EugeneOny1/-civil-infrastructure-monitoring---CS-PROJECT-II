@@ -1355,6 +1355,166 @@ body, body.light-theme {
     }
 }
 
+/* ==========================================================================
+   Citizen Tracking Stepper & Detailed Lifecycle Portal (FR-08)
+   ========================================================================== */
+.tracking-active-card {
+    margin-top: 1.5rem;
+    padding: 1.5rem;
+    border-radius: var(--radius-md);
+    background: #ffffff;
+    border: 1px solid var(--border-color);
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.05);
+}
+
+.tracking-card-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    flex-wrap: wrap;
+    gap: 1rem;
+    border-bottom: 1px solid var(--border-color);
+    padding-bottom: 1rem;
+    margin-bottom: 1.5rem;
+}
+
+.tracking-card-title-group h3 {
+    margin: 0 0 0.25rem 0;
+    font-size: 1.15rem;
+    font-weight: 700;
+    color: #0f172a;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.tracking-stepper-container {
+    margin: 1.5rem 0 2rem 0;
+    padding: 0 0.5rem;
+}
+
+.tracking-stepper {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    position: relative;
+    max-width: 900px;
+    margin: 0 auto;
+}
+
+.tracking-step {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    text-align: center;
+    position: relative;
+    z-index: 2;
+    flex: 1;
+}
+
+.tracking-step-node {
+    width: 44px;
+    height: 44px;
+    border-radius: 50%;
+    background: #f1f5f9;
+    border: 2px solid #cbd5e1;
+    color: #64748b;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1.25rem;
+    transition: all 0.3s ease;
+    margin-bottom: 0.5rem;
+}
+
+.tracking-step.completed .tracking-step-node {
+    background: #ecfdf5;
+    border-color: #10b981;
+    color: #059669;
+}
+
+.tracking-step.active .tracking-step-node {
+    background: #eff6ff;
+    border-color: #3b82f6;
+    color: #2563eb;
+    box-shadow: 0 0 0 4px rgba(59, 130, 246, 0.15);
+}
+
+.tracking-step-title {
+    font-size: 0.85rem;
+    font-weight: 600;
+    color: #64748b;
+    margin-bottom: 0.2rem;
+}
+
+.tracking-step.completed .tracking-step-title {
+    color: #059669;
+}
+
+.tracking-step.active .tracking-step-title {
+    color: #1e40af;
+    font-weight: 700;
+}
+
+.tracking-step-sub {
+    font-size: 0.72rem;
+    color: #94a3b8;
+}
+
+.tracking-stepper-line {
+    position: absolute;
+    top: 22px;
+    left: 12%;
+    right: 12%;
+    height: 4px;
+    background: #e2e8f0;
+    z-index: 1;
+}
+
+.tracking-stepper-fill {
+    height: 100%;
+    background: #10b981;
+    transition: width 0.4s ease;
+}
+
+.tracking-summary-panel {
+    background: #f8fafc;
+    border: 1px solid #e2e8f0;
+    border-radius: var(--radius-sm);
+    padding: 1.25rem;
+    margin-bottom: 1.5rem;
+}
+
+.tracking-grid-columns {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+    gap: 1.25rem;
+}
+
+.tracking-info-box {
+    background: #ffffff;
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-sm);
+    padding: 1.15rem;
+}
+
+.tracking-info-title {
+    font-size: 0.8rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: #475569;
+    margin-bottom: 0.75rem;
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+}
+
+.data-table tr.selected-tracking-row {
+    background-color: #f0f9ff !important;
+    border-left: 3px solid #0284c7;
+}
+
 @media (prefers-reduced-motion: reduce) {
     *, *::before, *::after {
         animation-duration: 0.01ms !important;
