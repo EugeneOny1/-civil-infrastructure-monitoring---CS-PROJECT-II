@@ -817,18 +817,64 @@
 
             <!-- Two Column Dashboard: Degradation Chart + Prioritized Queue -->
             <div class="dashboard-columns">
-                <!-- Structural Degradation Trend Chart (Figure 4.7) -->
+                <!-- Historical Defect Trends Chart (Figure 4.7) -->
                 <div class="glass-card chart-card">
-                    <div class="card-header-bar">
-                        <span class="step-tag">STRUCTURAL CONDITION TRENDS</span>
-                        <span class="mode-tag">Historical Monitoring</span>
+                    <div class="card-header-bar" style="flex-wrap: wrap; gap: 0.5rem;">
+                        <div>
+                            <span class="step-tag">HISTORICAL DEFECT TRENDS</span>
+                            <span class="mode-tag" id="trendSubtitle">Reports Over Time</span>
+                        </div>
+                        <div class="filter-controls" style="display: flex; gap: 0.4rem; flex-wrap: wrap; align-items: center;">
+                            <select id="trendRangeSelect" class="filter-select" style="font-size: 0.78rem; padding: 4px 8px;">
+                                <option value="3m">Last 3 Months</option>
+                                <option value="6m" selected>Last 6 Months</option>
+                                <option value="12m">Last 12 Months</option>
+                                <option value="all">All Available Data</option>
+                            </select>
+                            <select id="trendViewBySelect" class="filter-select" style="font-size: 0.78rem; padding: 4px 8px;">
+                                <option value="defect_class" selected>View by Defect Class</option>
+                                <option value="visual_severity">View by Visual Severity</option>
+                            </select>
+                            <select id="trendCountySelect" class="filter-select" style="font-size: 0.78rem; padding: 4px 8px;">
+                                <option value="all" selected>All Counties</option>
+                                <option value="Nairobi">Nairobi County</option>
+                                <option value="Mombasa">Mombasa County</option>
+                                <option value="Kisumu">Kisumu County</option>
+                                <option value="Nakuru">Nakuru County</option>
+                                <option value="Kiambu">Kiambu County</option>
+                                <option value="Machakos">Machakos County</option>
+                                <option value="Uasin Gishu">Uasin Gishu County</option>
+                            </select>
+                            <select id="trendWardSelect" class="filter-select" style="font-size: 0.78rem; padding: 4px 8px;">
+                                <option value="all" selected>All Areas / Wards</option>
+                                <option value="CBD">CBD</option>
+                                <option value="Westlands">Westlands</option>
+                                <option value="Kileleshwa">Kileleshwa</option>
+                                <option value="Lavington">Lavington</option>
+                                <option value="Kilimani">Kilimani</option>
+                                <option value="Langata">Langata</option>
+                                <option value="Upper Hill">Upper Hill</option>
+                                <option value="Industrial Area">Industrial Area</option>
+                                <option value="South B">South B</option>
+                                <option value="Ngong Road">Ngong Road</option>
+                            </select>
+                        </div>
                     </div>
-                    <div class="chart-canvas-wrapper">
+                    <div class="chart-canvas-wrapper" style="position: relative; min-height: 240px;">
                         <canvas id="degradationChart" class="trend-canvas"></canvas>
+                        <div id="trendEmptyState" class="canvas-placeholder hidden" style="position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; background: rgba(15, 23, 42, 0.75);">
+                            <p style="color: #94a3b8; font-size: 0.85rem;"><i class='bx bx-info-circle'></i> Not enough historical report data is available for this period.</p>
+                        </div>
                     </div>
-                    <div class="chart-legend">
-                        <div class="legend-item"><span class="legend-color line-condition"></span> Structural Condition Index</div>
-                        <div class="legend-item"><span class="legend-color line-threshold"></span> Review Threshold (Score: 68)</div>
+                    <div class="chart-legend" id="trendLegend" style="display: flex; gap: 1rem; flex-wrap: wrap; margin-top: 0.5rem;">
+                        <!-- Dynamically populated series legend -->
+                    </div>
+                    <!-- Secondary Summary Metrics Strip -->
+                    <div class="trend-summary-strip" id="trendSummaryStrip" style="display: flex; gap: 1.5rem; flex-wrap: wrap; margin-top: 0.75rem; padding-top: 0.6rem; border-top: 1px solid rgba(255, 255, 255, 0.08); font-size: 0.78rem; color: #94a3b8;">
+                        <div>Most reported defect: <strong id="trendSummaryMostReported" style="color: #f1f5f9;">—</strong></div>
+                        <div>Critical reports this period: <strong id="trendSummaryCritical" style="color: #ef4444;">—</strong></div>
+                        <div>Reports resolved: <strong id="trendSummaryResolved" style="color: #10b981;">—</strong></div>
+                        <div>Most active monitored corridor: <strong id="trendSummaryActiveLocation" style="color: #38bdf8;">—</strong></div>
                     </div>
                 </div>
 

@@ -1,4 +1,7 @@
-from flask import Blueprint, jsonify
+from datetime import datetime, timezone, timedelta
+import calendar
+from collections import defaultdict
+from flask import Blueprint, jsonify, request, make_response
 from ..services.database import db_service
 from ..utils.auth_helpers import role_required
 
@@ -33,7 +36,7 @@ def get_summary(current_user):
     from flask import current_app
     model_version = current_app.config.get('MODEL_VERSION', 'ssd_mobilenet_v2_lr00625_step8000_v2')
 
-    return jsonify({
+    resp = make_response(jsonify({
         'active_defect_queue': active_count,
         'flagged_unusual_count': flagged_unusual_count,
         'verified_inspections': verified_count,
@@ -52,25 +55,261 @@ def get_summary(current_user):
             'Pothole': pothole_count,
             'Surface deterioration': surface_count
         }
-    }), 200
+    }), 200)
+    resp.headers['Cache-Control'] = 'no-cache, no-store, must-revalidate'
+    return resp
 
 @analytics_bp.route('/trends', methods=['GET'])
 @role_required('engineer', 'admin')
-def get_degradation_trends(current_user):
+def get_historical_defect_trends(current_user):
     """
-    FR-09 & Figure 4.7: Historical Structural Condition Trends.
-    Returns condition tracking points across inspection periods.
+    Database-driven Historical Defect Trends.
+    Replaces static/artificial condition index with real infrastructure defect observations
+    grouped over time by Defect Class or Visual Severity.
     """
-    trends = [
-        {'period': 'May', 'condition_score': 92, 'action_threshold': 68, 'defects_logged': 4},
-        {'period': 'Jun', 'condition_score': 89, 'action_threshold': 68, 'defects_logged': 7},
-        {'period': 'Jul', 'condition_score': 82, 'action_threshold': 68, 'defects_logged': 11},
-        {'period': 'Aug', 'condition_score': 77, 'action_threshold': 68, 'defects_logged': 14},
-        {'period': 'Sep', 'condition_score': 70, 'action_threshold': 68, 'defects_logged': 18},
-        {'period': 'Oct', 'condition_score': 64, 'action_threshold': 68, 'defects_logged': 22}
-    ]
-    return jsonify({
-        'trend_data': trends,
-        'action_threshold': 68,
-        'current_condition_rating': 'Prioritized for Maintenance Review'
-    }), 200
+    time_range = request.args.get('range', '6m').lower().strip()
+    view_by = request.args.get('view_by', 'defect_class').lower().strip()
+    county_filter = request.args.get('county', 'all').strip()
+    ward_filter = request.args.get('ward', 'all').strip()
+
+    if view_by not in ['defect_class', 'visual_severity']:
+        view_by = 'defect_class'
+
+    now = datetime.now(timezone.utc)
+    all_reports = db_service.find('infrastructure_reports')
+    all_assessments = {str(a.get('report_id') or a.get('_id')): a for a in db_service.find('ai_assessments')}
+
+    # Pre-parse report dates
+    parsed_reports = []
+    for rep in all_reports:
+        dt_str = rep.get('date_submitted') or rep.get('created_at')
+        if not dt_str:
+            continue
+        try:
+            # Handle ISO formats with or without timezone
+            clean_str = dt_str.replace('Z', '+00:00')
+            if '+' in clean_str[10:] or '-' in clean_str[10:]:
+                # Timezone aware
+                dt = datetime.fromisoformat(clean_str)
+            else:
+                dt = datetime.fromisoformat(clean_str).replace(tzinfo=timezone.utc)
+        except Exception:
+            try:
+                dt = datetime.strptime(dt_str[:10], '%Y-%m-%d').replace(tzinfo=timezone.utc)
+            except Exception:
+                continue
+
+        meta = rep.get('metadata') or {}
+        loc_name = str(meta.get('location_name') or rep.get('location_name') or rep.get('description') or '')
+
+        # County filter
+        if county_filter and county_filter.lower() != 'all':
+            if county_filter.lower() not in loc_name.lower():
+                continue
+
+        # Ward / sub-county filter
+        if ward_filter and ward_filter.lower() != 'all' and ward_filter.lower() != 'all areas':
+            if ward_filter.lower() not in loc_name.lower():
+                continue
+
+        parsed_reports.append((dt, rep, meta, loc_name))
+
+    # Define time boundaries and chronological period buckets
+    if time_range == '3m':
+        # 12 weekly periods across past 90 days
+        num_weeks = 12
+        start_date = now - timedelta(days=num_weeks * 7)
+        periods = []
+        for w in range(num_weeks):
+            w_start = start_date + timedelta(days=w * 7)
+            w_end = w_start + timedelta(days=6)
+            label = f"{w_start.strftime('%d %b')} - {w_end.strftime('%d %b')}"
+            periods.append({
+                'key': f"W{w}",
+                'label': label,
+                'start': w_start,
+                'end': w_end + timedelta(days=1)
+            })
+    elif time_range == '12m':
+        # 12 calendar months
+        periods = []
+        cur_year, cur_month = now.year, now.month
+        for i in range(11, -1, -1):
+            m = cur_month - i
+            y = cur_year
+            while m <= 0:
+                m += 12
+                y -= 1
+            start_m = datetime(y, m, 1, tzinfo=timezone.utc)
+            last_day = calendar.monthrange(y, m)[1]
+            end_m = datetime(y, m, last_day, 23, 59, 59, tzinfo=timezone.utc)
+            periods.append({
+                'key': f"{y}-{m:02d}",
+                'label': f"{calendar.month_abbr[m]} {y}",
+                'start': start_m,
+                'end': end_m
+            })
+    elif time_range == 'all':
+        # From earliest report to current month
+        earliest_year = now.year
+        earliest_month = now.month
+        for dt, _, _, _ in parsed_reports:
+            if (dt.year, dt.month) < (earliest_year, earliest_month):
+                earliest_year = dt.year
+                earliest_month = dt.month
+        
+        # At least 6 months
+        months_span = (now.year - earliest_year) * 12 + (now.month - earliest_month) + 1
+        months_span = max(months_span, 6)
+        periods = []
+        for i in range(months_span - 1, -1, -1):
+            m = now.month - i
+            y = now.year
+            while m <= 0:
+                m += 12
+                y -= 1
+            start_m = datetime(y, m, 1, tzinfo=timezone.utc)
+            last_day = calendar.monthrange(y, m)[1]
+            end_m = datetime(y, m, last_day, 23, 59, 59, tzinfo=timezone.utc)
+            periods.append({
+                'key': f"{y}-{m:02d}",
+                'label': f"{calendar.month_abbr[m]} {y}",
+                'start': start_m,
+                'end': end_m
+            })
+    else:
+        # Default: 6 calendar months
+        time_range = '6m'
+        periods = []
+        cur_year, cur_month = now.year, now.month
+        for i in range(5, -1, -1):
+            m = cur_month - i
+            y = cur_year
+            while m <= 0:
+                m += 12
+                y -= 1
+            start_m = datetime(y, m, 1, tzinfo=timezone.utc)
+            last_day = calendar.monthrange(y, m)[1]
+            end_m = datetime(y, m, last_day, 23, 59, 59, tzinfo=timezone.utc)
+            periods.append({
+                'key': f"{y}-{m:02d}",
+                'label': f"{calendar.month_abbr[m]} {y}",
+                'start': start_m,
+                'end': end_m
+            })
+
+    # Initialize trend buckets with zero counts (no artificial gaps or interpolation)
+    if view_by == 'defect_class':
+        series_keys = ['Crack', 'Pothole', 'Surface deterioration']
+    else:
+        series_keys = ['Critical', 'Medium', 'Low']
+
+    trend_buckets = []
+    for p in periods:
+        b = {
+            'period': p['label'],
+            'total': 0
+        }
+        for k in series_keys:
+            b[k] = 0
+        trend_buckets.append((p, b))
+
+    # Aggregate actual database reports
+    total_in_period = 0
+    defect_counts = defaultdict(int)
+    critical_in_period = 0
+    resolved_in_period = 0
+    location_counts = defaultdict(int)
+
+    earliest_bound = periods[0]['start']
+    latest_bound = periods[-1]['end']
+
+    for dt, rep, meta, loc_name in parsed_reports:
+        if not (earliest_bound <= dt <= latest_bound):
+            continue
+
+        total_in_period += 1
+        rep_status = rep.get('status', 'Received')
+        if rep_status == 'Resolved':
+            resolved_in_period += 1
+
+        # Class determination
+        raw_class = str(meta.get('defect_class') or rep.get('defect_class') or '').strip().lower()
+        if 'pothole' in raw_class:
+            defect_class = 'Pothole'
+        elif 'crack' in raw_class:
+            defect_class = 'Crack'
+        elif 'surface' in raw_class:
+            defect_class = 'Surface deterioration'
+        else:
+            defect_class = 'Pothole'  # standard canonical fallback
+
+        defect_counts[defect_class] += 1
+
+        # Severity determination
+        raw_sev = str(meta.get('relative_severity') or rep.get('relative_severity') or '').strip().lower()
+        if raw_sev in ['critical', 'high']:
+            severity = 'Critical'
+            critical_in_period += 1
+        elif raw_sev in ['medium', 'moderate']:
+            severity = 'Medium'
+        else:
+            severity = 'Low'
+
+        if loc_name:
+            location_counts[loc_name] += 1
+
+        # Locate bucket
+        for p_info, bucket in trend_buckets:
+            if p_info['start'] <= dt <= p_info['end']:
+                bucket['total'] += 1
+                if view_by == 'defect_class':
+                    bucket[defect_class] = bucket.get(defect_class, 0) + 1
+                else:
+                    bucket[severity] = bucket.get(severity, 0) + 1
+                break
+
+    trend_data = [b for _, b in trend_buckets]
+
+    # Secondary summary computations
+    most_reported_defect = max(defect_counts.items(), key=lambda x: x[1])[0] if defect_counts else 'None'
+    most_active_loc = max(location_counts.items(), key=lambda x: x[1])[0] if location_counts else 'None'
+
+    has_data = total_in_period > 0
+
+    resp_data = {
+        'trend_data': trend_data,
+        'time_range': time_range,
+        'view_by': view_by,
+        'series': series_keys,
+        'has_sufficient_data': has_data,
+        'message': None if has_data else 'Not enough historical report data is available for this period.',
+        'summary': {
+            'most_reported_defect': most_reported_defect,
+            'critical_reports_count': critical_in_period,
+            'resolved_reports_count': resolved_in_period,
+            'most_active_location': most_active_loc,
+            'total_reports': total_in_period
+        },
+        'filter_options': {
+            'counties': ['All Counties', 'Nairobi', 'Mombasa', 'Kisumu', 'Nakuru', 'Kiambu', 'Machakos', 'Uasin Gishu'],
+            'wards': [
+                'All Areas',
+                'CBD',
+                'Westlands',
+                'Kileleshwa',
+                'Lavington',
+                'Kilimani',
+                'Langata',
+                'Upper Hill',
+                'Industrial Area',
+                'South B',
+                'Ngong Road'
+            ]
+        }
+    }
+
+    resp = make_response(jsonify(resp_data), 200)
+    resp.headers['Cache-Control'] = 'no-cache, no-store, must-revalidate'
+    return resp
+

@@ -32,6 +32,14 @@ const Dashboard = {
             e.stopPropagation();
             triggerVerifiedFilter();
         });
+        const rangeSelect = document.getElementById('trendRangeSelect');
+        const viewBySelect = document.getElementById('trendViewBySelect');
+        const countySelect = document.getElementById('trendCountySelect');
+        const wardSelect = document.getElementById('trendWardSelect');
+
+        [rangeSelect, viewBySelect, countySelect, wardSelect].forEach(el => {
+            if (el) el.addEventListener('change', () => this.loadDegradationChart());
+        });
     },
 
     async loadDashboardData() {
@@ -60,105 +68,226 @@ const Dashboard = {
     },
 
     async loadDegradationChart() {
+        const range = document.getElementById('trendRangeSelect')?.value || '6m';
+        const viewBy = document.getElementById('trendViewBySelect')?.value || 'defect_class';
+        const county = document.getElementById('trendCountySelect')?.value || 'all';
+        const ward = document.getElementById('trendWardSelect')?.value || 'all';
+
         try {
-            const data = await window.Api.getDegradationTrends();
-            this.drawDegradationChart(data.trend_data, data.action_threshold);
+            const data = await window.Api.getDegradationTrends({
+                range: range,
+                view_by: viewBy,
+                county: county,
+                ward: ward
+            });
+            this.drawHistoricalDefectChart(data);
         } catch (e) {
-            console.error("Trend load error:", e);
+            console.error("Historical Defect Trend load error:", e);
         }
     },
 
-    drawDegradationChart(trendData, threshold = 68) {
+    drawHistoricalDefectChart(apiData) {
         const canvas = document.getElementById('degradationChart');
+        const emptyState = document.getElementById('trendEmptyState');
+        const legendContainer = document.getElementById('trendLegend');
         if (!canvas) return;
-        const ctx = canvas.getContext('2d');
 
+        const trendData = apiData?.trend_data || [];
+        const series = apiData?.series || ['Crack', 'Pothole', 'Surface deterioration'];
+        const viewBy = apiData?.view_by || 'defect_class';
+        const hasData = Boolean(apiData?.has_sufficient_data && trendData.length > 0 && trendData.some(d => (d.total || 0) > 0));
+
+        // Update secondary summary strip
+        const summary = apiData?.summary || {};
+        const repEl = document.getElementById('trendSummaryMostReported');
+        const critEl = document.getElementById('trendSummaryCritical');
+        const resEl = document.getElementById('trendSummaryResolved');
+        const locEl = document.getElementById('trendSummaryActiveLocation');
+
+        if (repEl) repEl.textContent = summary.most_reported_defect || 'None';
+        if (critEl) critEl.textContent = summary.critical_reports_count ?? 0;
+        if (resEl) resEl.textContent = summary.resolved_reports_count ?? 0;
+        if (locEl) locEl.textContent = summary.most_active_location || 'Corridors';
+
+        // Update mode subtitle
+        const subEl = document.getElementById('trendSubtitle');
+        if (subEl) {
+            subEl.textContent = viewBy === 'visual_severity'
+                ? "Observations Over Time — By Visual Severity"
+                : "Observations Over Time — By Defect Class";
+        }
+
+        // Color palettes
+        const COLORS = {
+            'Crack': '#f59e0b',
+            'Pothole': '#ef4444',
+            'Surface deterioration': '#0284c7',
+            'Critical': '#ef4444',
+            'Medium': '#f59e0b',
+            'Low': '#10b981'
+        };
+
+        // Render dynamic legend
+        if (legendContainer) {
+            legendContainer.innerHTML = series.map(k => `
+                <div class="legend-item" style="display:flex; align-items:center; gap:6px; font-size:0.78rem; color:#cbd5e1;">
+                    <span style="display:inline-block; width:12px; height:12px; border-radius:3px; background:${COLORS[k] || '#94a3b8'};"></span>
+                    <span>${k}</span>
+                </div>
+            `).join('');
+        }
+
+        // Handle empty data
+        if (!hasData) {
+            if (emptyState) emptyState.classList.remove('hidden');
+            const ctx = canvas.getContext('2d');
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            return;
+        } else {
+            if (emptyState) emptyState.classList.add('hidden');
+        }
+
+        const ctx = canvas.getContext('2d');
         const width = canvas.parentElement.clientWidth || 540;
         const height = canvas.parentElement.clientHeight || 260;
         canvas.width = width * 2;
         canvas.height = height * 2;
         ctx.scale(2, 2);
 
-        const padL = 40;
-        const padR = 25;
-        const padT = 30;
+        const padL = 36;
+        const padR = 20;
+        const padT = 24;
         const padB = 40;
         const chartW = width - padL - padR;
         const chartH = height - padT - padB;
 
         ctx.clearRect(0, 0, width, height);
 
-        // Grid lines (0 to 100)
-        ctx.font = '11px "Montserrat", sans-serif';
-        ctx.fillStyle = '#86868b';
-        ctx.strokeStyle = '#e5e5ea';
+        // Find max count for Y-axis scale
+        let maxVal = 1;
+        trendData.forEach(d => {
+            series.forEach(s => {
+                if ((d[s] || 0) > maxVal) maxVal = d[s];
+            });
+            if ((d.total || 0) > maxVal) maxVal = d.total;
+        });
+
+        // Round maxVal up to nice integer step (e.g. 5, 10, 20)
+        let yMax = Math.max(5, Math.ceil(maxVal * 1.25));
+        if (yMax % 5 !== 0) yMax += (5 - (yMax % 5));
+
+        // Draw horizontal grid lines
+        ctx.font = '10px "Inter", sans-serif';
+        ctx.fillStyle = '#64748b';
+        ctx.strokeStyle = '#334155';
         ctx.lineWidth = 1;
 
-        const yLevels = [0, 20, 40, 60, 80, 100];
-        yLevels.forEach(lvl => {
-            const y = padT + chartH - (lvl / 100) * chartH;
+        const ySteps = 4;
+        for (let i = 0; i <= ySteps; i++) {
+            const val = Math.round((yMax / ySteps) * i);
+            const y = padT + chartH - (i / ySteps) * chartH;
             ctx.beginPath();
             ctx.moveTo(padL, y);
             ctx.lineTo(width - padR, y);
             ctx.stroke();
-            ctx.fillText(lvl.toString(), 15, y + 4);
-        });
-
-        // Threshold line (Action Threshold at 68)
-        const threshY = padT + chartH - (threshold / 100) * chartH;
-        ctx.strokeStyle = '#dc2626';
-        ctx.lineWidth = 2;
-        ctx.setLineDash([5, 4]);
-        ctx.beginPath();
-        ctx.moveTo(padL, threshY);
-        ctx.lineTo(width - padR, threshY);
-        ctx.stroke();
-        ctx.setLineDash([]);
-
-        ctx.fillStyle = '#b91c1c';
-        ctx.fillText(`Review Threshold: ${threshold}`, width - padR - 165, threshY - 6);
-
-        if (!trendData || trendData.length === 0) return;
-
-        const stepX = chartW / (trendData.length - 1);
-        const points = trendData.map((d, idx) => ({
-            x: padL + idx * stepX,
-            y: padT + chartH - (d.condition_score / 100) * chartH,
-            score: d.condition_score,
-            period: d.period
-        }));
-
-        // Connecting trend line
-        ctx.strokeStyle = '#0071e3';
-        ctx.lineWidth = 3;
-        ctx.beginPath();
-        ctx.moveTo(points[0].x, points[0].y);
-        for (let i = 1; i < points.length; i++) {
-            ctx.lineTo(points[i].x, points[i].y);
+            ctx.fillText(val.toString(), 10, y + 3);
         }
-        ctx.stroke();
 
-        // Points
-        points.forEach(pt => {
-            ctx.fillStyle = '#ffffff';
-            ctx.beginPath();
-            ctx.arc(pt.x, pt.y, 6, 0, 2 * Math.PI);
-            ctx.fill();
+        const numPeriods = trendData.length;
+        const stepX = numPeriods > 1 ? chartW / (numPeriods - 1) : chartW / 2;
 
-            ctx.strokeStyle = '#0071e3';
+        // Store plotted points for hover interactivity
+        const plottedPoints = [];
+
+        // Plot each series line
+        series.forEach(sName => {
+            const color = COLORS[sName] || '#94a3b8';
+            const sPoints = trendData.map((d, idx) => {
+                const count = d[sName] || 0;
+                const x = numPeriods > 1 ? padL + idx * stepX : padL + chartW / 2;
+                const y = padT + chartH - (count / yMax) * chartH;
+                return { x, y, count, period: d.period, series: sName };
+            });
+
+            // Draw line
+            ctx.strokeStyle = color;
             ctx.lineWidth = 2.5;
+            ctx.lineJoin = 'round';
             ctx.beginPath();
-            ctx.arc(pt.x, pt.y, 6, 0, 2 * Math.PI);
+            ctx.moveTo(sPoints[0].x, sPoints[0].y);
+            for (let i = 1; i < sPoints.length; i++) {
+                ctx.lineTo(sPoints[i].x, sPoints[i].y);
+            }
             ctx.stroke();
 
-            ctx.fillStyle = '#1d1d1f';
-            ctx.font = 'bold 11px "Montserrat", sans-serif';
-            ctx.fillText(pt.score.toString(), pt.x - 7, pt.y - 10);
+            // Draw points
+            sPoints.forEach(pt => {
+                plottedPoints.push(pt);
 
-            ctx.fillStyle = '#86868b';
-            ctx.font = '11px "Montserrat", sans-serif';
-            ctx.fillText(pt.period, pt.x - 10, height - padB + 18);
+                ctx.fillStyle = '#0f172a';
+                ctx.beginPath();
+                ctx.arc(pt.x, pt.y, 4.5, 0, 2 * Math.PI);
+                ctx.fill();
+
+                ctx.strokeStyle = color;
+                ctx.lineWidth = 2;
+                ctx.beginPath();
+                ctx.arc(pt.x, pt.y, 4.5, 0, 2 * Math.PI);
+                ctx.stroke();
+            });
         });
+
+        // X-axis period labels
+        ctx.fillStyle = '#94a3b8';
+        ctx.font = '10px "Inter", sans-serif';
+        ctx.textAlign = 'center';
+
+        trendData.forEach((d, idx) => {
+            const x = numPeriods > 1 ? padL + idx * stepX : padL + chartW / 2;
+            const shortLabel = d.period.length > 10 ? d.period.slice(0, 8) + '..' : d.period;
+            ctx.fillText(shortLabel, x, height - padB + 16);
+        });
+
+        // Interactive mouse hover tooltip binding
+        if (!canvas._hoverBound) {
+            canvas._hoverBound = true;
+            canvas.style.cursor = 'crosshair';
+
+            canvas.addEventListener('mousemove', (e) => {
+                const rect = canvas.getBoundingClientRect();
+                const mouseX = e.clientX - rect.left;
+                const mouseY = e.clientY - rect.top;
+
+                // Find nearest period column
+                let closestIdx = 0;
+                let minDist = Infinity;
+                trendData.forEach((d, idx) => {
+                    const x = numPeriods > 1 ? padL + idx * stepX : padL + chartW / 2;
+                    const dist = Math.abs(mouseX - x);
+                    if (dist < minDist) {
+                        minDist = dist;
+                        closestIdx = idx;
+                    }
+                });
+
+                if (minDist < 30) {
+                    const d = trendData[closestIdx];
+                    let tipText = `${d.period}\n`;
+                    series.forEach(s => {
+                        tipText += `${s}: ${d[s] || 0}\n`;
+                    });
+                    tipText += `Total: ${d.total || 0}`;
+                    canvas.title = tipText;
+                } else {
+                    canvas.title = '';
+                }
+            });
+        }
+    },
+
+    drawDegradationChart(trendData, threshold = 68) {
+        // Backwards compatibility alias
+        this.loadDegradationChart();
     },
 
     async loadReportsList() {

@@ -341,8 +341,10 @@ const Api = {
         return res.json();
     },
 
-    async getDegradationTrends() {
-        const res = await this.safeFetch(`${API_BASE}/analytics/trends`, {
+    async getDegradationTrends(params = {}) {
+        const qry = new URLSearchParams(params).toString();
+        const url = qry ? `${API_BASE}/analytics/trends?${qry}` : `${API_BASE}/analytics/trends`;
+        const res = await this.safeFetch(url, {
             headers: this.getHeaders()
         });
         if (!res.ok) {
@@ -350,6 +352,10 @@ const Api = {
             throw new Error(err.error || 'Failed to load trend analytics.');
         }
         return res.json();
+    },
+
+    getHistoricalDefectTrends(params = {}) {
+        return this.getDegradationTrends(params);
     },
 
     // Engineer Defect Review & Assessment Validation (FR-06)
