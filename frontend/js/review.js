@@ -203,10 +203,11 @@ const Review = {
             const status = rep.status || 'Received';
             const loc = rep.asset?.location || rep.metadata?.location_name || 'Corridor';
             const repId = rep.report_id || rep._id;
-            const shortId = repId.length > 18 ? repId.slice(0, 16) + '...' : repId;
+            const displayId = rep.display_id || (repId.length > 18 ? repId.slice(0, 16) + '...' : repId);
+            const formattedId = displayId.startsWith('#') ? displayId : '#' + displayId;
             const sev = (ai.relative_severity || rep.metadata?.relative_severity || 'Low').toUpperCase();
 
-            return `<option value="${repId}">${shortId} — ${defect} (${status} • ${sev}) • ${loc}</option>`;
+            return `<option value="${repId}">${formattedId} — ${defect} (${status} • ${sev}) • ${loc}</option>`;
         }).join('');
     },
 
@@ -280,6 +281,9 @@ const Review = {
             gallery.classList.add('hidden');
             gallery.style.display = 'none';
         }
+        const combinedBlock = document.getElementById('reviewCombinedMultiViewBlock');
+        if (combinedBlock) combinedBlock.classList.add('hidden');
+
         const thumbList = document.getElementById('reviewThumbnailList');
         if (thumbList) thumbList.innerHTML = '';
         this.activeReportData = null;
@@ -324,8 +328,9 @@ const Review = {
 
             // Populate Case Meta Header: Infrastructure Asset and Lifecycle Status
             const repId = data.report.report_id || data.report._id;
+            const displayId = data.report.display_id || (repId.startsWith('REP-') ? repId : '#' + repId);
             const frameEl = document.getElementById('reviewFrameId');
-            if (frameEl) frameEl.textContent = `#${repId}`;
+            if (frameEl) frameEl.textContent = displayId.startsWith('#') ? displayId : '#' + displayId;
 
             const assetType = data.asset?.asset_type || data.report.metadata?.asset_type || 'Road / Pavement';
             const assetTypeEl = document.getElementById('reviewAssetType');
@@ -486,6 +491,41 @@ const Review = {
             this.activeReportData = data;
             this.activeImageIndex = 0;
             this.renderImageGallery(data);
+
+            // Render Combined Multi-View Assessment Block if present
+            const combinedBlock = document.getElementById('reviewCombinedMultiViewBlock');
+            const combinedData = data.combined_multi_view_assessment || data.report.metadata?.combined_multi_view_assessment;
+            if (combinedBlock) {
+                if (combinedData && combinedData.detected_classes && combinedData.detected_classes.length > 0) {
+                    combinedBlock.classList.remove('hidden');
+                    const sevPill = document.getElementById('reviewCombinedSeverityPill');
+                    const sev = (combinedData.highest_visual_severity || 'Low').toUpperCase();
+                    if (sevPill) {
+                        sevPill.textContent = sev;
+                        sevPill.className = `severity-pill ${sev.toLowerCase()}`;
+                    }
+                    const rowsEl = document.getElementById('reviewCombinedClassRows');
+                    if (rowsEl) {
+                        rowsEl.innerHTML = combinedData.detected_classes.map(cls => {
+                            const support = combinedData.per_class_view_support?.[cls] || '1/1';
+                            const conf = combinedData.strongest_model_confidence?.[cls]
+                                ? `${Math.round(combinedData.strongest_model_confidence[cls] * 100)}%`
+                                : '—';
+                            return `
+                                <div style="display:flex; justify-content:space-between; align-items:center; background:#1e293b; padding:0.35rem 0.6rem; border-radius:4px;">
+                                    <span style="font-weight:600; color:#f8fafc;">${cls}</span>
+                                    <div style="display:flex; gap:0.6rem; font-size:0.75rem;">
+                                        <span style="color:#94a3b8;">Support: <strong style="color:#38bdf8;">${support}</strong></span>
+                                        <span style="color:#94a3b8;">Max Conf: <strong style="color:#10b981;">${conf}</strong></span>
+                                    </div>
+                                </div>
+                            `;
+                        }).join('');
+                    }
+                } else {
+                    combinedBlock.classList.add('hidden');
+                }
+            }
 
         } catch (e) {
             console.error("[Review] Load report review error:", e);
