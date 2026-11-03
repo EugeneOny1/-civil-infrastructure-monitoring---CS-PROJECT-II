@@ -785,12 +785,14 @@ const App = {
                 const isUnusual = rep.metadata?.is_unusual === true || rep.validation_status === 'unusual';
                 const dateStr = rep.date_submitted ? new Date(rep.date_submitted).toLocaleDateString() : 'Recent';
                 const location = rep.metadata?.location_name || 'Corridor Asset';
-                const repId = rep.report_id || (rep._id ? rep._id.slice(0, 16) : 'REF');
+                const canonicalId = rep.report_id || String(rep._id);
+                const rawDisplayId = rep.display_id || (rep.report_id ? `#REP-${rep.report_id.slice(-6).toUpperCase()}` : `#REP-${String(rep._id).slice(-6).toUpperCase()}`);
+                const displayId = rawDisplayId.startsWith('#') ? rawDisplayId : '#' + rawDisplayId;
                 const isFirst = idx === 0;
 
                 return `
-                    <tr class="tracking-table-row ${isFirst ? 'selected-tracking-row' : ''}" id="tracking-row-${repId}" style="cursor: pointer;" onclick="App.selectTrackingReport('${repId}')">
-                        <td><code>#${repId}</code></td>
+                    <tr class="tracking-table-row ${isFirst ? 'selected-tracking-row' : ''}" id="tracking-row-${canonicalId}" style="cursor: pointer;" onclick="App.selectTrackingReport('${canonicalId}')">
+                        <td><code>${displayId}</code></td>
                         <td>${dateStr}</td>
                         <td>${location}</td>
                         <td><strong>${ai.defect_class || rep.metadata?.defect_class || 'Pavement Distress'}</strong></td>
@@ -800,7 +802,7 @@ const App = {
                             ${isUnusual ? `<span class="badge-tag" style="background:#fff7ed;color:#c2410c;border:1px solid #fed7aa;margin-left:4px;"><i class='bx bx-error-circle'></i> Unusual Pairing</span>` : ''}
                         </td>
                         <td>
-                            <button type="button" class="btn-micro btn-accent" onclick="event.stopPropagation(); App.selectTrackingReport('${repId}')">
+                            <button type="button" class="btn-micro btn-accent" onclick="event.stopPropagation(); App.selectTrackingReport('${canonicalId}', true)">
                                 <i class='bx bx-git-branch'></i> Track
                             </button>
                         </td>
@@ -809,7 +811,7 @@ const App = {
             }).join('');
 
             // Automatically display the first report in the detailed progression stepper
-            const firstId = reports[0].report.report_id || reports[0].report._id;
+            const firstId = reports[0].report.report_id || String(reports[0].report._id);
             this.selectTrackingReport(firstId, false);
         } catch (e) {
             console.error("Failed to load tracking data:", e);
@@ -819,15 +821,23 @@ const App = {
 
     selectTrackingReport(reportId, scroll = true) {
         if (!this.citizenReports || this.citizenReports.length === 0) return;
-        const item = this.citizenReports.find(r => (r.report.report_id === reportId || r.report._id === reportId));
+        const item = this.citizenReports.find(r => (
+            r.report.report_id === reportId ||
+            r.report._id === reportId ||
+            String(r.report._id) === String(reportId) ||
+            r.report.display_id === reportId ||
+            String(r.report.display_id) === String(reportId)
+        ));
         if (!item) return;
+
+        const rep = item.report;
+        const canonicalId = rep.report_id || String(rep._id);
 
         // Highlight selected row in table
         document.querySelectorAll('.tracking-table-row').forEach(r => r.classList.remove('selected-tracking-row'));
-        const rowEl = document.getElementById(`tracking-row-${reportId}`);
+        const rowEl = document.getElementById(`tracking-row-${canonicalId}`) || document.getElementById(`tracking-row-${reportId}`);
         if (rowEl) rowEl.classList.add('selected-tracking-row');
 
-        const rep = item.report;
         const ai = item.assessment || {};
         const rev = item.review || {};
         const status = rep.status || 'Received';
@@ -843,6 +853,8 @@ const App = {
         const imgUrl = item.image_url ? (window.Api.resolveImageUrl(item.image_url)) : (rep.metadata?.image_url ? window.Api.resolveImageUrl(rep.metadata.image_url) : '');
         const lat = rep.metadata?.latitude || (rep.latitude || null);
         const lng = rep.metadata?.longitude || (rep.longitude || null);
+        const rawDisplayId = rep.display_id || (rep.report_id ? `#REP-${rep.report_id.slice(-6).toUpperCase()}` : `#REP-${String(rep._id).slice(-6).toUpperCase()}`);
+        const displayId = rawDisplayId.startsWith('#') ? rawDisplayId : '#' + rawDisplayId;
 
         // Stages: 1: Received, 2: Under Review, 3: Verified, 4: Resolved
         const stages = ['Received', 'Under Review', 'Verified', 'Resolved'];
@@ -882,7 +894,7 @@ const App = {
                 <div class="tracking-card-title-group">
                     <h3><i class='bx bx-check-shield' style="color: #0284c7;"></i> Defect Inspection Lifecycle & Tracking</h3>
                     <p style="margin: 0; font-size: 0.85rem; color: #64748b;">
-                        Case ID: <strong>#REP-${reportId}</strong> &bull; Submitted on <strong>${dateStr}</strong> &bull; Location: <strong>${location}</strong>
+                        Case ID: <strong>${displayId}</strong> &bull; Submitted on <strong>${dateStr}</strong> &bull; Location: <strong>${location}</strong>
                     </p>
                 </div>
                 <div style="display: flex; gap: 0.5rem; align-items: center;">
@@ -1066,14 +1078,36 @@ const App = {
             listEl.innerHTML = notifications.map(n => {
                 const isUnread = !n.is_read;
                 const timeStr = n.created_at ? new Date(n.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', month: 'short', day: 'numeric' }) : '';
+                const isAdvisory = n.event_type === 'safety_advisory' || n.category === 'safety_advisory' || (n.title && n.title.includes('Safety Advisory'));
+                const isCitizenLifecycle = ['verified', 'resolved', 'override'].includes(n.event_type) || (!isAdvisory && n.report_id && this.currentUser?.role === 'citizen');
+                const isEngineerReview = !isAdvisory && n.report_id && (this.currentUser?.role === 'engineer');
+                const isAdminGovernance = !isAdvisory && (this.currentUser?.role === 'admin' && (n.event_type === 'engineer_registered' || !n.report_id));
+
+                let linkText = '';
+                if (isAdvisory) {
+                    linkText = 'View on Infrastructure Map →';
+                } else if (isCitizenLifecycle) {
+                    linkText = 'Track Report →';
+                } else if (isEngineerReview) {
+                    linkText = 'Inspect in Defect Review →';
+                } else if (isAdminGovernance) {
+                    linkText = 'User Governance →';
+                } else if (n.report_id) {
+                    linkText = 'View Report Details →';
+                }
+
+                const advisoryId = n.metadata?.advisory_id || n.advisory_id || '';
+                const lat = n.metadata?.latitude !== undefined ? n.metadata.latitude : (n.latitude !== undefined ? n.latitude : '');
+                const lng = n.metadata?.longitude !== undefined ? n.metadata.longitude : (n.longitude !== undefined ? n.longitude : '');
+
                 return `
-                    <div class="notification-item ${isUnread ? 'unread' : ''}" data-id="${n.notification_id || n._id}" data-report-id="${n.report_id || ''}">
+                    <div class="notification-item ${isUnread ? 'unread' : ''}" data-id="${n.notification_id || n._id}" data-report-id="${n.report_id || ''}" data-is-advisory="${isAdvisory}" data-advisory-id="${advisoryId}" data-lat="${lat}" data-lng="${lng}">
                         <div class="notification-item-header">
                             <span class="notification-item-title">${n.title || 'Report Feedback'}</span>
                             <span class="notification-item-time">${timeStr}</span>
                         </div>
                         <div class="notification-item-message">${n.message}</div>
-                        ${n.report_id ? `<div class="notification-item-link">View Report Details →</div>` : ''}
+                        ${linkText ? `<div class="notification-item-link">${linkText}</div>` : ''}
                     </div>
                 `;
             }).join('');
@@ -1083,6 +1117,11 @@ const App = {
                 item.addEventListener('click', async () => {
                     const notifId = item.getAttribute('data-id');
                     const reportId = item.getAttribute('data-report-id');
+                    const isAdvisory = item.getAttribute('data-is-advisory') === 'true';
+                    const advisoryId = item.getAttribute('data-advisory-id');
+                    const lat = parseFloat(item.getAttribute('data-lat'));
+                    const lng = parseFloat(item.getAttribute('data-lng'));
+
                     try {
                         await window.Api.markNotificationRead(notifId);
                     } catch (e) {
@@ -1100,12 +1139,24 @@ const App = {
                     }
                     document.getElementById('notificationDropdown')?.classList.add('hidden');
 
-                    if (reportId) {
-                        if (this.currentUser?.role === 'engineer' || this.currentUser?.role === 'admin') {
+                    if (isAdvisory) {
+                        this.navigateTo('view-map');
+                        if (window.DefectMap) {
+                            window.DefectMap.focusOnAdvisory(advisoryId, reportId, !isNaN(lat) ? lat : null, !isNaN(lng) ? lng : null);
+                        }
+                    } else if (reportId) {
+                        if (this.currentUser?.role === 'engineer') {
                             this.navigateTo('view-review', reportId);
+                        } else if (this.currentUser?.role === 'admin') {
+                            this.navigateTo('view-admin');
                         } else {
                             this.navigateTo('view-tracking');
+                            setTimeout(() => {
+                                this.selectTrackingReport(reportId, true);
+                            }, 250);
                         }
+                    } else if (this.currentUser?.role === 'admin') {
+                        this.navigateTo('view-admin');
                     }
                 });
             });
