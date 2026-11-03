@@ -98,7 +98,7 @@ class NotificationService:
         note = advisory_doc.get('professional_note', '')
         eng_name = advisory_doc.get('issued_by_name', 'Civil Engineer')
 
-        title = f"⚠️ Safety Advisory: {category}"
+        title = f"Safety Advisory: {category}"
         msg = f"Defect at {location}: {category}. {note if note else 'Exercise caution in the affected vicinity.'} (Issued by {eng_name})"
 
         # Broadcast advisory to active citizens and engineers
@@ -109,7 +109,14 @@ class NotificationService:
             sender_id=advisory_doc.get('issued_by_id'),
             report_id=report_id,
             event_type='safety_advisory',
-            metadata={'category': category, 'location': location, 'advisory_id': advisory_id}
+            metadata={
+                'category': category,
+                'location': location,
+                'location_name': location,
+                'advisory_id': advisory_id,
+                'latitude': advisory_doc.get('latitude'),
+                'longitude': advisory_doc.get('longitude')
+            }
         )
         return advisory_doc
 

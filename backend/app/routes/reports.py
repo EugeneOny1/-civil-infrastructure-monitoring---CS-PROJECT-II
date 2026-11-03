@@ -1,6 +1,7 @@
 import os
+import uuid
 from datetime import datetime, timezone
-from flask import Blueprint, request, jsonify, current_app, send_from_directory
+from flask import Blueprint, request, jsonify, current_app, send_from_directory, make_response
 from ..models.report import InfrastructureReport, SubmittedImage
 from ..models.assessment import AIAssessment
 from ..models.asset import InfrastructureAsset
@@ -68,11 +69,180 @@ def submit_report(current_user):
 
     user_id = str(current_user.get('_id') or current_user.get('user_id'))
 
-    # Run independent inference on each submitted photograph
+    # Multi-Image Mode: 'same_defect' (default) vs 'multi_defect' (batch submission)
     multi_image_mode = request.form.get('multi_image_mode')
     if len(uploaded_files) > 1 and not multi_image_mode:
         multi_image_mode = 'same_defect'
 
+    current_year = datetime.now(timezone.utc).year
+
+    # ─────────────────────────────────────────────────────────────
+    # CASE A: DIFFERENT DEFECTS / OBSERVATIONS MODE (BATCH SUBMISSION)
+    # ─────────────────────────────────────────────────────────────
+    if multi_image_mode == 'multi_defect' and len(uploaded_files) > 1:
+        batch_id = f"batch_{datetime.now(timezone.utc).strftime('%Y%m%d%H%M%S')}_{uuid.uuid4().hex[:6]}"
+        batch_results = []
+
+        for idx, file in enumerate(uploaded_files):
+            try:
+                unique_filename, dest_path, orig_name, file_size = save_uploaded_image(file)
+            except ValueError as val_err:
+                return jsonify({'error': str(val_err)}), 400
+            except Exception as e:
+                return jsonify({'error': f'Failed to process image upload: {str(e)}'}), 500
+
+            # Execute single-image SSD-MobileNetV2 inference
+            try:
+                det_res = inference_service.detect_defects(dest_path)
+            except Exception as e:
+                current_app.logger.error(f"[Inference Error] Failed executing SavedModel inference on {unique_filename}: {e}")
+                return jsonify({'error': 'Automated defect analysis service failed. Please contact system administrator.'}), 500
+
+            # Extract observation-specific location & optional note
+            obs_location = (request.form.get(f'location_{idx}') or request.form.get(f'obs_location_{idx}') or location).strip()
+            obs_notes = (request.form.get(f'note_{idx}') or request.form.get(f'description_{idx}') or request.form.get(f'obs_notes_{idx}') or description).strip()
+
+            raw_obs_lat = request.form.get(f'latitude_{idx}') or request.form.get(f'obs_lat_{idx}') or raw_lat
+            raw_obs_lng = request.form.get(f'longitude_{idx}') or request.form.get(f'obs_lng_{idx}') or raw_lng
+            obs_lat, obs_lng = None, None
+            try:
+                if raw_obs_lat is not None and str(raw_obs_lat).strip() != '':
+                    obs_lat = float(raw_obs_lat)
+                if raw_obs_lng is not None and str(raw_obs_lng).strip() != '':
+                    obs_lng = float(raw_obs_lng)
+            except (ValueError, TypeError):
+                obs_lat, obs_lng = None, None
+
+            # Associate with Infrastructure Asset record
+            matched_asset = db_service.find_one('infrastructure_assets', {'location': obs_location})
+            if not matched_asset:
+                asset_obj = InfrastructureAsset(
+                    asset_type=asset_type,
+                    location=obs_location,
+                    description=f"Monitored asset at {obs_location}",
+                    current_condition='Critical' if det_res.get('relative_severity') == 'Critical' else 'Poor'
+                )
+                obs_asset_id = db_service.insert('infrastructure_assets', asset_obj.to_dict())
+            else:
+                obs_asset_id = matched_asset['_id']
+                if obs_lat is None and 'coordinates' in matched_asset:
+                    obs_lat = matched_asset['coordinates'].get('lat')
+                    obs_lng = matched_asset['coordinates'].get('lng')
+
+            obs_defect_class = det_res.get('defect_class', 'None Detected')
+            obs_severity = det_res.get('relative_severity', 'Low')
+            obs_confidence = float(det_res.get('confidence_score') or 0.0)
+
+            # Validation
+            obs_validation = validation_service.validate_report(
+                asset_type, obs_location, det_res
+            )
+
+            # Persist independent report record
+            obs_report = InfrastructureReport(
+                user_id=user_id,
+                asset_id=obs_asset_id,
+                description=obs_notes or f"Observed {obs_defect_class} defect on {asset_type}.",
+                status=InfrastructureReport.STATUS_RECEIVED,
+                latitude=obs_lat,
+                longitude=obs_lng,
+                metadata={
+                    'submitted_by_id': str(user_id),
+                    'submitted_by_name': current_user.get('name', 'Reporter'),
+                    'submitted_by_role': current_user.get('role', 'citizen'),
+                    'location_name': obs_location,
+                    'asset_type': asset_type,
+                    'defect_class': obs_defect_class,
+                    'detected_classes': det_res.get('detected_classes', [obs_defect_class]),
+                    'confidence': obs_confidence,
+                    'relative_severity': obs_severity,
+                    'image_count': 1,
+                    'multi_image_mode': 'multi_defect',
+                    'submission_batch_id': batch_id,
+                    'batch_index': idx + 1,
+                    'batch_total': len(uploaded_files),
+                    'is_unusual': obs_validation['is_unusual'],
+                    'requires_engineer_review': obs_validation.get('requires_engineer_review', True),
+                    'validation_status': obs_validation.get('validation_status', 'valid'),
+                    'validation_message': obs_validation.get('validation_message', ''),
+                    'flags': obs_validation['flags'],
+                    'flag_reasons': obs_validation['flag_reasons'],
+                    'advisory_notes': obs_validation['advisory_notes'],
+                    'priority': obs_validation['priority'],
+                    'latitude': obs_lat,
+                    'longitude': obs_lng,
+                    'status_history': [
+                        {
+                            'status': InfrastructureReport.STATUS_RECEIVED,
+                            'timestamp': datetime.now(timezone.utc).isoformat(),
+                            'updated_by': 'system',
+                            'note': f"Observation #{idx + 1} of batch {batch_id} registered into defect monitoring pipeline."
+                        }
+                    ]
+                }
+            )
+            obs_rep_id = db_service.insert('infrastructure_reports', obs_report.to_dict())
+            obs_report.report_id = obs_rep_id
+
+            short_ref = f"REP-{current_year}-{str(obs_rep_id)[-4:].upper()}"
+            obs_report.metadata['display_id'] = short_ref
+            db_service.update_one('infrastructure_reports', {'_id': obs_rep_id}, {'metadata.display_id': short_ref, 'display_id': short_ref})
+
+            # Save SubmittedImage and AIAssessment
+            sub_img = SubmittedImage(
+                report_id=obs_rep_id,
+                image_path=unique_filename,
+                original_filename=orig_name,
+                file_size=file_size,
+                dimensions=det_res.get('image_dimensions', {'width': 300, 'height': 300})
+            )
+            img_id = db_service.insert('submitted_images', sub_img.to_dict())
+
+            ai_ass = AIAssessment(
+                image_id=img_id,
+                defect_class=obs_defect_class,
+                confidence_score=obs_confidence,
+                bounding_box=det_res.get('bounding_box', [0.0, 0.0, 0.0, 0.0]),
+                relative_severity=obs_severity,
+                detections=det_res.get('detections', []),
+                model_name=det_res.get('model_name', 'SSD-MobileNetV2'),
+                model_version=det_res.get('model_version'),
+                class_id=det_res.get('class_id'),
+                relative_area=det_res.get('relative_area', 0.0),
+                area_percentage=det_res.get('area_percentage', 0.0),
+                bounding_box_pixels=det_res.get('bounding_box_pixels'),
+                validation_status='valid',
+                validation_message=''
+            )
+            ass_id = db_service.insert('ai_assessments', ai_ass.to_dict())
+
+            batch_results.append({
+                'report_id': obs_rep_id,
+                'display_id': short_ref,
+                'observation_index': idx + 1,
+                'location': obs_location,
+                'defect_class': obs_defect_class,
+                'relative_severity': obs_severity,
+                'confidence': obs_confidence,
+                'image_url': f"/api/reports/images/{unique_filename}",
+                'report': obs_report.to_dict(),
+                'ai_assessment': ai_ass.to_dict()
+            })
+
+        batch_resp = make_response(jsonify({
+            'mode': 'batch',
+            'submission_batch_id': batch_id,
+            'message': f"{len(batch_results)} infrastructure observations submitted successfully.",
+            'total_submitted': len(batch_results),
+            'observations': batch_results,
+            'reports': batch_results
+        }), 201)
+        batch_resp.headers['Cache-Control'] = 'no-cache, no-store, must-revalidate'
+        return batch_resp
+
+    # ─────────────────────────────────────────────────────────────
+    # CASE B: SAME-DEFECT MULTI-VIEW SUBMISSION (OR SINGLE IMAGE)
+    # ─────────────────────────────────────────────────────────────
     processed_images = []
     for file in uploaded_files:
         try:
@@ -96,8 +266,8 @@ def submit_report(current_user):
             'detection': det_res
         })
 
-    # Multi-Image Aggregation:
-    # 1. Detected defect classes union across all images
+    # Multi-Image Evidence Aggregation (over independent single-image SSD-MobileNetV2 inferences):
+    # 1. Detected defect classes union across all images (after model confidence filtering & duplicate suppression)
     aggregated_classes_set = set()
     all_detections_flat = []
 
@@ -119,7 +289,7 @@ def submit_report(current_user):
         report_detected_classes = sorted(list(aggregated_classes_set))
         primary_defect_class = report_detected_classes[0]
 
-    # 2. Overall Visual Severity: highest credible Visual Severity observed across submitted images
+    # 2. Overall Visual Severity: highest credible Visual Severity observed across submitted views
     # Critical (3) > Medium / Moderate (2) > Low (1)
     SEV_WEIGHTS = {'critical': 3, 'moderate': 2, 'medium': 2, 'low': 1}
     highest_sev_rank = 1
@@ -138,6 +308,81 @@ def submit_report(current_user):
         c = float(item['detection'].get('confidence_score') or 0.0)
         if c > highest_confidence:
             highest_confidence = c
+
+    # 4. Construct Transparent Combined Multi-View Assessment
+    class_assessments = []
+    for cls in report_detected_classes:
+        if cls == 'None Detected':
+            continue
+        detected_in_views = 0
+        strongest_conf = 0.0
+        strongest_img_idx = 1
+        strongest_img_fn = ''
+
+        for v_idx, item in enumerate(processed_images):
+            det = item['detection']
+            item_classes = det.get('detected_classes') or []
+            item_primary = det.get('defect_class')
+            item_dets = det.get('detections') or []
+
+            has_class = (
+                item_primary == cls or
+                cls in item_classes or
+                any(d.get('class_name') == cls or d.get('defect_class') == cls for d in item_dets)
+            )
+            if has_class:
+                detected_in_views += 1
+
+            for d in item_dets:
+                if d.get('class_name') == cls or d.get('defect_class') == cls:
+                    c_val = float(d.get('confidence') or d.get('confidence_score') or 0.0)
+                    if c_val > strongest_conf:
+                        strongest_conf = c_val
+                        strongest_img_idx = v_idx + 1
+                        strongest_img_fn = item['unique_filename']
+
+        if strongest_conf == 0.0:
+            for v_idx, item in enumerate(processed_images):
+                if item['detection'].get('defect_class') == cls:
+                    c_val = float(item['detection'].get('confidence_score') or 0.0)
+                    if c_val > strongest_conf:
+                        strongest_conf = c_val
+                        strongest_img_idx = v_idx + 1
+                        strongest_img_fn = item['unique_filename']
+
+        class_assessments.append({
+            'defect_class': cls,
+            'views_detected': detected_in_views,
+            'total_views': len(processed_images),
+            'view_support': f"{detected_in_views}/{len(processed_images)}",
+            'view_support_text': f"Detected in {detected_in_views} of {len(processed_images)} views",
+            'strongest_confidence': round(strongest_conf, 4),
+            'strongest_confidence_pct': round(strongest_conf * 100, 1),
+            'strongest_image_index': strongest_img_idx,
+            'strongest_image_filename': strongest_img_fn
+        })
+
+    combined_multi_view_assessment = {
+        'label': 'Combined Multi-View Assessment',
+        'architecture_note': 'Application-level evidence aggregation over independent single-image SSD-MobileNetV2 detections.',
+        'mode': 'same_defect',
+        'total_views': len(processed_images),
+        'combined_visual_severity': overall_visual_severity,
+        'combined_classes': [c for c in report_detected_classes if c != 'None Detected'],
+        'class_assessments': class_assessments,
+        'per_view_summary': [
+            {
+                'view_index': idx + 1,
+                'filename': item['unique_filename'],
+                'defect_class': item['detection'].get('defect_class', 'None Detected'),
+                'detected_classes': item['detection'].get('detected_classes', []),
+                'relative_severity': item['detection'].get('relative_severity', 'Low'),
+                'confidence': float(item['detection'].get('confidence_score') or 0.0),
+                'detections_count': len(item['detection'].get('detections', []))
+            }
+            for idx, item in enumerate(processed_images)
+        ]
+    }
 
     # Associate with Infrastructure Asset record
     matched_asset = db_service.find_one('infrastructure_assets', {'location': location})
@@ -199,6 +444,7 @@ def submit_report(current_user):
             'image_count': len(processed_images),
             'multi_image_mode': multi_image_mode,
             'image_relationship': 'Multiple views of the same defect' if multi_image_mode == 'same_defect' else ('Different defect observations' if multi_image_mode == 'multi_defect' else 'Single image'),
+            'combined_multi_view_assessment': combined_multi_view_assessment,
             'is_unusual': validation_result['is_unusual'],
             'requires_engineer_review': validation_result.get('requires_engineer_review', True),
             'validation_status': validation_result.get('validation_status', 'valid'),
@@ -226,6 +472,15 @@ def submit_report(current_user):
     )
     report_id = db_service.insert('infrastructure_reports', report.to_dict())
     report.report_id = report_id
+
+    # Short stable human-readable display case reference (e.g. REP-2026-0142)
+    display_id = f"REP-{current_year}-{str(report_id)[-4:].upper()}"
+    report.metadata['display_id'] = display_id
+    db_service.update_one('infrastructure_reports', {'_id': report_id}, {
+        'metadata.display_id': display_id,
+        'metadata.combined_multi_view_assessment': combined_multi_view_assessment,
+        'display_id': display_id
+    })
 
     # Persist individual SubmittedImage and AIAssessment records
     image_records = []
@@ -289,19 +544,23 @@ def submit_report(current_user):
     primary_image = image_records[0]
     primary_assessment = assessment_records[0]
 
-    return jsonify({
+    resp = make_response(jsonify({
         'message': response_message,
         'report_id': report_id,
+        'display_id': display_id,
         'status': report.status,
         'report': report.to_dict(),
         'image': primary_image,
         'images': image_records,
         'ai_assessment': primary_assessment,
         'ai_assessments': assessment_records,
+        'combined_multi_view_assessment': combined_multi_view_assessment,
         'detected_classes': report_detected_classes,
         'overall_visual_severity': overall_visual_severity,
         'validation': validation_result
-    }), 201
+    }), 201)
+    resp.headers['Cache-Control'] = 'no-cache, no-store, must-revalidate'
+    return resp
 
 
 @reports_bp.route('/analyze', methods=['POST'])
@@ -423,13 +682,16 @@ def list_reports(current_user):
         if defect_class_filter and assessment and assessment.get('defect_class') != defect_class_filter:
             continue
 
+        display_id = rep.get('display_id') or rep.get('metadata', {}).get('display_id') or f"REP-{datetime.now(timezone.utc).year}-{str(report_id)[-4:].upper()}"
         enriched_reports.append({
             'report_id': report_id,
+            'display_id': display_id,
             'user_id': rep.get('user_id'),
             'description': rep.get('description'),
             'status': rep.get('status'),
             'date_submitted': rep.get('date_submitted'),
             'metadata': rep.get('metadata', {}),
+            'combined_multi_view_assessment': rep.get('metadata', {}).get('combined_multi_view_assessment'),
             'asset': asset or {
                 'location': rep.get('metadata', {}).get('location_name', 'Monitored Infrastructure'),
                 'asset_type': rep.get('metadata', {}).get('asset_type', 'Road / Pavement')
@@ -439,7 +701,9 @@ def list_reports(current_user):
             'review': review
         })
 
-    return jsonify({'reports': enriched_reports, 'count': len(enriched_reports)}), 200
+    resp = make_response(jsonify({'reports': enriched_reports, 'count': len(enriched_reports)}), 200)
+    resp.headers['Cache-Control'] = 'no-cache, no-store, must-revalidate'
+    return resp
 
 
 @reports_bp.route('/<report_id>', methods=['GET'])
@@ -528,8 +792,13 @@ def get_report_detail(current_user, report_id):
         'role': submitter_user.get('role') if submitter_user else (meta.get('submitted_by_role') or 'citizen')
     }
 
-    return jsonify({
+    display_id = report.get('display_id') or meta.get('display_id') or f"REP-{datetime.now(timezone.utc).year}-{str(report_id)[-4:].upper()}"
+
+    resp = make_response(jsonify({
         'report': report,
+        'report_id': report_id,
+        'display_id': display_id,
+        'combined_multi_view_assessment': meta.get('combined_multi_view_assessment'),
         'submitter': submitter_info,
         'asset': asset,
         'image': primary_image,
@@ -537,7 +806,9 @@ def get_report_detail(current_user, report_id):
         'assessment': primary_assessment,
         'assessments': assessment_list,
         'review': review
-    }), 200
+    }), 200)
+    resp.headers['Cache-Control'] = 'no-cache, no-store, must-revalidate'
+    return resp
 
 
 @reports_bp.route('/map/config', methods=['GET'])
@@ -614,8 +885,10 @@ def get_map_reports():
         if asset_filter and asset_t.lower() != asset_filter.lower():
             continue
 
+        display_id = meta.get('display_id') or rep.get('display_id') or f"REP-{datetime.now(timezone.utc).year}-{str(rep['_id'])[-4:].upper()}"
         point = {
             'report_id': rep['_id'],
+            'display_id': display_id,
             'latitude': float(lat),
             'longitude': float(lng),
             'location_name': meta.get('location_name', 'Monitored Infrastructure'),
@@ -649,11 +922,77 @@ def get_map_reports():
                 nearby_cnt += 1
         p['nearby_report_count'] = nearby_cnt
 
-    return jsonify({
+    # Retrieve active Safety Advisories (deactivated once report is Resolved)
+    active_advisories = []
+    raw_advisories = db_service.find('safety_advisories', {'status': {'$ne': 'inactive'}})
+    for adv in raw_advisories:
+        rep = db_service.find_one('infrastructure_reports', {'_id': adv.get('report_id')})
+        rep_status = rep.get('status') if rep else 'Under Review'
+        # Once report is Resolved, advisory is inactive (no permanent active hazard marker)
+        if rep_status == 'Resolved':
+            continue
+
+        lat = adv.get('latitude') or (rep.get('latitude') if rep else None)
+        lng = adv.get('longitude') or (rep.get('longitude') if rep else None)
+        if lat is not None and lng is not None:
+            active_advisories.append({
+                'advisory_id': adv.get('advisory_id', str(adv.get('_id'))),
+                'report_id': adv.get('report_id'),
+                'display_id': (rep.get('metadata', {}).get('display_id') if rep else None) or f"REP-{adv.get('report_id', '')[-4:].upper()}",
+                'category': adv.get('category', 'Safety Advisory'),
+                'note': adv.get('professional_note', ''),
+                'location_name': adv.get('location_name', 'Monitored Infrastructure'),
+                'latitude': float(lat),
+                'longitude': float(lng),
+                'issued_by': 'Verified Civil Infrastructure Engineer',  # Privacy: zero citizen or reviewer PII exposed
+                'issued_at': adv.get('issued_at'),
+                'status': 'active',
+                'related_status': rep_status
+            })
+
+    resp = make_response(jsonify({
         'points': map_points,
         'count': len(map_points),
+        'advisories': active_advisories,
+        'advisories_count': len(active_advisories),
         'mode': 'privileged' if is_privileged else 'public'
-    }), 200
+    }), 200)
+    resp.headers['Cache-Control'] = 'no-cache, no-store, must-revalidate'
+    return resp
+
+
+@reports_bp.route('/safety-advisories/active', methods=['GET'])
+def get_active_safety_advisories():
+    """Returns active Safety Advisories for map presentation and navigation."""
+    raw_advisories = db_service.find('safety_advisories', {'status': {'$ne': 'inactive'}})
+    active_list = []
+    for adv in raw_advisories:
+        rep = db_service.find_one('infrastructure_reports', {'_id': adv.get('report_id')})
+        rep_status = rep.get('status') if rep else 'Under Review'
+        if rep_status == 'Resolved':
+            continue
+
+        lat = adv.get('latitude') or (rep.get('latitude') if rep else None)
+        lng = adv.get('longitude') or (rep.get('longitude') if rep else None)
+        if lat is not None and lng is not None:
+            active_list.append({
+                'advisory_id': adv.get('advisory_id', str(adv.get('_id'))),
+                'report_id': adv.get('report_id'),
+                'display_id': (rep.get('metadata', {}).get('display_id') if rep else None) or f"REP-{adv.get('report_id', '')[-4:].upper()}",
+                'category': adv.get('category', 'Safety Advisory'),
+                'note': adv.get('professional_note', ''),
+                'location_name': adv.get('location_name', 'Monitored Infrastructure'),
+                'latitude': float(lat),
+                'longitude': float(lng),
+                'issued_by': 'Verified Civil Infrastructure Engineer',
+                'issued_at': adv.get('issued_at'),
+                'status': 'active',
+                'related_status': rep_status
+            })
+
+    resp = make_response(jsonify({'advisories': active_list, 'count': len(active_list)}), 200)
+    resp.headers['Cache-Control'] = 'no-cache, no-store, must-revalidate'
+    return resp
 
 
 @reports_bp.route('/<report_id>/status', methods=['PUT'])
@@ -687,7 +1026,7 @@ def update_report_status(current_user, report_id):
             'error': f"Invalid status transition from '{current_status}' to '{target_status}'. Permitted forward lifecycle: Received -> Under Review -> Verified -> Resolved."
         }), 400
 
-    now_iso = datetime.utcnow().isoformat()
+    now_iso = datetime.now(timezone.utc).isoformat()
     meta = report.get('metadata', {})
     history = meta.get('status_history', [])
     history.append({
@@ -700,6 +1039,17 @@ def update_report_status(current_user, report_id):
     meta['status_history'] = history
     if target_status == InfrastructureReport.STATUS_VERIFIED:
         meta['requires_engineer_review'] = False
+
+    # Automatically mark associated safety advisory inactive when report is Resolved
+    if target_status == InfrastructureReport.STATUS_RESOLVED:
+        db_service.update_many('safety_advisories', {'report_id': report_id}, {
+            'status': 'inactive',
+            'closed_at': now_iso,
+            'closed_reason': 'Report Resolved'
+        })
+        if 'safety_advisory' in meta and isinstance(meta['safety_advisory'], dict):
+            meta['safety_advisory']['status'] = 'inactive'
+            meta['safety_advisory']['closed_at'] = now_iso
 
     db_service.update_one('infrastructure_reports', {'_id': report_id}, {
         'status': target_status,

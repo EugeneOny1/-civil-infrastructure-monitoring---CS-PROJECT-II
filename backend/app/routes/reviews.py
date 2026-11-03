@@ -242,6 +242,17 @@ def review_by_report(current_user, report_id):
         'reviewed_at': now_iso
     }
 
+    # Automatically mark associated safety advisory inactive when report is Resolved
+    if target_status == InfrastructureReport.STATUS_RESOLVED:
+        db_service.update_many('safety_advisories', {'report_id': report_id}, {
+            'status': 'inactive',
+            'closed_at': now_iso,
+            'closed_reason': 'Report marked Resolved'
+        })
+        if 'safety_advisory' in meta and isinstance(meta['safety_advisory'], dict):
+            meta['safety_advisory']['status'] = 'inactive'
+            meta['safety_advisory']['closed_at'] = now_iso
+
     db_service.update_one('infrastructure_reports', {'_id': report_id}, {
         'status': target_status,
         'metadata': meta
@@ -337,21 +348,26 @@ def issue_safety_advisory(current_user, report_id):
     eng_id = str(current_user.get('_id') or current_user.get('user_id'))
     eng_name = current_user.get('name', 'Civil Engineer')
 
+    meta = report.get('metadata') or {}
+    rep_loc = meta.get('location_name') or report.get('location_name') or report.get('location') or 'Monitored Infrastructure'
+    rep_lat = report.get('latitude') or meta.get('latitude')
+    rep_lng = report.get('longitude') or meta.get('longitude')
+
     advisory_doc = {
         'advisory_id': f"adv_{uuid.uuid4().hex[:10]}",
         'report_id': report_id,
         'category': category,
         'professional_note': note,
-        'location_name': report.get('location_name', 'Monitored Infrastructure'),
-        'latitude': report.get('latitude'),
-        'longitude': report.get('longitude'),
+        'location_name': rep_loc,
+        'latitude': rep_lat,
+        'longitude': rep_lng,
         'issued_by_id': eng_id,
         'issued_by_name': eng_name,
-        'issued_at': now_iso
+        'issued_at': now_iso,
+        'status': 'active'
     }
 
     # Store in report metadata
-    meta = report.get('metadata') or {}
     meta['safety_advisory'] = advisory_doc
     db_service.update_one('infrastructure_reports', {'_id': report_id}, {'metadata': meta})
 
