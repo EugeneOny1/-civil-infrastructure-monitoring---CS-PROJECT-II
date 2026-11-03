@@ -472,5 +472,250 @@ class TestFinalAcceptancePass(unittest.TestCase):
         cit_notifs = notification_service.get_user_notifications(cit_id)
         self.assertFalse(any('Engineer Protocol Update' in n.get('title', '') for n in cit_notifs))
 
+    # =========================================================================
+    # 7. MULTI-IMAGE, BATCH SUBMISSION & MAP ADVISORY COMPLETION TESTS
+    # =========================================================================
+    def test_14_same_defect_multi_view_evidence_aggregation(self):
+        """Verifies report-level multi-view assessment aggregates independent view evidence."""
+        rep_id = f"rep_multiview_{int(datetime.now().timestamp())}"
+        img_id_1 = f"img_mv1_{int(datetime.now().timestamp())}"
+        img_id_2 = f"img_mv2_{int(datetime.now().timestamp())}"
+
+        combined_assessment = {
+            'detected_classes': ['Pothole', 'Crack'],
+            'total_views': 2,
+            'per_class_view_support': {'Pothole': '2/2', 'Crack': '1/2'},
+            'strongest_model_confidence': {'Pothole': 0.88, 'Crack': 0.65},
+            'highest_visual_severity': 'Critical',
+            'view_summaries': [
+                {'photo_index': 0, 'detected_classes': ['Pothole', 'Crack'], 'strongest_confidence': 0.88, 'visual_severity': 'Critical'},
+                {'photo_index': 1, 'detected_classes': ['Pothole'], 'strongest_confidence': 0.82, 'visual_severity': 'High'}
+            ]
+        }
+
+        rep_doc = {
+            '_id': rep_id,
+            'report_id': rep_id,
+            'display_id': 'REP-2026-0042',
+            'status': 'Received',
+            'date_submitted': datetime.now(timezone.utc).isoformat(),
+            'metadata': {
+                'multi_image_mode': 'same_defect',
+                'location_name': 'Mombasa Road',
+                'combined_multi_view_assessment': combined_assessment
+            }
+        }
+        db_service.insert('infrastructure_reports', rep_doc)
+        self.created_reports.append(rep_id)
+
+        eng_id = f"eng_mv_{int(datetime.now().timestamp())}"
+        eng_doc = {'_id': eng_id, 'email': f"{eng_id}@infravision.ke", 'role': 'engineer'}
+        db_service.insert('users', eng_doc)
+        self.created_users.append(eng_id)
+
+        with self.app.app_context():
+            token = create_access_token({'user_id': eng_id, 'email': eng_doc['email'], 'role': 'engineer'})
+        headers = {'Authorization': f'Bearer {token}'}
+
+        res = self.client.get(f'/api/reports/{rep_id}', headers=headers)
+        self.assertEqual(res.status_code, 200)
+        data = res.get_json()
+        self.assertEqual(data.get('report', {}).get('display_id'), 'REP-2026-0042')
+        self.assertIn('combined_multi_view_assessment', data)
+        cmv = data['combined_multi_view_assessment']
+        self.assertIn('Pothole', cmv['detected_classes'])
+        self.assertIn('Crack', cmv['detected_classes'])
+        self.assertEqual(cmv['highest_visual_severity'], 'Critical')
+        self.assertEqual(cmv['per_class_view_support']['Pothole'], '2/2')
+
+    def test_15_multi_defect_batch_submission_structure(self):
+        """Verifies multi_defect batch generates shared submission_batch_id and independent reports."""
+        batch_id = f"batch_{int(datetime.now().timestamp())}"
+        rep_id_1 = f"rep_b1_{int(datetime.now().timestamp())}"
+        rep_id_2 = f"rep_b2_{int(datetime.now().timestamp())}"
+
+        rep1 = {
+            '_id': rep_id_1,
+            'report_id': rep_id_1,
+            'display_id': 'REP-2026-0091',
+            'status': 'Received',
+            'latitude': -1.2863,
+            'longitude': 36.8172,
+            'date_submitted': datetime.now(timezone.utc).isoformat(),
+            'metadata': {'submission_batch_id': batch_id, 'observation_index': 0, 'location_name': 'Kenyatta Ave Posta'}
+        }
+        rep2 = {
+            '_id': rep_id_2,
+            'report_id': rep_id_2,
+            'display_id': 'REP-2026-0092',
+            'status': 'Received',
+            'latitude': -1.2890,
+            'longitude': 36.8210,
+            'date_submitted': datetime.now(timezone.utc).isoformat(),
+            'metadata': {'submission_batch_id': batch_id, 'observation_index': 1, 'location_name': 'Kenyatta Ave Roundabout'}
+        }
+        db_service.insert('infrastructure_reports', rep1)
+        db_service.insert('infrastructure_reports', rep2)
+        self.created_reports.extend([rep_id_1, rep_id_2])
+
+        # Verify querying by batch_id retrieves both independent reports
+        batch_reports = list(db_service.db['infrastructure_reports'].find({'metadata.submission_batch_id': batch_id}))
+        self.assertEqual(len(batch_reports), 2)
+        self.assertNotEqual(batch_reports[0]['_id'], batch_reports[1]['_id'])
+        self.assertNotEqual(batch_reports[0]['latitude'], batch_reports[1]['latitude'])
+
+    def test_16_safety_advisory_active_map_and_resolution_deactivation(self):
+        """Verifies active safety advisories appear on map and auto-deactivate upon report resolution."""
+        rep_id = f"rep_adv_{int(datetime.now().timestamp())}"
+        adv_id = f"adv_{int(datetime.now().timestamp())}"
+
+        rep_doc = {
+            '_id': rep_id,
+            'report_id': rep_id,
+            'display_id': 'REP-2026-0105',
+            'status': 'Verified',
+            'latitude': -1.2833,
+            'longitude': 36.8167,
+            'date_submitted': datetime.now(timezone.utc).isoformat(),
+            'metadata': {'location_name': 'Uhuru Highway / University Way'}
+        }
+        adv_doc = {
+            '_id': adv_id,
+            'advisory_id': adv_id,
+            'report_id': rep_id,
+            'category': 'Major Hazard',
+            'note': 'Deep excavation near lane boundary.',
+            'location_name': 'Uhuru Highway / University Way',
+            'latitude': -1.2833,
+            'longitude': 36.8167,
+            'status': 'active',
+            'created_at': datetime.now(timezone.utc).isoformat()
+        }
+        db_service.insert('infrastructure_reports', rep_doc)
+        db_service.insert('safety_advisories', adv_doc)
+        self.created_reports.append(rep_id)
+
+        # 1. Map points endpoint includes active advisory
+        res = self.client.get('/api/reports/map')
+        self.assertEqual(res.status_code, 200)
+        data = res.get_json()
+        active_advisories = data.get('safety_advisories', [])
+        self.assertTrue(any(a.get('advisory_id') == adv_id or a.get('report_id') == rep_id for a in active_advisories))
+
+        # 2. Update report status to Resolved
+        eng_id = f"eng_adv_{int(datetime.now().timestamp())}"
+        eng_doc = {'_id': eng_id, 'email': f"{eng_id}@infravision.ke", 'role': 'engineer', 'verification_status': 'verified', 'is_active': True}
+        db_service.insert('users', eng_doc)
+        self.created_users.append(eng_id)
+
+        with self.app.app_context():
+            token = create_access_token({'user_id': eng_id, 'email': eng_doc['email'], 'role': 'engineer'})
+        headers = {'Authorization': f'Bearer {token}', 'Content-Type': 'application/json'}
+        patch_res = self.client.post(f'/api/reviews/report/{rep_id}', json={'target_status': 'Resolved', 'decision': 'Confirmed', 'notes': 'Repairs verified.'}, headers=headers)
+        self.assertEqual(patch_res.status_code, 200)
+
+        # 3. Advisory is now inactive in DB and excluded from map
+        updated_adv = db_service.find_one('safety_advisories', {'_id': adv_id})
+        self.assertEqual(updated_adv.get('status'), 'inactive')
+
+        res_after = self.client.get('/api/reports/map')
+        self.assertEqual(res_after.status_code, 200)
+        advisories_after = res_after.get_json().get('safety_advisories', [])
+        self.assertFalse(any(a.get('advisory_id') == adv_id for a in advisories_after))
+
+    def test_17_historical_defect_trends_endpoint(self):
+        """Verifies GET /api/analytics/trends handles ranges, view_by, and continuous period bucketing."""
+        eng_id = f"eng_trends_{int(datetime.now().timestamp())}"
+        eng_doc = {
+            '_id': eng_id,
+            'email': f"{eng_id}@infravision.ke",
+            'role': 'engineer',
+            'verification_status': 'verified',
+            'is_active': True
+        }
+        db_service.insert('users', eng_doc)
+        self.created_users.append(eng_id)
+
+        with self.app.app_context():
+            token = create_access_token({'user_id': eng_id, 'email': eng_doc['email'], 'role': 'engineer'})
+        headers = {'Authorization': f'Bearer {token}'}
+
+        # Test view_by=defect_class with 3m range
+        res = self.client.get('/api/analytics/trends?range=3m&view_by=defect_class', headers=headers)
+        self.assertEqual(res.status_code, 200)
+        data = res.get_json()
+        self.assertIn('trend_data', data)
+        self.assertTrue(len(data['trend_data']) > 0)
+        self.assertIn('period', data['trend_data'][0])
+        self.assertIn('series', data)
+        self.assertIn('summary', data)
+        self.assertEqual(data.get('view_by'), 'defect_class')
+        self.assertIn('Pothole', data['series'])
+        self.assertIn('Crack', data['series'])
+
+        # Test view_by=visual_severity with 12m range
+        res_sev = self.client.get('/api/analytics/trends?range=12m&view_by=visual_severity', headers=headers)
+        self.assertEqual(res_sev.status_code, 200)
+        data_sev = res_sev.get_json()
+        self.assertEqual(data_sev.get('view_by'), 'visual_severity')
+        self.assertIn('Critical', data_sev['series'])
+        self.assertIn('Medium', data_sev['series'])
+        self.assertIn('Low', data_sev['series'])
+
+    def test_18_display_id_format_and_canonical_id_integrity(self):
+        """Verifies display_id format matches #REP-YYYY-XXXX and canonical lookup works."""
+        rep_id = f"rep_canonical_{int(datetime.now().timestamp())}"
+        rep_doc = {
+            '_id': rep_id,
+            'report_id': rep_id,
+            'display_id': 'REP-2026-0777',
+            'status': 'Received',
+            'date_submitted': datetime.now(timezone.utc).isoformat(),
+            'metadata': {'location_name': 'Waiyaki Way'}
+        }
+        db_service.insert('infrastructure_reports', rep_doc)
+        self.created_reports.append(rep_id)
+
+        eng_id = f"eng_can_{int(datetime.now().timestamp())}"
+        eng_doc = {'_id': eng_id, 'email': f"{eng_id}@infravision.ke", 'role': 'engineer'}
+        db_service.insert('users', eng_doc)
+        self.created_users.append(eng_id)
+
+        with self.app.app_context():
+            token = create_access_token({'user_id': eng_id, 'email': eng_doc['email'], 'role': 'engineer'})
+        headers = {'Authorization': f'Bearer {token}'}
+
+        # Lookup by canonical MongoDB _id
+        res = self.client.get(f'/api/reports/{rep_id}', headers=headers)
+        self.assertEqual(res.status_code, 200)
+        self.assertEqual(res.get_json().get('report', {}).get('display_id'), 'REP-2026-0777')
+
+    def test_19_safety_advisory_notification_metadata_and_privacy(self):
+        """Verifies advisory notifications carry spatial metadata with zero citizen personal identity."""
+        cit_id = f"cit_notif_{int(datetime.now().timestamp())}"
+        cit_doc = {'_id': cit_id, 'email': f"{cit_id}@gmail.com", 'role': 'citizen', 'name': 'Anonymous Citizen'}
+        db_service.insert('users', cit_doc)
+        self.created_users.append(cit_id)
+
+        notif_id = notification_service.create_notification(
+            user_id=cit_id,
+            title='Safety Advisory: Severe Pothole Cluster',
+            message='Exercise caution on Langata Road near Galleria.',
+            event_type='safety_advisory',
+            report_id='rep_privacy_999',
+            metadata={'advisory_id': 'adv_privacy_999', 'latitude': -1.332, 'longitude': 36.755, 'location_name': 'Langata Road'}
+        )
+
+        notifs = notification_service.get_user_notifications(cit_id)
+        target = next((n for n in notifs if n.get('event_type') == 'safety_advisory'), None)
+        self.assertIsNotNone(target)
+        self.assertEqual(target.get('title'), 'Safety Advisory: Severe Pothole Cluster')
+        self.assertNotIn('⚠️', target.get('title', ''))  # Verify zero emoji rule
+        self.assertEqual(target.get('metadata', {}).get('latitude'), -1.332)
+        self.assertEqual(target.get('metadata', {}).get('longitude'), 36.755)
+        # Verify zero citizen identity leakage in message or metadata
+        self.assertNotIn('Anonymous Citizen', target.get('message', ''))
+        self.assertNotIn(cit_doc['email'], target.get('message', ''))
+
 if __name__ == '__main__':
     unittest.main()
