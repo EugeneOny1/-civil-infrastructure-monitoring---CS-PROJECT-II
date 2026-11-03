@@ -5,6 +5,10 @@ const Submission = {
     selectedFiles: [],
     lastAssessment: null,
     currentPreviewIndex: 0,
+    observationLocations: {},
+    activeLocationTarget: null,
+    resultPhotos: [],
+    currentCitizenResultIdx: 0,
 
     init() {
         this.bindEvents();
@@ -58,8 +62,41 @@ const Submission = {
         }
 
         if (gpsBtn) {
-            gpsBtn.addEventListener('click', () => this.openLocationPicker());
+            gpsBtn.addEventListener('click', () => this.openLocationPicker(null));
         }
+
+        // Carousel navigation buttons for multi-image citizen results
+        const prevCitizenBtn = document.getElementById('btnCitizenPrev');
+        const nextCitizenBtn = document.getElementById('btnCitizenNext');
+        if (prevCitizenBtn) {
+            prevCitizenBtn.addEventListener('click', () => {
+                if (!this.resultPhotos || this.resultPhotos.length <= 1) return;
+                const nextIdx = (this.currentCitizenResultIdx - 1 + this.resultPhotos.length) % this.resultPhotos.length;
+                this.selectCitizenResultPhoto(nextIdx);
+            });
+        }
+        if (nextCitizenBtn) {
+            nextCitizenBtn.addEventListener('click', () => {
+                if (!this.resultPhotos || this.resultPhotos.length <= 1) return;
+                const nextIdx = (this.currentCitizenResultIdx + 1) % this.resultPhotos.length;
+                this.selectCitizenResultPhoto(nextIdx);
+            });
+        }
+
+        const viewBatchBtn = document.getElementById('btnViewBatchInTracking');
+        if (viewBatchBtn) {
+            viewBatchBtn.addEventListener('click', () => {
+                window.App?.navigateTo('view-tracking');
+            });
+        }
+
+        // Multi-image relationship mode toggle
+        const relRadios = document.querySelectorAll('input[name="multiImageRelationship"]');
+        relRadios.forEach(radio => {
+            radio.addEventListener('change', () => {
+                this.updateMultiModeFormDisplay();
+            });
+        });
 
         const closePickerBtn = document.getElementById('btnCloseLocationPicker');
         const cancelPickerBtn = document.getElementById('btnCancelLocationPicker');
@@ -109,6 +146,10 @@ const Submission = {
                 this.clearFiles();
                 this.selectedCoordinates = null;
                 this.tempCoordinates = null;
+                this.observationLocations = {};
+                this.activeLocationTarget = null;
+                this.resultPhotos = [];
+                this.currentCitizenResultIdx = 0;
 
                 const taggedBtn = document.getElementById('btnAutoGps');
                 if (taggedBtn) taggedBtn.classList.remove('tagged');
@@ -143,26 +184,62 @@ const Submission = {
                 const banner = document.getElementById('unusualDefectBanner');
                 if (banner) banner.classList.add('hidden');
 
+                const obsContainer = document.getElementById('multiDefectObservationsContainer');
+                if (obsContainer) {
+                    obsContainer.classList.add('hidden');
+                    obsContainer.innerHTML = '';
+                }
+
+                const combinedCard = document.getElementById('combinedMultiViewCard');
+                if (combinedCard) combinedCard.classList.add('hidden');
+
+                const batchCard = document.getElementById('batchCompletionCard');
+                if (batchCard) batchCard.classList.add('hidden');
+
+                const carouselNav = document.getElementById('citizenCarouselNav');
+                if (carouselNav) carouselNav.classList.add('hidden');
+
+                const galleryStrip = document.getElementById('citizenImageGalleryStrip');
+                if (galleryStrip) {
+                    galleryStrip.classList.add('hidden');
+                    galleryStrip.style.display = 'none';
+                }
+
                 document.getElementById('btnViewTrackingAfterSubmit').disabled = true;
                 window.App.showToast("Ready for new defect submission.");
             });
         }
     },
 
-    openLocationPicker() {
+    openLocationPicker(targetIdx = null) {
+        this.activeLocationTarget = targetIdx;
         const modal = document.getElementById('locationPickerModal');
         if (!modal) return;
         modal.classList.add('active');
 
-        // Initial coordinates: existing selectedCoordinates or Nairobi fallback
-        const initialLat = this.selectedCoordinates?.latitude ?? -1.286389;
-        const initialLng = this.selectedCoordinates?.longitude ?? 36.817223;
+        // Initial coordinates: observation-specific, primary selectedCoordinates, or Nairobi fallback
+        let initialLat, initialLng;
+        if (typeof targetIdx === 'number' && this.observationLocations[targetIdx]?.latitude) {
+            initialLat = this.observationLocations[targetIdx].latitude;
+            initialLng = this.observationLocations[targetIdx].longitude;
+        } else {
+            initialLat = this.selectedCoordinates?.latitude ?? -1.286389;
+            initialLng = this.selectedCoordinates?.longitude ?? 36.817223;
+        }
         this.tempCoordinates = { latitude: initialLat, longitude: initialLng };
 
         const summaryInput = document.getElementById('pickerLocationSummary');
-        const locInput = document.getElementById('defectLocation');
-        if (summaryInput && locInput && locInput.value.trim() && !summaryInput.value.trim()) {
-            summaryInput.value = locInput.value.trim();
+        if (summaryInput) {
+            if (typeof targetIdx === 'number' && this.observationLocations[targetIdx]?.location) {
+                summaryInput.value = this.observationLocations[targetIdx].location;
+            } else {
+                const locInput = document.getElementById('defectLocation');
+                if (locInput && locInput.value.trim()) {
+                    summaryInput.value = locInput.value.trim();
+                } else {
+                    summaryInput.value = '';
+                }
+            }
         }
 
         // Initialize or invalidate picker map
@@ -295,14 +372,49 @@ const Submission = {
             return;
         }
 
+        const summaryInput = document.getElementById('pickerLocationSummary');
+        const summaryText = summaryInput ? summaryInput.value.trim() : '';
+
+        if (typeof this.activeLocationTarget === 'number') {
+            const idx = this.activeLocationTarget;
+            const coords = {
+                latitude: this.tempCoordinates.latitude,
+                longitude: this.tempCoordinates.longitude
+            };
+            const locName = summaryText || `Observation #${idx + 1} [${coords.latitude.toFixed(5)}°, ${coords.longitude.toFixed(5)}°]`;
+
+            if (!this.observationLocations[idx]) this.observationLocations[idx] = {};
+            this.observationLocations[idx].latitude = coords.latitude;
+            this.observationLocations[idx].longitude = coords.longitude;
+            this.observationLocations[idx].location = locName;
+
+            const obsLocInput = document.getElementById(`obsLocation_${idx}`);
+            if (obsLocInput) obsLocInput.value = locName;
+
+            const obsTagBtn = document.getElementById(`btnTagLocationObs_${idx}`);
+            if (obsTagBtn) {
+                obsTagBtn.classList.add('tagged');
+                obsTagBtn.innerHTML = `<i class='bx bx-check-circle'></i> Tagged (${coords.latitude.toFixed(4)}°, ${coords.longitude.toFixed(4)}°)`;
+            }
+
+            // If observation 0 and primary coordinates not set, sync to primary
+            if (idx === 0 && !this.selectedCoordinates) {
+                this.selectedCoordinates = coords;
+                const primaryLoc = document.getElementById('defectLocation');
+                if (primaryLoc && !primaryLoc.value.trim()) primaryLoc.value = locName;
+            }
+
+            this.closeLocationPicker();
+            window.App?.showToast(`Observation #${idx + 1} coordinates confirmed: ${coords.latitude.toFixed(4)}°, ${coords.longitude.toFixed(4)}°`);
+            return;
+        }
+
         this.selectedCoordinates = {
             latitude: this.tempCoordinates.latitude,
             longitude: this.tempCoordinates.longitude
         };
 
-        const summaryInput = document.getElementById('pickerLocationSummary');
         const locInput = document.getElementById('defectLocation');
-        const summaryText = summaryInput ? summaryInput.value.trim() : '';
 
         if (summaryText) {
             locInput.value = summaryText;
@@ -373,6 +485,7 @@ const Submission = {
                 grid.innerHTML = '';
             }
             if (addRow) addRow.classList.add('hidden');
+            this.updateMultiModeFormDisplay();
             return;
         }
 
@@ -427,6 +540,88 @@ const Submission = {
         if (relGroup) {
             relGroup.classList.toggle('hidden', count <= 1);
         }
+
+        this.updateMultiModeFormDisplay();
+    },
+
+    updateMultiModeFormDisplay() {
+        const obsContainer = document.getElementById('multiDefectObservationsContainer');
+        if (!obsContainer) return;
+
+        const count = this.selectedFiles.length;
+        const isMultiDefect = count > 1 && (document.querySelector('input[name="multiImageRelationship"]:checked')?.value === 'multi_defect');
+
+        if (!isMultiDefect) {
+            obsContainer.classList.add('hidden');
+            obsContainer.innerHTML = '';
+            return;
+        }
+
+        obsContainer.classList.remove('hidden');
+        this.renderObservationCards(obsContainer);
+    },
+
+    renderObservationCards(container) {
+        container.innerHTML = `
+            <div style="margin-bottom: 0.75rem; border-bottom: 1px solid #334155; padding-bottom: 0.5rem;">
+                <span style="font-size: 0.82rem; font-weight: 700; color: #38bdf8; text-transform: uppercase; letter-spacing: 0.05em;">
+                    <i class='bx bx-map-pin'></i> Corridor Observations (${this.selectedFiles.length} Locations)
+                </span>
+                <p style="font-size: 0.76rem; color: #94a3b8; margin: 0.25rem 0 0 0;">
+                    Specify the road location or GPS pin for each distinct defect photograph along your corridor route.
+                </p>
+            </div>
+            <div id="observationCardsList" style="display: flex; flex-direction: column; gap: 0.75rem;"></div>
+        `;
+
+        const list = container.querySelector('#observationCardsList');
+        this.selectedFiles.forEach((file, idx) => {
+            const card = document.createElement('div');
+            card.className = 'observation-card';
+            card.style.cssText = 'background: #0f172a; border: 1px solid #334155; border-radius: 6px; padding: 0.75rem; display: flex; gap: 0.75rem; align-items: flex-start;';
+
+            const objectUrl = URL.createObjectURL(file);
+            const existingLoc = this.observationLocations[idx]?.location || '';
+            const hasCoords = Boolean(this.observationLocations[idx]?.latitude);
+            const coordsLabel = hasCoords
+                ? `Tagged (${this.observationLocations[idx].latitude.toFixed(4)}°, ${this.observationLocations[idx].longitude.toFixed(4)}°)`
+                : 'Tag Location';
+
+            card.innerHTML = `
+                <div style="width: 72px; height: 72px; border-radius: 4px; overflow: hidden; background: #1e293b; flex-shrink: 0;">
+                    <img src="${objectUrl}" alt="Observation #${idx + 1}" style="width: 100%; height: 100%; object-fit: cover;">
+                </div>
+                <div style="flex: 1; display: flex; flex-direction: column; gap: 0.4rem;">
+                    <div style="display: flex; justify-content: space-between; align-items: center;">
+                        <span style="font-size: 0.8rem; font-weight: 700; color: #f1f5f9;">Observation #${idx + 1}</span>
+                        <button type="button" class="btn-micro ${hasCoords ? 'tagged' : 'btn-secondary'}" id="btnTagLocationObs_${idx}" style="font-size: 0.72rem; padding: 2px 8px;">
+                            <i class='bx ${hasCoords ? 'bx-check-circle' : 'bx-map-pin'}'></i> ${coordsLabel}
+                        </button>
+                    </div>
+                    <input type="text" id="obsLocation_${idx}" class="form-input" style="font-size: 0.78rem; padding: 0.35rem 0.5rem;" placeholder="Road / Street location for photo #${idx + 1}..." value="${existingLoc}">
+                    <textarea id="obsNote_${idx}" class="form-input" rows="1" style="font-size: 0.75rem; padding: 0.3rem 0.5rem; resize: vertical;" placeholder="Optional notes for this observation...">${this.observationLocations[idx]?.description || ''}</textarea>
+                </div>
+            `;
+
+            const tagBtn = card.querySelector(`#btnTagLocationObs_${idx}`);
+            tagBtn.addEventListener('click', () => {
+                this.openLocationPicker(idx);
+            });
+
+            const locInput = card.querySelector(`#obsLocation_${idx}`);
+            locInput.addEventListener('input', (e) => {
+                if (!this.observationLocations[idx]) this.observationLocations[idx] = {};
+                this.observationLocations[idx].location = e.target.value.trim();
+            });
+
+            const noteInput = card.querySelector(`#obsNote_${idx}`);
+            noteInput.addEventListener('input', (e) => {
+                if (!this.observationLocations[idx]) this.observationLocations[idx] = {};
+                this.observationLocations[idx].description = e.target.value.trim();
+            });
+
+            list.appendChild(card);
+        });
     },
 
     removeFile(index) {
@@ -533,6 +728,27 @@ const Submission = {
         if (this.selectedFiles.length > 1) {
             const relChoice = document.querySelector('input[name="multiImageRelationship"]:checked')?.value || 'same_defect';
             formData.append('multi_image_mode', relChoice);
+
+            if (relChoice === 'multi_defect') {
+                this.selectedFiles.forEach((file, idx) => {
+                    const obsLoc = document.getElementById(`obsLocation_${idx}`)?.value.trim() || location;
+                    formData.append(`location_${idx}`, obsLoc);
+
+                    const obsCoords = this.observationLocations[idx];
+                    if (obsCoords?.latitude && obsCoords?.longitude) {
+                        formData.append(`latitude_${idx}`, obsCoords.latitude);
+                        formData.append(`longitude_${idx}`, obsCoords.longitude);
+                    } else if (this.selectedCoordinates) {
+                        formData.append(`latitude_${idx}`, this.selectedCoordinates.latitude);
+                        formData.append(`longitude_${idx}`, this.selectedCoordinates.longitude);
+                    }
+
+                    const obsNote = document.getElementById(`obsNote_${idx}`)?.value.trim() || notes;
+                    if (obsNote) {
+                        formData.append(`description_${idx}`, obsNote);
+                    }
+                });
+            }
         }
 
         if (this.selectedCoordinates) {
@@ -548,9 +764,20 @@ const Submission = {
         try {
             const data = await window.Api.submitDefect(formData);
             this.lastAssessment = data;
-            this.renderAssessmentResults(data);
-            window.App.showToast("Defect analyzed and report recorded successfully.");
+
+            if (data.mode === 'batch') {
+                this.renderBatchCompletion(data);
+                window.App?.showToast(`Successfully registered ${data.reports?.length || 3} independent corridor defect reports.`);
+            } else {
+                this.renderAssessmentResults(data);
+                window.App?.showToast("Defect analyzed and report recorded successfully.");
+            }
+
             document.getElementById('btnViewTrackingAfterSubmit').disabled = false;
+
+            // Invalidate live state across tracking and map views
+            if (window.App?.loadTrackingData) window.App.loadTrackingData();
+            if (window.DefectMap?.loadMapData) window.DefectMap.loadMapData();
         } catch (err) {
             console.error("Submission failed:", err);
             window.App.showToast(err.message || "Failed to submit defect report.", true);
@@ -561,84 +788,96 @@ const Submission = {
     },
 
     renderAssessmentResults(data) {
+        // Hide batch card if previously shown
+        const batchCard = document.getElementById('batchCompletionCard');
+        if (batchCard) batchCard.classList.add('hidden');
+
         const ai = data.ai_assessment;
         if (!ai) return;
 
-        // Aggregate defect classes across all submitted images if returned
-        let defectName = 'None Detected';
-        if (data.detected_classes && data.detected_classes.length > 0) {
-            defectName = data.detected_classes.join(', ');
-        } else if (ai.defect_class && ai.defect_class !== 'None Detected') {
-            defectName = ai.defect_class;
+        // Build this.resultPhotos list for carousel navigation
+        const imgs = (data.images && data.images.length > 0) ? data.images : (data.image ? [data.image] : []);
+        const asses = (data.ai_assessments && data.ai_assessments.length > 0) ? data.ai_assessments : (ai ? [ai] : []);
+
+        this.resultPhotos = imgs.map((img, i) => ({
+            image: img,
+            assessment: asses[i] || asses[0] || ai
+        }));
+
+        if (this.resultPhotos.length === 0 && (data.image || ai)) {
+            this.resultPhotos = [{ image: data.image || { url: '' }, assessment: ai }];
         }
 
-        const isSameDefect = (data.multi_image_mode === 'same_defect' || data.report?.metadata?.multi_image_mode === 'same_defect');
-        const isMultiDefect = (data.multi_image_mode === 'multi_defect' || data.report?.metadata?.multi_image_mode === 'multi_defect');
+        const carouselNav = document.getElementById('citizenCarouselNav');
+        const strip = document.getElementById('citizenImageGalleryStrip');
+        const dots = document.getElementById('citizenPaginationDots');
 
-        const sev = data.overall_visual_severity || ai.relative_severity || ai.severity || 'Low';
-        const sevEl = document.getElementById('resSeverity');
-        if (isSameDefect) {
-            sevEl.textContent = `[ COMBINED SEVERITY: ${sev.toUpperCase()} ]`;
-        } else if (isMultiDefect) {
-            sevEl.textContent = `[ CORRIDOR SEVERITY: ${sev.toUpperCase()} ]`;
-        } else {
-            sevEl.textContent = `[ ${sev.toUpperCase()} ]`;
-        }
-        sevEl.className = `severity-pill ${sev.toLowerCase()}`;
+        if (this.resultPhotos.length > 1) {
+            if (carouselNav) carouselNav.classList.remove('hidden');
+            if (strip) {
+                strip.classList.remove('hidden');
+                strip.style.display = 'flex';
+            }
+            if (dots) {
+                dots.innerHTML = this.resultPhotos.map((_, idx) => `
+                    <span class="citizen-dot" data-idx="${idx}" style="display:inline-block; width:${idx === 0 ? '16px' : '6px'}; height:6px; border-radius:3px; background:${idx === 0 ? '#38bdf8' : '#475569'}; transition:all 0.2s ease; cursor:pointer;"></span>
+                `).join('');
 
-        document.getElementById('resDefectClass').textContent = defectName;
-
-        // Primary assessment detection metrics
-        const allAssessments = data.ai_assessments && data.ai_assessments.length > 0
-            ? data.ai_assessments
-            : [ai];
-
-        const primaryAssessment = allAssessments[0];
-        const detections = (primaryAssessment.detections && primaryAssessment.detections.length > 0)
-            ? primaryAssessment.detections
-            : (primaryAssessment.defect_class && primaryAssessment.defect_class !== 'None Detected' ? [primaryAssessment] : []);
-
-        const hasDetections = detections.length > 0;
-        document.getElementById('resConfidence').textContent = hasDetections
-            ? `${primaryAssessment.confidence_percentage || Math.round((primaryAssessment.confidence_score || 0) * 100)}%`
-            : '—';
-
-        document.getElementById('resAreaRatio').textContent = hasDetections
-            ? `${primaryAssessment.area_percentage || 0.0}% of image extent`
-            : '0.0% of image extent';
-
-        // Multi-detection summary badge chips across all images
-        const badgeList = document.getElementById('multiDetectionsList');
-        if (badgeList) {
-            const combinedBadges = [];
-            allAssessments.forEach((assItem, imgIdx) => {
-                const itemDets = (assItem.detections && assItem.detections.length > 0)
-                    ? assItem.detections
-                    : (assItem.defect_class && assItem.defect_class !== 'None Detected' ? [assItem] : []);
-                itemDets.forEach(d => {
-                    const cls = d.class_name || d.defect_class || 'Defect';
-                    const confVal = d.confidence !== undefined ? d.confidence : (d.confidence_score || 0);
-                    const conf = Math.round(confVal * 100);
-                    const dSev = d.severity || d.relative_severity || 'Low';
-                    const slug = cls.toLowerCase().includes('crack') ? 'crack' : (cls.toLowerCase().includes('pothole') ? 'pothole' : 'surface');
-                    const imgTag = allAssessments.length > 1 ? `[Photo #${imgIdx + 1}] ` : '';
-                    combinedBadges.push(`<span class="defect-badge-pill ${slug}">${imgTag}${cls} • ${conf}% Conf • [${dSev} Severity]</span>`);
+                dots.querySelectorAll('.citizen-dot').forEach(d => {
+                    d.addEventListener('click', (e) => {
+                        const idx = parseInt(e.currentTarget.getAttribute('data-idx'), 10);
+                        this.selectCitizenResultPhoto(idx);
+                    });
                 });
-            });
-
-            if (combinedBadges.length > 0) {
-                badgeList.innerHTML = combinedBadges.join('');
-            } else {
-                badgeList.innerHTML = `<span class="badge-tag" style="background:#f1f5f9; color:#64748b;">No defect detections above threshold</span>`;
+            }
+        } else {
+            if (carouselNav) carouselNav.classList.add('hidden');
+            if (strip) {
+                strip.classList.add('hidden');
+                strip.style.display = 'none';
             }
         }
 
-        const noticeEl = document.getElementById('noticeText');
-        if (noticeEl && ai.disclaimer) {
-            noticeEl.textContent = ai.disclaimer;
+        // Render Combined Multi-View Assessment Card (Report-Level Evidence Aggregation)
+        const combinedData = data.combined_multi_view_assessment || data.report?.metadata?.combined_multi_view_assessment;
+        const combinedCard = document.getElementById('combinedMultiViewCard');
+        if (combinedCard) {
+            if (combinedData && this.resultPhotos.length > 1) {
+                combinedCard.classList.remove('hidden');
+                const countEl = document.getElementById('combinedMultiViewCount');
+                if (countEl) countEl.textContent = combinedData.total_views || this.resultPhotos.length;
+
+                const pill = document.getElementById('combinedMultiViewSeverityPill');
+                const sev = (combinedData.highest_visual_severity || 'Low').toUpperCase();
+                if (pill) {
+                    pill.textContent = sev;
+                    pill.className = `severity-pill ${sev.toLowerCase()}`;
+                }
+
+                const listEl = document.getElementById('combinedMultiViewClassesList');
+                if (listEl && combinedData.detected_classes) {
+                    listEl.innerHTML = combinedData.detected_classes.map(cls => {
+                        const support = combinedData.per_class_view_support?.[cls] || `${this.resultPhotos.length}/${this.resultPhotos.length}`;
+                        const conf = combinedData.strongest_model_confidence?.[cls]
+                            ? `${Math.round(combinedData.strongest_model_confidence[cls] * 100)}%`
+                            : '—';
+                        return `
+                            <div style="display: flex; align-items: center; justify-content: space-between; background: #1e293b; padding: 0.4rem 0.6rem; border-radius: 4px; font-size: 0.8rem;">
+                                <span style="font-weight: 600; color: #f8fafc;">${cls}</span>
+                                <div style="display: flex; gap: 0.75rem; align-items: center; font-size: 0.74rem;">
+                                    <span style="color: #94a3b8;">View Support: <strong style="color: #38bdf8;">${support}</strong></span>
+                                    <span style="color: #94a3b8;">Peak Conf: <strong style="color: #10b981;">${conf}</strong></span>
+                                </div>
+                            </div>
+                        `;
+                    }).join('');
+                }
+            } else {
+                combinedCard.classList.add('hidden');
+            }
         }
 
-        // Defect integrity flag for unusual combinations (e.g. Building + Pothole)
+        // Integrity flag for unusual defect pairings
         const flagBanner = document.getElementById('unusualDefectBanner');
         const flagMsgEl = document.getElementById('unusualDefectMessage');
         if (flagBanner && flagMsgEl) {
@@ -652,11 +891,131 @@ const Submission = {
             }
         }
 
-        // Render Canvas Bounding Box with primary image
-        const primaryImage = data.image || (data.images && data.images[0]);
-        if (primaryImage) {
-            this.drawBoundingBoxOnCanvas(primaryImage.url, primaryAssessment);
+        const noticeEl = document.getElementById('noticeText');
+        if (noticeEl && ai.disclaimer) {
+            noticeEl.textContent = ai.disclaimer;
         }
+
+        // Select the first photo for canvas and detail rendering
+        this.selectCitizenResultPhoto(0);
+    },
+
+    selectCitizenResultPhoto(index) {
+        if (!this.resultPhotos || this.resultPhotos.length === 0) return;
+        if (index < 0) index = 0;
+        if (index >= this.resultPhotos.length) index = this.resultPhotos.length - 1;
+        this.currentCitizenResultIdx = index;
+
+        const total = this.resultPhotos.length;
+        const counterEl = document.getElementById('citizenGalleryCounter');
+        if (counterEl) {
+            counterEl.textContent = `Photo ${index + 1} of ${total}`;
+        }
+
+        // Update pagination dots
+        const dots = document.querySelectorAll('#citizenPaginationDots .citizen-dot');
+        dots.forEach((dot, i) => {
+            const isActive = i === index;
+            dot.style.background = isActive ? '#38bdf8' : '#475569';
+            dot.style.width = isActive ? '16px' : '6px';
+        });
+
+        const activeItem = this.resultPhotos[index];
+        const ai = activeItem.assessment || {};
+        const imgUrl = activeItem.image?.url;
+
+        // Photo-specific defect telemetry
+        const defectName = ai.defect_class || 'None Detected';
+        const sev = ai.relative_severity || ai.severity || 'Low';
+        const sevEl = document.getElementById('resSeverity');
+        if (sevEl) {
+            sevEl.textContent = `[ ${sev.toUpperCase()} ]`;
+            sevEl.className = `severity-pill ${sev.toLowerCase()}`;
+        }
+
+        const classEl = document.getElementById('resDefectClass');
+        if (classEl) classEl.textContent = defectName;
+
+        const detections = (ai.detections && ai.detections.length > 0)
+            ? ai.detections
+            : (ai.defect_class && ai.defect_class !== 'None Detected' ? [ai] : []);
+        const hasDetections = detections.length > 0;
+
+        const confEl = document.getElementById('resConfidence');
+        if (confEl) {
+            confEl.textContent = hasDetections
+                ? `${ai.confidence_percentage || Math.round((ai.confidence_score || 0) * 100)}%`
+                : '—';
+        }
+
+        const areaEl = document.getElementById('resAreaRatio');
+        if (areaEl) {
+            areaEl.textContent = hasDetections
+                ? `${ai.area_percentage || 0.0}% of image extent`
+                : '0.0% of image extent';
+        }
+
+        // Render badges belonging ONLY to this specific photo
+        const badgeList = document.getElementById('multiDetectionsList');
+        if (badgeList) {
+            if (hasDetections) {
+                badgeList.innerHTML = detections.map(d => {
+                    const cls = d.class_name || d.defect_class || 'Defect';
+                    const confVal = d.confidence !== undefined ? d.confidence : (d.confidence_score || 0);
+                    const conf = Math.round(confVal * 100);
+                    const dSev = d.severity || d.relative_severity || 'Low';
+                    const slug = cls.toLowerCase().includes('crack') ? 'crack' : (cls.toLowerCase().includes('pothole') ? 'pothole' : 'surface');
+                    return `<span class="defect-badge-pill ${slug}">${cls} • ${conf}% Conf • [${dSev} Severity]</span>`;
+                }).join('');
+            } else {
+                badgeList.innerHTML = `<span class="badge-tag" style="background:#f1f5f9; color:#64748b;">No defect detections above threshold in this photo</span>`;
+            }
+        }
+
+        if (imgUrl) {
+            this.drawBoundingBoxOnCanvas(imgUrl, ai);
+        }
+    },
+
+    renderBatchCompletion(data) {
+        const batchCard = document.getElementById('batchCompletionCard');
+        const combinedCard = document.getElementById('combinedMultiViewCard');
+        if (combinedCard) combinedCard.classList.add('hidden');
+
+        if (!batchCard) return;
+
+        batchCard.classList.remove('hidden');
+
+        const reports = data.reports || [];
+        const heading = document.getElementById('batchCompletionHeading');
+        if (heading) {
+            heading.textContent = `${reports.length} Infrastructure Observations Submitted Successfully`;
+        }
+
+        const list = document.getElementById('batchObservationsList');
+        if (list) {
+            list.innerHTML = reports.map((r, idx) => {
+                const rep = r.report || {};
+                const ai = r.assessment || {};
+                const repId = r.display_id || rep.display_id || (rep.report_id ? `#REP-${rep.report_id.slice(-6).toUpperCase()}` : `#OBS-${idx + 1}`);
+                const cls = ai.defect_class || 'Defect';
+                const sev = (ai.relative_severity || 'Low').toUpperCase();
+                const loc = rep.location_name || rep.metadata?.location_name || 'Corridor';
+                const conf = ai.confidence_score ? `${Math.round(ai.confidence_score * 100)}%` : '—';
+                return `
+                    <div style="background: #1e293b; border: 1px solid #334155; border-radius: 6px; padding: 0.6rem 0.8rem; display: flex; justify-content: space-between; align-items: center;">
+                        <div>
+                            <div style="font-size: 0.85rem; font-weight: 700; color: #38bdf8;">${repId} — ${cls} (${conf})</div>
+                            <div style="font-size: 0.75rem; color: #94a3b8;"><i class='bx bx-map-pin'></i> ${loc}</div>
+                        </div>
+                        <span class="severity-pill ${sev.toLowerCase()}" style="font-size: 0.7rem; padding: 2px 8px;">${sev}</span>
+                    </div>
+                `;
+            }).join('');
+        }
+
+        // Scroll to batch completion card
+        batchCard.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
     },
 
     drawBoundingBoxOnCanvas(imageUrl, aiData) {
