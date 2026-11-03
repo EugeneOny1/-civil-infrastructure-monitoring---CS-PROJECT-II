@@ -953,6 +953,7 @@ def get_map_reports():
     resp = make_response(jsonify({
         'points': map_points,
         'count': len(map_points),
+        'safety_advisories': active_advisories,
         'advisories': active_advisories,
         'advisories_count': len(active_advisories),
         'mode': 'privileged' if is_privileged else 'public'

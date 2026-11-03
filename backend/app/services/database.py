@@ -296,6 +296,16 @@ class DatabaseService:
                 return True
             return False
 
+    def update_many(self, collection_name, query, update_values):
+        if not self.use_mock and self.db is not None:
+            return self.db[collection_name].update_many(self._format_query(query), {'$set': update_values})
+        else:
+            items = self.find(collection_name, query)
+            for item in items:
+                target_id = item['_id']
+                self._mock_data[collection_name][target_id].update(update_values)
+            return True
+
     def delete_one(self, collection_name, query):
         if not self.use_mock:
             return self.db[collection_name].delete_one(self._format_query(query))
