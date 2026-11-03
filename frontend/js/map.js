@@ -13,6 +13,8 @@
 const DefectMap = {
     map: null,
     markerCluster: null,
+    advisoriesLayer: null,
+    advisoryMarkers: {},
     tileLayer: null,
     reportsData: [],
     config: {
@@ -333,6 +335,9 @@ const DefectMap = {
                 this.markerCluster = L.layerGroup().addTo(this.map);
             }
 
+            // Dedicated layer for active safety advisories
+            this.advisoriesLayer = L.layerGroup().addTo(this.map);
+
             this.isInitialized = true;
             this.invalidateSize();
         } catch (err) {
@@ -398,7 +403,8 @@ const DefectMap = {
     },
 
     createPopupContent(point) {
-        const repId = point.report_id ? point.report_id.slice(-6).toUpperCase() : '0000';
+        const rawId = point.display_id || (point.report_id ? `#REP-${point.report_id.slice(-6).toUpperCase()}` : '#REP-0000');
+        const formattedId = rawId.startsWith('#') ? rawId : '#' + rawId;
         const defect = point.defect_class || 'Pavement Distress';
         const sev = (point.relative_severity || 'Low').toUpperCase();
         const sevClass = (point.relative_severity || 'low').toLowerCase();
@@ -414,7 +420,7 @@ const DefectMap = {
         return `
             <div class="map-popup-card" style="font-family: inherit; min-width: 240px; padding: 2px;">
                 <div style="display:flex; justify-content:space-between; align-items:center; border-bottom:1px solid #e2e8f0; padding-bottom:6px; margin-bottom:8px;">
-                    <code style="font-weight:700; color:#1e293b; font-size:0.85rem;">#REP-${repId}</code>
+                    <code style="font-weight:700; color:#1e293b; font-size:0.85rem;">${formattedId}</code>
                     <span class="severity-pill ${sevClass}" style="font-size:0.7rem; padding:2px 8px;">${sev}</span>
                 </div>
                 ${resolvedImgUrl ? `<div style="width:100%; height:110px; border-radius:6px; overflow:hidden; margin-bottom:8px; background:#0f172a;"><img src="${resolvedImgUrl}" alt="Defect" style="width:100%; height:100%; object-fit:cover;" onerror="this.parentElement.style.display='none'"></div>` : ''}
@@ -490,6 +496,7 @@ const DefectMap = {
             if (countEl) countEl.textContent = `${this.reportsData.length} Pinpoints`;
 
             this.renderMarkers(this.reportsData);
+            this.renderAdvisories(data.safety_advisories || []);
             this.invalidateSize();
         } catch (err) {
             console.error("[DefectMap] Failed loading map points:", err);
@@ -624,6 +631,80 @@ const DefectMap = {
                 }
             }
         }
+    },
+
+    renderAdvisories(advisories) {
+        if (!this.advisoriesLayer) return;
+        this.advisoriesLayer.clearLayers();
+        this.advisoryMarkers = {};
+
+        if (!advisories || advisories.length === 0) return;
+
+        advisories.forEach(adv => {
+            const lat = Number(adv.latitude);
+            const lng = Number(adv.longitude);
+            if (isNaN(lat) || isNaN(lng) || lat === 0 || lng === 0) return;
+
+            const advIcon = L.divIcon({
+                className: 'safety-advisory-leaflet-icon',
+                html: `
+                    <div class="safety-advisory-pin-wrap" style="position:relative; width:34px; height:34px; cursor:pointer;" title="Safety Advisory: ${adv.category}">
+                        <div style="position:absolute; inset:-4px; border-radius:50%; border:2px solid #f59e0b; opacity:0.8; animation: pulse 2s infinite;"></div>
+                        <div style="width:34px; height:34px; border-radius:50%; background:#d97706; color:#ffffff; display:flex; align-items:center; justify-content:center; box-shadow:0 3px 8px rgba(217,119,6,0.5); font-size:18px;">
+                            <i class='bx bx-shield-quarter'></i>
+                        </div>
+                    </div>
+                `,
+                iconSize: [34, 34],
+                iconAnchor: [17, 17],
+                popupAnchor: [0, -17]
+            });
+
+            const marker = L.marker([lat, lng], { icon: advIcon });
+
+            const dateStr = adv.issued_at || adv.created_at
+                ? new Date(adv.issued_at || adv.created_at).toLocaleDateString('en-KE', { dateStyle: 'medium' })
+                : 'Active';
+
+            const popupHtml = `
+                <div class="advisory-map-popup" style="font-family: inherit; min-width: 240px; padding: 2px;">
+                    <div style="display:flex; justify-content:space-between; align-items:center; border-bottom:1px solid #fed7aa; padding-bottom:6px; margin-bottom:8px;">
+                        <span style="font-weight:700; color:#c2410c; font-size:0.82rem;"><i class='bx bx-shield-quarter'></i> SAFETY ADVISORY</span>
+                        <span class="status-chip active" style="font-size:0.68rem; padding:2px 8px; background:#fff7ed; color:#c2410c; border:1px solid #fed7aa;">ACTIVE</span>
+                    </div>
+                    <div style="font-size:0.92rem; font-weight:700; color:#0f172a; margin-bottom:4px;">${adv.category}</div>
+                    <div style="font-size:0.8rem; color:#475569; margin-bottom:8px; line-height:1.4;">${adv.note || adv.comments || 'Exercise caution when traversing this section.'}</div>
+                    <div style="font-size:0.75rem; color:#64748b; margin-bottom:6px;"><i class='bx bx-map-pin'></i> ${adv.location_name || 'Corridor Infrastructure'}</div>
+                    <div style="font-size:0.72rem; color:#94a3b8; border-top:1px solid #f1f5f9; padding-top:6px; display:flex; justify-content:space-between; align-items:center;">
+                        <span><i class='bx bx-check-shield'></i> Verified Civil Engineer</span>
+                        <span>${dateStr}</span>
+                    </div>
+                </div>
+            `;
+
+            marker.bindPopup(popupHtml, { maxWidth: 300, className: 'leaflet-custom-popup' });
+            this.advisoriesLayer.addLayer(marker);
+
+            if (adv.advisory_id) this.advisoryMarkers[adv.advisory_id] = marker;
+            if (adv.report_id) this.advisoryMarkers[adv.report_id] = marker;
+            if (adv._id) this.advisoryMarkers[String(adv._id)] = marker;
+        });
+    },
+
+    focusOnAdvisory(advisoryId, reportId, lat, lng) {
+        if (!this.map) return;
+        this.invalidateSize();
+
+        if (lat && lng && !isNaN(lat) && !isNaN(lng)) {
+            this.map.setView([lat, lng], Math.max(this.map.getZoom(), 15), { animate: true });
+        }
+
+        setTimeout(() => {
+            const marker = (advisoryId && this.advisoryMarkers[advisoryId]) || (reportId && this.advisoryMarkers[reportId]);
+            if (marker) {
+                marker.openPopup();
+            }
+        }, 300);
     }
 };
 
