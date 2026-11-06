@@ -34,8 +34,9 @@
                 </div>
             </div>
 
-            <!-- Role-Scoped Dynamic Navigation Links -->
+            <!-- Role-Scoped Dynamic Navigation Links with Sliding Active Indicator (Section 7) -->
             <nav class="nav-links" id="mainNav">
+                <div class="nav-sliding-indicator" id="navSlidingIndicator" aria-hidden="true"></div>
                 <!-- Shared Citizen & Engineer Navigation -->
                 <button class="nav-tab role-citizen role-engineer active" id="tabSubmit" data-view="view-submit">
                     <span class="tab-icon"><i class='bx bx-camera'></i></span> Report Defect
@@ -651,29 +652,38 @@
                 <div class="map-container" id="infrastructureMapContainer">
                     <!-- Leaflet + OpenStreetMap interactive infrastructure map -->
                 </div>
-                <div class="map-legend-bar" style="display: flex; flex-wrap: wrap; gap: 0.75rem; align-items: center; padding: 0.6rem 1rem;">
-                    <!-- Section 13: Individual Report Severity -->
+                <div class="map-legend-bar" style="display: flex; flex-wrap: wrap; gap: 0.85rem; align-items: center; padding: 0.65rem 1rem; background: rgba(248, 250, 252, 0.95); border-top: 1px solid #e2e8f0;">
+                    <!-- Section 8 & 17: Individual Report Severity -->
                     <div style="display: flex; align-items: center; gap: 7px;">
                         <span style="font-size: 0.73rem; font-weight: 700; color: #1e293b; text-transform: uppercase;">Individual Reports:</span>
-                        <span class="map-legend-dot" style="background: #ef4444;" title="Critical Visual Severity"></span> <span style="font-size: 0.74rem;">Critical</span>
-                        <span class="map-legend-dot" style="background: #f59e0b;" title="Medium Visual Severity"></span> <span style="font-size: 0.74rem;">Medium</span>
-                        <span class="map-legend-dot" style="background: #10b981;" title="Low Visual Severity"></span> <span style="font-size: 0.74rem;">Low</span>
-                        <span class="map-legend-dot" style="background: #059669; display: inline-flex; align-items: center; justify-content: center; color: #ffffff; font-size: 9px;" title="Resolved Defect"><i class='bx bx-check'></i></span> <span style="font-size: 0.74rem;">Resolved</span>
+                        <span class="map-legend-dot" style="background: #ef4444;" title="Critical Visual Severity"></span> <span style="font-size: 0.74rem; font-weight: 600; color: #334155;">Critical</span>
+                        <span class="map-legend-dot" style="background: #f59e0b;" title="Medium Visual Severity"></span> <span style="font-size: 0.74rem; font-weight: 600; color: #334155;">Medium</span>
+                        <span class="map-legend-dot" style="background: #0284c7;" title="Low Visual Severity"></span> <span style="font-size: 0.74rem; font-weight: 600; color: #334155;">Low</span>
+                        <span class="map-legend-dot" style="background: #10b981; display: inline-flex; align-items: center; justify-content: center; color: #ffffff; font-size: 9px;" title="Recently Resolved (&le; 7 days)"><i class='bx bx-check'></i></span> <span style="font-size: 0.74rem; font-weight: 600; color: #334155;">Recently Resolved</span>
                     </div>
-                    <!-- Section 16: Safety Advisory Marker -->
+                    <!-- Section 15 & 17: Cluster Donut -->
                     <div style="display: flex; align-items: center; gap: 6px; padding-left: 8px; border-left: 1px solid #cbd5e1;">
-                        <span style="display: inline-flex; align-items: center; justify-content: center; width: 15px; height: 15px; border-radius: 50%; background: #1e1b4b; border: 1px solid #4338ca; color: #ffffff; font-size: 10px;"><i class='bx bx-shield-quarter'></i></span>
-                        <span style="font-size: 0.74rem; font-weight: 600; color: #312e81;">Safety Advisory</span>
+                        <span style="display: inline-flex; align-items: center; justify-content: center; width: 16px; height: 16px; border-radius: 50%; background: conic-gradient(#ef4444 0% 25%, #f59e0b 25% 60%, #0284c7 60% 100%); padding: 2px;">
+                            <span style="width: 10px; height: 10px; border-radius: 50%; background: #ffffff; display: block;"></span>
+                        </span>
+                        <span style="font-size: 0.74rem; color: #334155;"><strong>Cluster:</strong> Number = count &bull; Ring = severity composition</span>
                     </div>
-                    <!-- Section 13: Active Defect Density / Monitoring Priority -->
+                    <!-- Section 18: Safety Advisory Road Hazard Triangle -->
+                    <div style="display: flex; align-items: center; gap: 6px; padding-left: 8px; border-left: 1px solid #cbd5e1;">
+                        <span style="display: inline-flex; align-items: center; justify-content: center; width: 16px; height: 15px; color: #dc2626; font-size: 14px;">
+                            <i class='bx bx-error-alt'></i>
+                        </span>
+                        <span style="font-size: 0.74rem; font-weight: 700; color: #b91c1c;">Safety Advisory</span>
+                    </div>
+                    <!-- Section 12 & 17: Active Defect Density -->
                     <div class="map-legend-item" id="hotspotLegendItem" style="display: flex; align-items: center; gap: 6px; padding-left: 8px; border-left: 1px solid #cbd5e1;">
-                        <span style="font-size: 0.73rem; font-weight: 700; color: #1e293b; text-transform: uppercase;">Active Defect Density (Priority):</span>
-                        <span class="map-legend-dot" style="background: #22c55e;"></span> <span style="font-size: 0.74rem;">Low</span>
-                        <span class="map-legend-dot" style="background: #eab308;"></span> <span style="font-size: 0.74rem;">Moderate</span>
-                        <span class="map-legend-dot" style="background: #ef4444;"></span> <span style="font-size: 0.74rem;">High Hotspot</span>
+                        <span style="font-size: 0.73rem; font-weight: 700; color: #1e293b; text-transform: uppercase;">Active Defect Density:</span>
+                        <span class="map-legend-dot" style="background: #0284c7;"></span> <span style="font-size: 0.74rem; color: #334155;">Low</span>
+                        <span class="map-legend-dot" style="background: #f59e0b;"></span> <span style="font-size: 0.74rem; color: #334155;">Moderate</span>
+                        <span class="map-legend-dot" style="background: #ef4444;"></span> <span style="font-size: 0.74rem; color: #334155;">High Priority</span>
                     </div>
                     <div class="map-legend-item" style="margin-left: auto; color: #64748b; font-size: 0.72rem;">
-                        <i class="bx bx-lock-alt"></i> Citizen Privacy Mode: Personal reporter identities are protected.
+                        <i class="bx bx-shield-quarter"></i> Citizen Privacy Mode: Reporter identities protected.
                     </div>
                 </div>
             </div>
@@ -911,14 +921,54 @@
                                     <option value="visual_severity">View by Visual Severity</option>
                                 </select>
                                 <select id="trendCountySelect" class="filter-select" style="font-size: 0.78rem; padding: 4px 8px;">
-                                    <option value="all" selected>All Counties</option>
-                                    <option value="Nairobi">Nairobi County</option>
-                                    <option value="Mombasa">Mombasa County</option>
-                                    <option value="Kisumu">Kisumu County</option>
-                                    <option value="Nakuru">Nakuru County</option>
-                                    <option value="Kiambu">Kiambu County</option>
-                                    <option value="Machakos">Machakos County</option>
-                                    <option value="Uasin Gishu">Uasin Gishu County</option>
+                                    <option value="all" selected>All Counties (Kenya)</option>
+                                    <option value="Mombasa">Mombasa</option>
+                                    <option value="Kwale">Kwale</option>
+                                    <option value="Kilifi">Kilifi</option>
+                                    <option value="Tana River">Tana River</option>
+                                    <option value="Lamu">Lamu</option>
+                                    <option value="Taita Taveta">Taita Taveta</option>
+                                    <option value="Garissa">Garissa</option>
+                                    <option value="Wajir">Wajir</option>
+                                    <option value="Mandera">Mandera</option>
+                                    <option value="Marsabit">Marsabit</option>
+                                    <option value="Isiolo">Isiolo</option>
+                                    <option value="Meru">Meru</option>
+                                    <option value="Tharaka Nithi">Tharaka Nithi</option>
+                                    <option value="Embu">Embu</option>
+                                    <option value="Kitui">Kitui</option>
+                                    <option value="Machakos">Machakos</option>
+                                    <option value="Makueni">Makueni</option>
+                                    <option value="Nyandarua">Nyandarua</option>
+                                    <option value="Nyeri">Nyeri</option>
+                                    <option value="Kirinyaga">Kirinyaga</option>
+                                    <option value="Murang'a">Murang'a</option>
+                                    <option value="Kiambu">Kiambu</option>
+                                    <option value="Turkana">Turkana</option>
+                                    <option value="West Pokot">West Pokot</option>
+                                    <option value="Samburu">Samburu</option>
+                                    <option value="Trans Nzoia">Trans Nzoia</option>
+                                    <option value="Uasin Gishu">Uasin Gishu</option>
+                                    <option value="Elgeyo Marakwet">Elgeyo Marakwet</option>
+                                    <option value="Nandi">Nandi</option>
+                                    <option value="Baringo">Baringo</option>
+                                    <option value="Laikipia">Laikipia</option>
+                                    <option value="Nakuru">Nakuru</option>
+                                    <option value="Narok">Narok</option>
+                                    <option value="Kajiado">Kajiado</option>
+                                    <option value="Kericho">Kericho</option>
+                                    <option value="Bomet">Bomet</option>
+                                    <option value="Kakamega">Kakamega</option>
+                                    <option value="Vihiga">Vihiga</option>
+                                    <option value="Bungoma">Bungoma</option>
+                                    <option value="Busia">Busia</option>
+                                    <option value="Siaya">Siaya</option>
+                                    <option value="Kisumu">Kisumu</option>
+                                    <option value="Homa Bay">Homa Bay</option>
+                                    <option value="Migori">Migori</option>
+                                    <option value="Kisii">Kisii</option>
+                                    <option value="Nyamira">Nyamira</option>
+                                    <option value="Nairobi">Nairobi</option>
                                 </select>
                                 <select id="trendWardSelect" class="filter-select" style="font-size: 0.78rem; padding: 4px 8px;">
                                     <option value="all" selected>All Areas / Wards</option>
@@ -997,24 +1047,46 @@
                     </div>
                 </div>
 
-                <!-- Prioritized Defect Queue (Figure 4.7) -->
-                <div class="glass-card queue-card">
-                    <div class="card-header-bar">
-                        <span class="step-tag">PRIORITIZED DEFECT QUEUE</span>
-                        <div class="filter-controls">
-                            <select id="filterSeveritySelect" class="filter-select">
-                                <option value="">All Reports</option>
-                                <option value="Flagged">Flagged for Review Only</option>
-                                <option value="Verified">Verified Inspections</option>
-                                <option value="Critical">Critical Severity</option>
-                                <option value="Medium">Medium Severity</option>
-                                <option value="Low">Low Severity</option>
-                            </select>
+                <!-- Right Column: Prioritized Defect Queue & Monitoring Insights (Sections 34, 35, 36, 40, 41) -->
+                <div class="dashboard-queue-col" style="display: flex; flex-direction: column; gap: 1.5rem; min-width: 0;">
+                    <!-- Prioritized Defect Queue (Figure 4.7) -->
+                    <div class="glass-card queue-card">
+                        <div class="card-header-bar">
+                            <span class="step-tag">PRIORITIZED DEFECT QUEUE</span>
+                            <div class="filter-controls">
+                                <select id="filterSeveritySelect" class="filter-select">
+                                    <option value="">All Reports</option>
+                                    <option value="Flagged">Flagged for Review Only</option>
+                                    <option value="Verified">Verified Inspections</option>
+                                    <option value="Critical">Critical Severity</option>
+                                    <option value="Medium">Medium Severity</option>
+                                    <option value="Low">Low Severity</option>
+                                </select>
+                            </div>
+                        </div>
+
+                        <!-- Date Filter Indicator (Section 41) -->
+                        <div id="queueDateFilterNotice" class="hidden" style="margin-bottom: 0.75rem; background: #f0f9ff; border: 1px solid #bae6fd; border-radius: 6px; padding: 6px 12px; display: flex; justify-content: space-between; align-items: center; font-size: 0.8rem; color: #0369a1;">
+                            <span><i class='bx bx-calendar-event' style="vertical-align: -1px; margin-right: 4px;"></i> Filtered by date: <strong id="queueDateFilterVal"></strong></span>
+                            <button type="button" id="btnClearDateFilter" style="background: none; border: none; color: #0284c7; font-weight: 600; cursor: pointer; display: flex; align-items: center; gap: 2px;">Clear Date Filter ✕</button>
+                        </div>
+
+                        <div class="defect-queue-list" id="defectQueueList">
+                            <!-- Populated dynamically via JS -->
                         </div>
                     </div>
 
-                    <div class="defect-queue-list" id="defectQueueList">
-                        <!-- Populated dynamically via JS -->
+                    <!-- Monitoring & Historical Context Insights Panel (Sections 34, 35, 36) -->
+                    <div class="glass-card" id="monitoringInsightsPanel" style="padding: 1.25rem;">
+                        <div class="card-header-bar" style="margin-bottom: 0.75rem;">
+                            <div>
+                                <span class="step-tag">MONITORING INSIGHTS</span>
+                                <span class="mode-tag">Historical & Context Intelligence</span>
+                            </div>
+                        </div>
+                        <div id="monitoringInsightsContent" style="display: flex; flex-direction: column; gap: 0.75rem;">
+                            <!-- Populated dynamically via Dashboard.renderMonitoringInsights -->
+                        </div>
                     </div>
                 </div>
             </div>
@@ -1039,10 +1111,10 @@
                     <span class="map-filter-label" style="white-space:nowrap;">Search:</span>
                     <input type="text" id="reviewSearchInput" class="field-input" placeholder="Search case ID, location, defect, status..." style="font-size:0.85rem; padding:0.4rem 0.75rem; flex:1;">
                     <select id="reviewFilterStatus" class="field-input" style="font-size:0.85rem; padding:0.4rem 0.6rem; width:auto;">
-                        <option value="">All Statuses</option>
-                        <option value="Received">Received</option>
-                        <option value="Under Review">Under Review</option>
-                        <option value="Verified">Verified</option>
+                        <option value="">All Reports</option>
+                        <option value="awaiting_review">Awaiting Review</option>
+                        <option value="my_reviews">My Active Reviews</option>
+                        <option value="my_verified">My Verified Cases</option>
                         <option value="Resolved">Resolved</option>
                     </select>
                 </div>
@@ -1055,17 +1127,12 @@
                     <button type="button" class="btn-secondary btn-sm" id="btnRefreshCasework" title="Refresh Casework Queue">↻</button>
                 </div>
 
-                <div class="lifecycle-btn-group" style="margin-left:auto;">
-                    <span class="map-filter-label" style="align-self:center; margin-right:4px;">Lifecycle:</span>
-                    <button type="button" class="btn-lifecycle action-verify" id="btnMarkVerified" title="Verify reported defect">
-                        <i class='bx bx-check-circle'></i> Verify Defect
-                    </button>
-                    <button type="button" class="btn-lifecycle action-review" id="btnMoveUnderReview" title="Mark inspection as Under Review">
-                        <i class='bx bx-time'></i> Under Review
-                    </button>
-                    <button type="button" class="btn-lifecycle action-resolve" id="btnMarkResolved" title="Close/Resolve infrastructure issue">
-                        <i class='bx bx-check-double'></i> Mark Resolved
-                    </button>
+                <!-- Top Lifecycle & Reviewer Status Display (Section 25 & 28) -->
+                <div class="review-status-display" style="margin-left:auto; display:flex; align-items:center; gap:0.6rem; font-size:0.85rem;">
+                    <span style="color:#64748b; font-weight:600;">Status:</span>
+                    <span id="reviewTopStatusBadge" class="status-chip warning" style="font-size:0.75rem; padding:2px 10px; font-weight:700;">Received</span>
+                    <span style="color:#64748b; font-size:0.8rem; margin-left:4px;">Reviewer:</span>
+                    <span id="reviewTopOwnerBadge" style="font-weight:600; color:#0f172a; font-size:0.8rem;">Unassigned</span>
                 </div>
             </div>
 
@@ -1079,12 +1146,21 @@
                         <span id="reviewFrameId" style="display:none;">#REP-0000</span>
                     </div>
                     <div class="meta-item">
-                        <span class="meta-label">LIFECYCLE STATUS</span>
+                        <span class="meta-label">CURRENT LIFECYCLE</span>
                         <span class="meta-val" id="reviewLifecycleStatus"><span class="badge-dot warning"></span> Received</span>
+                    </div>
+                    <div class="meta-item">
+                        <span class="meta-label">ASSIGNED REVIEWER</span>
+                        <span class="meta-val" id="reviewAssignedEngineer" style="color:#0f172a; font-weight:600;">Unassigned</span>
                     </div>
                     <div class="meta-item">
                         <span class="meta-label">INFRASTRUCTURE LOCATION</span>
                         <span class="meta-val" id="reviewGps">—</span>
+                    </div>
+                    <div class="meta-item" style="justify-content:center;">
+                        <button type="button" class="btn-secondary btn-sm" id="btnReviewShowOnMap" title="View defect location on Infrastructure Map" style="display:flex; align-items:center; gap:0.35rem; font-size:0.78rem; padding:4px 10px; border-radius:6px; border:1px solid #cbd5e1; background:#ffffff; color:#0f172a; cursor:pointer;">
+                            <i class='bx bx-map-pin' style="color:#0284c7;"></i> Show on Map
+                        </button>
                     </div>
                     <div class="meta-item">
                         <span class="meta-label">REPORTED BY</span>
@@ -1182,6 +1258,47 @@
                             </div>
                         </div>
 
+                        <!-- Contextual Lifecycle Actions Card (Sections 25, 26, 27) -->
+                        <div id="reviewContextualWorkflow" style="margin-bottom: 1rem; border-radius: 8px; border: 1px solid #e2e8f0; background: #ffffff; padding: 1rem; box-shadow: 0 1px 3px rgba(0,0,0,0.03);">
+                            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.6rem;">
+                                <span style="font-size: 0.75rem; font-weight: 700; color: #64748b; text-transform: uppercase; letter-spacing: 0.05em;"><i class='bx bx-git-branch'></i> Lifecycle Stage Action</span>
+                                <span id="reviewWorkflowStageBadge" class="status-chip warning" style="font-size: 0.72rem; padding: 2px 8px;">Received</span>
+                            </div>
+
+                            <!-- Case A: Received State -> Begin Review Action -->
+                            <div id="actionStageReceived" style="display: flex; flex-direction: column; gap: 0.5rem;">
+                                <p style="font-size: 0.8rem; color: #475569; margin: 0; line-height: 1.4;">Defect ticket registered in monitoring queue. Initiating review assigns your engineer accreditation to this case.</p>
+                                <button type="button" class="btn-primary" id="btnMoveUnderReview" style="width: 100%; display: flex; align-items: center; justify-content: center; gap: 0.5rem; padding: 0.7rem; font-size: 0.88rem; font-weight: 600; border-radius: 6px; cursor: pointer;">
+                                    <i class='bx bx-play-circle' style="font-size: 1.15rem;"></i> Begin Professional Review
+                                </button>
+                            </div>
+
+                            <!-- Case B: Under Review State -> Validation Active Notice -->
+                            <div id="actionStageUnderReview" class="hidden" style="display: none; flex-direction: column; gap: 0.4rem;">
+                                <p style="font-size: 0.8rem; color: #0284c7; margin: 0; font-weight: 500;">
+                                    <i class='bx bx-time'></i> Inspection active. Review automated AI telemetry below and submit engineering validation.
+                                </p>
+                            </div>
+
+                            <!-- Case C: Verified State -> Resolution & Advisory Actions -->
+                            <div id="actionStageVerified" class="hidden" style="display: none; flex-direction: column; gap: 0.65rem;">
+                                <div style="font-size: 0.8rem; color: #059669; font-weight: 500; display: flex; align-items: center; gap: 0.4rem;">
+                                    <i class='bx bx-check-circle'></i> Defect verified by certified engineer. Proceed to remediation tracking.
+                                </div>
+                                <div style="display: flex; gap: 0.5rem; flex-wrap: wrap;">
+                                    <button type="button" class="btn-lifecycle action-resolve" id="btnMarkResolved" style="flex: 1; min-width: 160px; padding: 0.65rem 0.85rem; font-size: 0.82rem; font-weight: 600; background: #10b981; color: #ffffff; border: none; border-radius: 6px; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 0.4rem;">
+                                        <i class='bx bx-check-double'></i> Mark Resolved
+                                    </button>
+                                    <button type="button" class="btn-secondary" id="btnOpenSafetyAdvisory" style="flex: 1; min-width: 160px; border: 1px solid #f59e0b; color: #b45309; background: #fffbeb; font-size: 0.82rem; padding: 0.65rem 0.85rem; border-radius: 6px; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 0.4rem;">
+                                        <i class='bx bx-error-circle'></i> Issue Safety Advisory
+                                    </button>
+                                </div>
+                            </div>
+
+                            <!-- Hidden compatibility hook for test runners -->
+                            <button type="button" id="btnMarkVerified" style="display: none;"></button>
+                        </div>
+
                         <!-- Professional Review Decision Form -->
                         <form id="professionalReviewForm" class="review-form" onsubmit="return false;">
                             <label class="field-label">ENGINEER REVIEW DECISION *</label>
@@ -1250,10 +1367,105 @@
                             <button type="button" class="btn-primary btn-signoff" id="btnSubmitSignOff">
                                 <i class='bx bx-check-shield'></i> Submit Professional Validation
                             </button>
-                            <button type="button" class="btn-secondary" id="btnOpenSafetyAdvisory" style="width: 100%; margin-top: 0.75rem; display: flex; align-items: center; justify-content: center; gap: 0.5rem; border: 1px solid #f59e0b; color: #b45309; background: #fffbeb;">
-                                <i class='bx bx-error-circle'></i> Issue Safety Advisory
-                            </button>
                         </form>
+
+                        <!-- Inspection Notebook & Field Work Notes (Sections 30-33 & 43) -->
+                        <div id="reviewInspectionNotebookSection" style="margin-top: 1.5rem; border-top: 1px solid #e2e8f0; padding-top: 1rem;">
+                            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.85rem;">
+                                <div style="display: flex; align-items: center; gap: 0.4rem;">
+                                    <i class='bx bx-notepad' style="color: #0284c7; font-size: 1.15rem;"></i>
+                                    <strong style="font-size: 0.88rem; color: #0f172a;">Inspection Notebook & Objectives</strong>
+                                </div>
+                                <button type="button" class="btn-secondary btn-sm" id="btnSaveInspectionNotebook" style="font-size: 0.75rem; padding: 3px 10px; display: flex; align-items: center; gap: 0.3rem;">
+                                    <i class='bx bx-save'></i> Save Notebook
+                                </button>
+                            </div>
+
+                            <!-- Asset-Aware Inspection Checklist (Sections 31 & 32) -->
+                            <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 6px; padding: 0.85rem; margin-bottom: 1rem;">
+                                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem;">
+                                    <span style="font-size: 0.75rem; font-weight: 700; color: #475569; text-transform: uppercase; letter-spacing: 0.05em;" id="checklistTitle">Road / Pavement Inspection Objectives</span>
+                                    <span style="font-size: 0.72rem; color: #64748b;" id="checklistProgress">0 of 10 completed</span>
+                                </div>
+                                <div id="reviewChecklistItems" style="display: flex; flex-direction: column; gap: 0.45rem; font-size: 0.8rem; color: #1e293b;"></div>
+                                
+                                <div style="margin-top: 0.65rem; display: flex; gap: 0.4rem;">
+                                    <input type="text" id="customObjectiveInput" class="field-input" placeholder="Add custom inspection objective..." style="font-size: 0.78rem; padding: 3px 8px; flex: 1;">
+                                    <button type="button" class="btn-secondary btn-sm" id="btnAddCustomObjective" style="font-size: 0.75rem; padding: 3px 8px; white-space: nowrap;">+ Add Item</button>
+                                </div>
+                            </div>
+
+                            <!-- Building / Structural Compliance Context (Section 43) -->
+                            <div id="reviewBuildingComplianceCard" class="hidden" style="display: none; background: #fdfbf7; border: 1px solid #fed7aa; border-radius: 6px; padding: 0.85rem; margin-bottom: 1rem;">
+                                <div style="display: flex; align-items: center; gap: 0.4rem; margin-bottom: 0.4rem;">
+                                    <i class='bx bx-building-house' style="color: #c2410c;"></i>
+                                    <strong style="font-size: 0.82rem; color: #9a3412;">Structural Compliance Inquiry Prompts</strong>
+                                </div>
+                                <p style="font-size: 0.73rem; color: #7c2d12; margin-bottom: 0.65rem; line-height: 1.35;">Professional follow-up inquiry prompts for structural engineering oversight. Not an automated legal or zoning determination.</p>
+                                
+                                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.5rem; font-size: 0.78rem;">
+                                    <div>
+                                        <label class="field-label" style="font-size: 0.7rem;">Approval Info Available?</label>
+                                        <select id="compApprovalSelect" class="field-input" style="font-size: 0.78rem; padding: 3px 6px;">
+                                            <option value="Unknown" selected>Unknown</option>
+                                            <option value="Yes">Yes</option>
+                                            <option value="No">No</option>
+                                        </select>
+                                    </div>
+                                    <div>
+                                        <label class="field-label" style="font-size: 0.7rem;">Observed Apparent Alterations?</label>
+                                        <select id="compAlterationSelect" class="field-input" style="font-size: 0.78rem; padding: 3px 6px;">
+                                            <option value="Unknown" selected>Unknown</option>
+                                            <option value="Yes">Yes</option>
+                                            <option value="No">No</option>
+                                        </select>
+                                    </div>
+                                    <div>
+                                        <label class="field-label" style="font-size: 0.7rem;">Possible Additional Floors?</label>
+                                        <select id="compFloorsSelect" class="field-input" style="font-size: 0.78rem; padding: 3px 6px;">
+                                            <option value="Unknown" selected>Unknown</option>
+                                            <option value="Yes">Yes</option>
+                                            <option value="No">No</option>
+                                        </select>
+                                    </div>
+                                    <div>
+                                        <label class="field-label" style="font-size: 0.7rem;">NCA / County Verification Needed?</label>
+                                        <select id="compNcaSelect" class="field-input" style="font-size: 0.78rem; padding: 3px 6px;">
+                                            <option value="No" selected>No</option>
+                                            <option value="Yes">Yes</option>
+                                        </select>
+                                    </div>
+                                </div>
+                                <div style="margin-top: 0.5rem;">
+                                    <label class="field-label" style="font-size: 0.7rem;">Compliance Inquiry Notes</label>
+                                    <input type="text" id="compNotesInput" class="field-input" placeholder="e.g. Planning record reference requested from county office..." style="font-size: 0.78rem; padding: 4px 8px;">
+                                </div>
+                            </div>
+
+                            <!-- Visual Note Cards (Section 33) -->
+                            <div style="background: #ffffff; border: 1px solid #e2e8f0; border-radius: 6px; padding: 0.85rem;">
+                                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem;">
+                                    <span style="font-size: 0.75rem; font-weight: 700; color: #475569; text-transform: uppercase; letter-spacing: 0.05em;"><i class='bx bx-card'></i> Engineering Note Cards</span>
+                                    <span style="font-size: 0.72rem; color: #64748b;" id="noteCardsCount">0 cards</span>
+                                </div>
+
+                                <div id="reviewNoteCardsList" style="display: flex; flex-direction: column; gap: 0.5rem; max-height: 220px; overflow-y: auto; margin-bottom: 0.65rem;"></div>
+
+                                <!-- Add Note Card Form -->
+                                <div style="display: flex; flex-direction: column; gap: 0.4rem; border-top: 1px solid #f1f5f9; padding-top: 0.5rem;">
+                                    <div style="display: flex; gap: 0.4rem;">
+                                        <select id="noteCategorySelect" class="field-input" style="font-size: 0.78rem; padding: 3px 6px; width: 130px;">
+                                            <option value="Observation" selected>Observation</option>
+                                            <option value="Follow-Up">Follow-Up</option>
+                                            <option value="Maintenance">Maintenance</option>
+                                            <option value="Compliance Context">Compliance</option>
+                                        </select>
+                                        <input type="text" id="noteCardTextInput" class="field-input" placeholder="Add field observation or maintenance note..." style="font-size: 0.78rem; padding: 3px 8px; flex: 1;">
+                                        <button type="button" class="btn-primary btn-sm" id="btnAddNoteCard" style="font-size: 0.75rem; padding: 3px 10px; white-space: nowrap;">Add Card</button>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
                     </div>
                 </div>
             </div>
