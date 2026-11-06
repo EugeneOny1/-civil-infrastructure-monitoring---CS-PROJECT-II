@@ -647,8 +647,26 @@ def list_reports(current_user):
     status_filter = request.args.get('status')
     defect_class_filter = request.args.get('defect_class')
     exclude_status = request.args.get('exclude_status')
+    casework_filter = request.args.get('filter') or request.args.get('casework_filter')
 
-    if status_filter:
+    if casework_filter:
+        if casework_filter == 'awaiting_review':
+            query['status'] = InfrastructureReport.STATUS_RECEIVED
+        elif casework_filter == 'my_reviews':
+            query['status'] = InfrastructureReport.STATUS_UNDER_REVIEW
+            query['$or'] = [
+                {'metadata.assigned_engineer_id': user_id},
+                {'metadata.reviewer_id': user_id}
+            ]
+        elif casework_filter == 'my_verified':
+            query['status'] = InfrastructureReport.STATUS_VERIFIED
+            query['$or'] = [
+                {'metadata.assigned_engineer_id': user_id},
+                {'metadata.reviewer_id': user_id}
+            ]
+        elif casework_filter == 'resolved':
+            query['status'] = InfrastructureReport.STATUS_RESOLVED
+    elif status_filter:
         query['status'] = InfrastructureReport.normalize_lifecycle_status(status_filter)
     elif exclude_status:
         query['status'] = {'$ne': InfrastructureReport.normalize_lifecycle_status(exclude_status)}
@@ -683,6 +701,7 @@ def list_reports(current_user):
             continue
 
         display_id = rep.get('display_id') or rep.get('metadata', {}).get('display_id') or f"REP-{datetime.now(timezone.utc).year}-{str(report_id)[-4:].upper()}"
+        meta = rep.get('metadata', {})
         enriched_reports.append({
             'report_id': report_id,
             'display_id': display_id,
@@ -690,11 +709,14 @@ def list_reports(current_user):
             'description': rep.get('description'),
             'status': rep.get('status'),
             'date_submitted': rep.get('date_submitted'),
-            'metadata': rep.get('metadata', {}),
-            'combined_multi_view_assessment': rep.get('metadata', {}).get('combined_multi_view_assessment'),
+            'metadata': meta,
+            'assigned_engineer_id': meta.get('assigned_engineer_id') or meta.get('reviewer_id'),
+            'assigned_engineer_name': meta.get('assigned_engineer_name') or meta.get('reviewed_by'),
+            'inspection_notebook': meta.get('inspection_notebook', {}),
+            'combined_multi_view_assessment': meta.get('combined_multi_view_assessment'),
             'asset': asset or {
-                'location': rep.get('metadata', {}).get('location_name', 'Monitored Infrastructure'),
-                'asset_type': rep.get('metadata', {}).get('asset_type', 'Road / Pavement')
+                'location': meta.get('location_name', 'Monitored Infrastructure'),
+                'asset_type': meta.get('asset_type', 'Road / Pavement')
             },
             'image': image_info,
             'assessment': assessment,
@@ -844,6 +866,13 @@ def get_map_reports():
     status_filter = request.args.get('status')
     defect_filter = request.args.get('defect_class')
     asset_filter = request.args.get('asset_type')
+    retention_days = 7
+    try:
+        raw_ret = request.args.get('retention_days')
+        if raw_ret is not None:
+            retention_days = int(raw_ret)
+    except (ValueError, TypeError):
+        retention_days = 7
 
     query = {}
     if status_filter:
@@ -851,9 +880,29 @@ def get_map_reports():
 
     reports = db_service.find('infrastructure_reports', query, sort_key='date_submitted', reverse=True)
 
+    now_utc = datetime.now(timezone.utc)
     map_points = []
     for rep in reports:
         meta = rep.get('metadata', {})
+        rep_status = InfrastructureReport.normalize_lifecycle_status(rep.get('status'))
+
+        # Section 10: Operational map retention window (default 7 days)
+        # Resolved reports older than retention_days are excluded from default operational map
+        # unless explicit status filter specifies Resolved.
+        if rep_status == InfrastructureReport.STATUS_RESOLVED and (not status_filter or status_filter.lower() != 'resolved'):
+            res_date_str = meta.get('resolved_at') or rep.get('last_updated_at') or rep.get('date_submitted')
+            if res_date_str:
+                try:
+                    clean_d = res_date_str.replace('Z', '+00:00')
+                    if '+' in clean_d[10:] or '-' in clean_d[10:]:
+                        res_dt = datetime.fromisoformat(clean_d)
+                    else:
+                        res_dt = datetime.fromisoformat(clean_d).replace(tzinfo=timezone.utc)
+                    if (now_utc - res_dt).total_seconds() > retention_days * 86400:
+                        continue
+                except Exception:
+                    pass
+
         lat = rep.get('latitude') or meta.get('latitude')
         lng = rep.get('longitude') or meta.get('longitude')
 
@@ -996,7 +1045,7 @@ def get_active_safety_advisories():
     return resp
 
 
-@reports_bp.route('/<report_id>/status', methods=['PUT'])
+@reports_bp.route('/<report_id>/status', methods=['PUT', 'PATCH'])
 @login_required
 def update_report_status(current_user, report_id):
     """
@@ -1022,6 +1071,13 @@ def update_report_status(current_user, report_id):
     target_status = InfrastructureReport.normalize_lifecycle_status(new_raw_status)
     current_status = InfrastructureReport.normalize_lifecycle_status(report.get('status'))
 
+    # Section 26: Forward-only lifecycle in ordinary engineer operations
+    if current_status == InfrastructureReport.STATUS_RESOLVED:
+        return jsonify({'error': 'This defect report is resolved and in read-only mode.'}), 400
+
+    if current_status == InfrastructureReport.STATUS_VERIFIED and target_status in [InfrastructureReport.STATUS_RECEIVED, InfrastructureReport.STATUS_UNDER_REVIEW]:
+        return jsonify({'error': 'Forward-only lifecycle: A verified defect cannot return to Received or Under Review.'}), 400
+
     if not InfrastructureReport.can_transition(current_status, target_status):
         return jsonify({
             'error': f"Invalid status transition from '{current_status}' to '{target_status}'. Permitted forward lifecycle: Received -> Under Review -> Verified -> Resolved."
@@ -1029,6 +1085,15 @@ def update_report_status(current_user, report_id):
 
     now_iso = datetime.now(timezone.utc).isoformat()
     meta = report.get('metadata', {})
+
+    # Engineer Ownership & Accountability (Section 28)
+    user_id_str = str(current_user.get('_id') or current_user.get('user_id'))
+    if target_status in [InfrastructureReport.STATUS_UNDER_REVIEW, InfrastructureReport.STATUS_VERIFIED]:
+        if not meta.get('assigned_engineer_id'):
+            meta['assigned_engineer_id'] = user_id_str
+            meta['assigned_engineer_name'] = current_user.get('name', 'Certified Engineer')
+            meta['assigned_engineer_email'] = current_user.get('email', '')
+            meta['assigned_at'] = now_iso
     history = meta.get('status_history', [])
     history.append({
         'status': target_status,
@@ -1043,6 +1108,7 @@ def update_report_status(current_user, report_id):
 
     # Automatically mark associated safety advisory inactive when report is Resolved
     if target_status == InfrastructureReport.STATUS_RESOLVED:
+        meta['resolved_at'] = now_iso
         db_service.update_many('safety_advisories', {'report_id': report_id}, {
             'status': 'inactive',
             'closed_at': now_iso,
