@@ -275,6 +275,54 @@ def get_historical_defect_trends(current_user):
     most_reported_defect = max(defect_counts.items(), key=lambda x: x[1])[0] if defect_counts else 'None'
     most_active_loc = max(location_counts.items(), key=lambda x: x[1])[0] if location_counts else 'None'
 
+    # Compute genuine data-based recurrence insights (Section 31)
+    month_critical_counts = defaultdict(int)
+    corridor_defect_map = defaultdict(lambda: defaultdict(int))
+    for dt, rep, meta, loc_name in parsed_reports:
+        if not (earliest_bound <= dt <= latest_bound):
+            continue
+        raw_sev = str(meta.get('relative_severity') or rep.get('relative_severity') or '').strip().lower()
+        if raw_sev in ['critical', 'high']:
+            m_label = f"{calendar.month_name[dt.month]} {dt.year}"
+            month_critical_counts[m_label] += 1
+        raw_class = str(meta.get('defect_class') or rep.get('defect_class') or '').strip().lower()
+        d_class = 'Pothole' if 'pothole' in raw_class else ('Crack' if 'crack' in raw_class else 'Surface deterioration')
+        if loc_name:
+            corridor_defect_map[loc_name][d_class] += 1
+
+    peak_crit_month = max(month_critical_counts.items(), key=lambda x: x[1]) if month_critical_counts else None
+    top_corridor_recurrent = None
+    if most_active_loc != 'None' and most_active_loc in corridor_defect_map:
+        d_map = corridor_defect_map[most_active_loc]
+        if d_map:
+            top_corridor_recurrent = max(d_map.items(), key=lambda x: x[1])
+
+    recurrence_insights = []
+    if most_reported_defect != 'None':
+        recurrence_insights.append({
+            'title': 'Most Frequently Reported Defect',
+            'value': f"{most_reported_defect} ({defect_counts[most_reported_defect]} observations)",
+            'basis': 'Historical observation count in active period'
+        })
+    if most_active_loc != 'None':
+        recurrence_insights.append({
+            'title': 'Most Active Monitored Corridor',
+            'value': f"{most_active_loc} ({location_counts[most_active_loc]} reports)",
+            'basis': 'Corridor report concentration'
+        })
+    if peak_crit_month:
+        recurrence_insights.append({
+            'title': 'Month with Highest Critical Reports',
+            'value': f"{peak_crit_month[0]} ({peak_crit_month[1]} critical reports)",
+            'basis': 'Temporal critical density'
+        })
+    if top_corridor_recurrent:
+        recurrence_insights.append({
+            'title': f"Most Recurring Defect on {most_active_loc}",
+            'value': f"{top_corridor_recurrent[0]} ({top_corridor_recurrent[1]} occurrences)",
+            'basis': 'Corridor-level defect recurrence pattern'
+        })
+
     has_data = total_in_period > 0
 
     resp_data = {
@@ -289,7 +337,8 @@ def get_historical_defect_trends(current_user):
             'critical_reports_count': critical_in_period,
             'resolved_reports_count': resolved_in_period,
             'most_active_location': most_active_loc,
-            'total_reports': total_in_period
+            'total_reports': total_in_period,
+            'recurrence_insights': recurrence_insights
         },
         'filter_options': {
             'counties': ['All Counties', 'Nairobi', 'Mombasa', 'Kisumu', 'Nakuru', 'Kiambu', 'Machakos', 'Uasin Gishu'],
@@ -312,4 +361,110 @@ def get_historical_defect_trends(current_user):
     resp = make_response(jsonify(resp_data), 200)
     resp.headers['Cache-Control'] = 'no-cache, no-store, must-revalidate'
     return resp
+
+@analytics_bp.route('/critical-calendar', methods=['GET'])
+@role_required('engineer', 'admin')
+def get_critical_calendar(current_user):
+    """
+    Critical Reports Calendar (Sections 28 & 29).
+    Calculates concentration of Critical infrastructure reports over actual dates.
+    Grounded strictly in verified database observations; no fabricated dates or counts.
+    Explicitly represents: Critical Reports Calendar = Critical reports received over time.
+    """
+    time_range = request.args.get('range', '6m').lower().strip()
+    county_filter = request.args.get('county', 'all').strip()
+    ward_filter = request.args.get('ward', 'all').strip()
+
+    now = datetime.now(timezone.utc)
+    all_reports = db_service.find('infrastructure_reports')
+
+    if time_range == '3m':
+        days_span = 90
+    elif time_range == '12m':
+        days_span = 365
+    else:
+        time_range = '6m'
+        days_span = 180
+
+    start_date = (now - timedelta(days=days_span)).replace(hour=0, minute=0, second=0, microsecond=0)
+    end_date = now.replace(hour=23, minute=59, second=59, microsecond=999999)
+
+    daily_critical = defaultdict(int)
+    daily_report_ids = defaultdict(list)
+    total_critical = 0
+
+    for rep in all_reports:
+        meta = rep.get('metadata') or {}
+        raw_sev = str(meta.get('relative_severity') or rep.get('relative_severity') or '').strip().lower()
+        if raw_sev not in ['critical', 'high']:
+            continue
+
+        loc_name = str(meta.get('location_name') or rep.get('location_name') or rep.get('description') or '')
+        if county_filter and county_filter.lower() != 'all' and county_filter.lower() not in loc_name.lower():
+            continue
+        if ward_filter and ward_filter.lower() != 'all' and ward_filter.lower() != 'all areas' and ward_filter.lower() not in loc_name.lower():
+            continue
+
+        dt_str = rep.get('date_submitted') or rep.get('created_at')
+        if not dt_str:
+            continue
+        try:
+            clean_str = dt_str.replace('Z', '+00:00')
+            if '+' in clean_str[10:] or '-' in clean_str[10:]:
+                dt = datetime.fromisoformat(clean_str)
+            else:
+                dt = datetime.fromisoformat(clean_str).replace(tzinfo=timezone.utc)
+        except Exception:
+            try:
+                dt = datetime.strptime(dt_str[:10], '%Y-%m-%d').replace(tzinfo=timezone.utc)
+            except Exception:
+                continue
+
+        if start_date <= dt <= end_date:
+            day_key = dt.strftime('%Y-%m-%d')
+            daily_critical[day_key] += 1
+            disp_id = rep.get('display_id') or (f"#REP-{rep.get('report_id')[-6:].upper()}" if rep.get('report_id') else f"#REP-{str(rep.get('_id'))[-6:].upper()}")
+            daily_report_ids[day_key].append(disp_id)
+            total_critical += 1
+
+    # Build continuous day records for calendar grid
+    days = []
+    cur = start_date
+    max_count = 0
+    while cur <= end_date:
+        d_key = cur.strftime('%Y-%m-%d')
+        cnt = daily_critical.get(d_key, 0)
+        if cnt > max_count:
+            max_count = cnt
+
+        if cnt == 0:
+            intensity = 0
+        elif cnt == 1:
+            intensity = 1
+        elif cnt == 2:
+            intensity = 2
+        else:
+            intensity = 3
+
+        days.append({
+            'date': d_key,
+            'day_of_week': cur.weekday(),
+            'count': cnt,
+            'intensity': intensity,
+            'reports': daily_report_ids.get(d_key, [])
+        })
+        cur += timedelta(days=1)
+
+    resp = make_response(jsonify({
+        'time_range': time_range,
+        'total_critical_reports': total_critical,
+        'start_date': start_date.strftime('%Y-%m-%d'),
+        'end_date': end_date.strftime('%Y-%m-%d'),
+        'days': days,
+        'max_daily_count': max_count,
+        'note': 'Critical Reports Calendar = Critical reports received over time (temporal concentration)'
+    }), 200)
+    resp.headers['Cache-Control'] = 'no-cache, no-store, must-revalidate'
+    return resp
+
 

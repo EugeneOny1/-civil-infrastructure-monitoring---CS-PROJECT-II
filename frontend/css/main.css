@@ -1515,6 +1515,260 @@ body, body.light-theme {
     border-left: 3px solid #0284c7;
 }
 
+/* ==========================================================================
+   Citizen My Reports - Master-Detail & Gallery View
+   ========================================================================== */
+.btn-view-toggle {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    padding: 5px 12px;
+    font-size: 0.78rem;
+    font-weight: 600;
+    border-radius: var(--radius-sm);
+    border: 1px solid var(--border-color);
+    background: var(--bg-surface);
+    color: var(--text-secondary);
+    cursor: pointer;
+    transition: var(--transition-fast);
+}
+
+.btn-view-toggle:hover {
+    background: var(--bg-card-hover);
+    color: var(--text-primary);
+}
+
+.btn-view-toggle.active {
+    background: #0284c7;
+    border-color: #0284c7;
+    color: #ffffff;
+}
+
+.tracking-evidence-thumb {
+    width: 44px;
+    height: 44px;
+    border-radius: 6px;
+    object-fit: cover;
+    border: 1px solid var(--border-color);
+    background: #0f172a;
+    display: block;
+}
+
+.clickable-row {
+    cursor: pointer;
+    transition: background-color 0.15s ease;
+}
+
+.clickable-row:hover {
+    background-color: rgba(2, 132, 199, 0.05) !important;
+}
+
+.selected-tracking-row {
+    background-color: rgba(2, 132, 199, 0.12) !important;
+    outline: 2px solid #0284c7;
+    outline-offset: -2px;
+}
+
+.tracking-gallery-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+    gap: 1rem;
+}
+
+.gallery-card {
+    background: var(--bg-surface);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-md);
+    overflow: hidden;
+    cursor: pointer;
+    transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+    display: flex;
+    flex-direction: column;
+}
+
+.gallery-card:hover {
+    transform: translateY(-2px);
+    box-shadow: var(--shadow-card-hover);
+    border-color: #93c5fd;
+}
+
+.gallery-card.selected-gallery-card {
+    border-color: #0284c7 !important;
+    box-shadow: 0 0 0 2px rgba(2, 132, 199, 0.35), 0 4px 14px rgba(2, 132, 199, 0.15);
+    background: #f0f9ff;
+}
+
+.gallery-card-thumb-wrapper {
+    position: relative;
+    width: 100%;
+    height: 140px;
+    background: #0f172a;
+    overflow: hidden;
+}
+
+.gallery-card-img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    transition: transform 0.3s ease;
+}
+
+.gallery-card:hover .gallery-card-img {
+    transform: scale(1.04);
+}
+
+.gallery-card-body {
+    padding: 0.85rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.4rem;
+    flex: 1;
+}
+
+.btn-close-detail {
+    background: transparent;
+    border: none;
+    font-size: 1.3rem;
+    color: var(--text-muted);
+    cursor: pointer;
+    line-height: 1;
+    padding: 4px;
+    border-radius: 4px;
+    transition: var(--transition-fast);
+}
+
+.btn-close-detail:hover {
+    color: var(--accent-rose);
+    background: rgba(220, 38, 38, 0.08);
+}
+
+/* Master-detail mobile responsiveness */
+@media (max-width: 900px) {
+    #trackingLayoutContainer {
+        flex-direction: column !important;
+    }
+
+    #trackingExplorerCol {
+        flex: 1 1 100% !important;
+        max-width: 100% !important;
+    }
+
+    #trackingDetailCol {
+        flex: 1 1 100% !important;
+        max-width: 100% !important;
+        margin-top: 1rem;
+    }
+}
+
+/* ==========================================================================
+   Engineer Monitoring Dashboard - Critical Calendar & Recurrence Insights
+   ========================================================================== */
+.calendar-card {
+    background: var(--bg-surface);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-md);
+    padding: 1.25rem;
+}
+
+.critical-calendar-grid {
+    display: flex;
+    gap: 3px;
+    align-items: flex-start;
+    padding: 4px 2px;
+}
+
+.cal-week-col {
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+}
+
+.cal-day-cell {
+    width: 12px;
+    height: 12px;
+    border-radius: 2px;
+    cursor: pointer;
+    transition: transform 0.15s ease, outline 0.15s ease;
+    box-sizing: border-box;
+}
+
+.cal-day-cell:hover {
+    transform: scale(1.4);
+    z-index: 5;
+    outline: 1.5px solid #ffffff;
+}
+
+.cal-intensity-0 {
+    background-color: #1e293b;
+    border: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.cal-intensity-1 {
+    background-color: #7f1d1d;
+    border: 1px solid #991b1b;
+}
+
+.cal-intensity-2 {
+    background-color: #dc2626;
+    box-shadow: 0 0 3px rgba(220, 38, 38, 0.4);
+}
+
+.cal-intensity-3 {
+    background-color: #ef4444;
+    box-shadow: 0 0 6px rgba(239, 68, 68, 0.6);
+}
+
+.cal-legend-box {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 18px;
+    height: 18px;
+    border-radius: 3px;
+    font-size: 0.68rem;
+    font-weight: 700;
+    color: #ffffff;
+}
+
+.recurrence-insight-card {
+    background: rgba(15, 23, 42, 0.04);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-sm);
+    padding: 0.65rem 0.85rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.2rem;
+    transition: var(--transition-fast);
+}
+
+.recurrence-insight-card:hover {
+    border-color: #93c5fd;
+    background: rgba(2, 132, 199, 0.03);
+}
+
+.recurrence-insight-card .insight-header {
+    display: flex;
+    align-items: center;
+    gap: 0.35rem;
+    font-size: 0.72rem;
+    font-weight: 600;
+    color: #475569;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+}
+
+.recurrence-insight-card .insight-value {
+    font-size: 0.88rem;
+    font-weight: 700;
+    color: var(--text-primary);
+}
+
+.recurrence-insight-card .insight-basis {
+    font-size: 0.68rem;
+    color: #64748b;
+    font-style: italic;
+}
+
 @media (prefers-reduced-motion: reduce) {
     *, *::before, *::after {
         animation-duration: 0.01ms !important;

@@ -539,40 +539,66 @@
             </div>
         </section>
 
-        <!-- VIEW 2: CITIZEN TRACKING (FR-08) -->
+        <!-- VIEW 2: CITIZEN TRACKING / MY REPORTS (FR-08) -->
         <section class="view-section" id="view-tracking">
             <div class="view-header">
                 <div>
-                    <h2 class="view-title">Citizen Defect Tracking Portal</h2>
-                    <p class="view-desc">Monitor the lifecycle status and engineer review updates of your submitted infrastructure defect reports</p>
+                    <h2 class="view-title">My Infrastructure Reports</h2>
+                    <p class="view-desc">Monitor the lifecycle status and professional engineering validation of your submitted defect reports</p>
                 </div>
-                <button class="btn-secondary btn-sm" id="btnRefreshTracking"><i class='bx bx-refresh'></i> Refresh Status</button>
+                <div style="display: flex; align-items: center; gap: 0.75rem;">
+                    <!-- Section 20: List | Gallery View Switch -->
+                    <div class="view-mode-toggle" id="trackingViewModeToggle" style="display: flex; background: #0f172a; border: 1px solid #334155; border-radius: 6px; padding: 2px;">
+                        <button type="button" class="btn-view-toggle active" id="btnTrackingListView" title="List View" style="padding: 4px 10px; font-size: 0.78rem; border-radius: 4px; border: none; background: #2563eb; color: #ffffff; cursor: pointer; display: flex; align-items: center; gap: 4px;">
+                            <i class='bx bx-list-ul'></i> List
+                        </button>
+                        <button type="button" class="btn-view-toggle" id="btnTrackingGalleryView" title="Gallery View" style="padding: 4px 10px; font-size: 0.78rem; border-radius: 4px; border: none; background: transparent; color: #94a3b8; cursor: pointer; display: flex; align-items: center; gap: 4px;">
+                            <i class='bx bx-grid-alt'></i> Gallery
+                        </button>
+                    </div>
+                    <button class="btn-secondary btn-sm" id="btnRefreshTracking"><i class='bx bx-refresh'></i> Refresh Status</button>
+                </div>
             </div>
 
-            <div class="glass-card table-card">
-                <div class="table-container">
-                    <table class="data-table" id="trackingTable">
-                        <thead>
-                            <tr>
-                                <th>Report ID</th>
-                                <th>Date Submitted</th>
-                                <th>Infrastructure Location</th>
-                                <th>Detected Defect(s)</th>
-                                <th>Relative Severity</th>
-                                <th>Lifecycle Status</th>
-                                <th>Action</th>
-                            </tr>
-                        </thead>
-                        <tbody id="trackingTableBody">
+            <!-- Section 21 & 22: Master-Detail Explorer Layout -->
+            <div class="tracking-layout-container" id="trackingLayoutContainer" style="display: flex; gap: 1.25rem; align-items: flex-start; width: 100%;">
+                <!-- Left: Reports Explorer Column -->
+                <div class="tracking-explorer-col" id="trackingExplorerCol" style="flex: 1 1 100%; min-width: 0; transition: all 0.25s ease;">
+                    <!-- List View Container -->
+                    <div class="glass-card table-card" id="trackingListContainer">
+                        <div class="table-container">
+                            <table class="data-table" id="trackingTable">
+                                <thead>
+                                    <tr>
+                                        <th style="width: 56px;">Photo</th>
+                                        <th>Infrastructure Location</th>
+                                        <th>Detected Defect</th>
+                                        <th>Relative Severity</th>
+                                        <th>Lifecycle Status</th>
+                                        <th>Date Submitted</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="trackingTableBody">
+                                    <!-- Populated dynamically via JS -->
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+
+                    <!-- Gallery View Container (Section 20) -->
+                    <div id="trackingGalleryContainer" class="hidden">
+                        <div class="citizen-reports-grid" id="trackingGalleryGrid" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 1rem;">
                             <!-- Populated dynamically via JS -->
-                        </tbody>
-                    </table>
+                        </div>
+                    </div>
                 </div>
-            </div>
 
-            <!-- Active Defect Status Progression & Verification Details (FR-08) -->
-            <div class="tracking-active-card glass-card hidden" id="trackingActiveDetailCard">
-                <!-- Populated dynamically via App.selectTrackingReport -->
+                <!-- Right: Selected Report Detail Panel (Section 21, 22, 23) -->
+                <div class="tracking-detail-col hidden" id="trackingDetailCol" style="flex: 1 1 42%; max-width: 42%; min-width: 320px; transition: all 0.25s ease;">
+                    <div class="tracking-active-card glass-card" id="trackingActiveDetailCard">
+                        <!-- Populated dynamically via App.selectTrackingReport -->
+                    </div>
+                </div>
             </div>
         </section>
 
@@ -625,26 +651,28 @@
                 <div class="map-container" id="infrastructureMapContainer">
                     <!-- Leaflet + OpenStreetMap interactive infrastructure map -->
                 </div>
-                <div class="map-legend-bar">
-                    <div class="map-legend-item">
-                        <span class="map-legend-dot" style="background: #ef4444;"></span> Critical Severity (≥ 15% extent)
+                <div class="map-legend-bar" style="display: flex; flex-wrap: wrap; gap: 0.75rem; align-items: center; padding: 0.6rem 1rem;">
+                    <!-- Section 13: Individual Report Severity -->
+                    <div style="display: flex; align-items: center; gap: 7px;">
+                        <span style="font-size: 0.73rem; font-weight: 700; color: #1e293b; text-transform: uppercase;">Individual Reports:</span>
+                        <span class="map-legend-dot" style="background: #ef4444;" title="Critical Visual Severity"></span> <span style="font-size: 0.74rem;">Critical</span>
+                        <span class="map-legend-dot" style="background: #f59e0b;" title="Medium Visual Severity"></span> <span style="font-size: 0.74rem;">Medium</span>
+                        <span class="map-legend-dot" style="background: #10b981;" title="Low Visual Severity"></span> <span style="font-size: 0.74rem;">Low</span>
+                        <span class="map-legend-dot" style="background: #059669; display: inline-flex; align-items: center; justify-content: center; color: #ffffff; font-size: 9px;" title="Resolved Defect"><i class='bx bx-check'></i></span> <span style="font-size: 0.74rem;">Resolved</span>
                     </div>
-                    <div class="map-legend-item">
-                        <span class="map-legend-dot" style="background: #f59e0b;"></span> Medium Severity (5% - 15%)
+                    <!-- Section 16: Safety Advisory Marker -->
+                    <div style="display: flex; align-items: center; gap: 6px; padding-left: 8px; border-left: 1px solid #cbd5e1;">
+                        <span style="display: inline-flex; align-items: center; justify-content: center; width: 15px; height: 15px; border-radius: 50%; background: #1e1b4b; border: 1px solid #4338ca; color: #ffffff; font-size: 10px;"><i class='bx bx-shield-quarter'></i></span>
+                        <span style="font-size: 0.74rem; font-weight: 600; color: #312e81;">Safety Advisory</span>
                     </div>
-                    <div class="map-legend-item">
-                        <span class="map-legend-dot" style="background: #10b981;"></span> Low Severity (&lt; 5%)
+                    <!-- Section 13: Active Defect Density / Monitoring Priority -->
+                    <div class="map-legend-item" id="hotspotLegendItem" style="display: flex; align-items: center; gap: 6px; padding-left: 8px; border-left: 1px solid #cbd5e1;">
+                        <span style="font-size: 0.73rem; font-weight: 700; color: #1e293b; text-transform: uppercase;">Active Defect Density (Priority):</span>
+                        <span class="map-legend-dot" style="background: #22c55e;"></span> <span style="font-size: 0.74rem;">Low</span>
+                        <span class="map-legend-dot" style="background: #eab308;"></span> <span style="font-size: 0.74rem;">Moderate</span>
+                        <span class="map-legend-dot" style="background: #ef4444;"></span> <span style="font-size: 0.74rem;">High Hotspot</span>
                     </div>
-                    <div class="map-legend-item">
-                        <span class="map-legend-dot" style="background: #059669; display: inline-flex; align-items: center; justify-content: center; color: #ffffff; font-size: 9px;"><i class='bx bx-check'></i></span> Resolved
-                    </div>
-                    <div class="map-legend-item" id="hotspotLegendItem" style="display: none; align-items: center; gap: 6px; padding-left: 8px; border-left: 1px solid var(--border-color);">
-                        <span style="font-size: 0.72rem; font-weight: 600; color: #475569;">Active Defect Density / Monitoring Priority:</span>
-                        <span class="map-legend-dot" style="background: #10b981;"></span> Low
-                        <span class="map-legend-dot" style="background: #f59e0b;"></span> Moderate
-                        <span class="map-legend-dot" style="background: #ef4444;"></span> High Priority Hotspot
-                    </div>
-                    <div class="map-legend-item" style="margin-left: auto; color: #86868b; font-size: 0.72rem;">
+                    <div class="map-legend-item" style="margin-left: auto; color: #64748b; font-size: 0.72rem;">
                         <i class="bx bx-lock-alt"></i> Citizen Privacy Mode: Personal reporter identities are protected.
                     </div>
                 </div>
@@ -861,66 +889,111 @@
                 </div>
             </div>
 
-            <!-- Two Column Dashboard: Degradation Chart + Prioritized Queue -->
+            <!-- Two Column Dashboard: Analytics (Trends + Critical Calendar) + Prioritized Queue -->
             <div class="dashboard-columns">
-                <!-- Historical Defect Trends Chart (Figure 4.7) -->
-                <div class="glass-card chart-card">
-                    <div class="card-header-bar" style="flex-wrap: wrap; gap: 0.5rem;">
-                        <div>
-                            <span class="step-tag">HISTORICAL DEFECT TRENDS</span>
-                            <span class="mode-tag" id="trendSubtitle">Reports Over Time</span>
+                <div class="dashboard-analytics-col" style="display: flex; flex-direction: column; gap: 1.5rem; min-width: 0;">
+                    <!-- Historical Defect Trends Chart (Figure 4.7) -->
+                    <div class="glass-card chart-card">
+                        <div class="card-header-bar" style="flex-wrap: wrap; gap: 0.5rem;">
+                            <div>
+                                <span class="step-tag">HISTORICAL DEFECT TRENDS</span>
+                                <span class="mode-tag" id="trendSubtitle">Reports Over Time</span>
+                            </div>
+                            <div class="filter-controls" style="display: flex; gap: 0.4rem; flex-wrap: wrap; align-items: center;">
+                                <select id="trendRangeSelect" class="filter-select" style="font-size: 0.78rem; padding: 4px 8px;">
+                                    <option value="3m">Last 3 Months</option>
+                                    <option value="6m" selected>Last 6 Months</option>
+                                    <option value="12m">Last 12 Months</option>
+                                    <option value="all">All Available Data</option>
+                                </select>
+                                <select id="trendViewBySelect" class="filter-select" style="font-size: 0.78rem; padding: 4px 8px;">
+                                    <option value="defect_class" selected>View by Defect Class</option>
+                                    <option value="visual_severity">View by Visual Severity</option>
+                                </select>
+                                <select id="trendCountySelect" class="filter-select" style="font-size: 0.78rem; padding: 4px 8px;">
+                                    <option value="all" selected>All Counties</option>
+                                    <option value="Nairobi">Nairobi County</option>
+                                    <option value="Mombasa">Mombasa County</option>
+                                    <option value="Kisumu">Kisumu County</option>
+                                    <option value="Nakuru">Nakuru County</option>
+                                    <option value="Kiambu">Kiambu County</option>
+                                    <option value="Machakos">Machakos County</option>
+                                    <option value="Uasin Gishu">Uasin Gishu County</option>
+                                </select>
+                                <select id="trendWardSelect" class="filter-select" style="font-size: 0.78rem; padding: 4px 8px;">
+                                    <option value="all" selected>All Areas / Wards</option>
+                                    <option value="CBD">CBD</option>
+                                    <option value="Westlands">Westlands</option>
+                                    <option value="Kileleshwa">Kileleshwa</option>
+                                    <option value="Lavington">Lavington</option>
+                                    <option value="Kilimani">Kilimani</option>
+                                    <option value="Langata">Langata</option>
+                                    <option value="Upper Hill">Upper Hill</option>
+                                    <option value="Industrial Area">Industrial Area</option>
+                                    <option value="South B">South B</option>
+                                    <option value="Ngong Road">Ngong Road</option>
+                                </select>
+                            </div>
                         </div>
-                        <div class="filter-controls" style="display: flex; gap: 0.4rem; flex-wrap: wrap; align-items: center;">
-                            <select id="trendRangeSelect" class="filter-select" style="font-size: 0.78rem; padding: 4px 8px;">
-                                <option value="3m">Last 3 Months</option>
-                                <option value="6m" selected>Last 6 Months</option>
-                                <option value="12m">Last 12 Months</option>
-                                <option value="all">All Available Data</option>
-                            </select>
-                            <select id="trendViewBySelect" class="filter-select" style="font-size: 0.78rem; padding: 4px 8px;">
-                                <option value="defect_class" selected>View by Defect Class</option>
-                                <option value="visual_severity">View by Visual Severity</option>
-                            </select>
-                            <select id="trendCountySelect" class="filter-select" style="font-size: 0.78rem; padding: 4px 8px;">
-                                <option value="all" selected>All Counties</option>
-                                <option value="Nairobi">Nairobi County</option>
-                                <option value="Mombasa">Mombasa County</option>
-                                <option value="Kisumu">Kisumu County</option>
-                                <option value="Nakuru">Nakuru County</option>
-                                <option value="Kiambu">Kiambu County</option>
-                                <option value="Machakos">Machakos County</option>
-                                <option value="Uasin Gishu">Uasin Gishu County</option>
-                            </select>
-                            <select id="trendWardSelect" class="filter-select" style="font-size: 0.78rem; padding: 4px 8px;">
-                                <option value="all" selected>All Areas / Wards</option>
-                                <option value="CBD">CBD</option>
-                                <option value="Westlands">Westlands</option>
-                                <option value="Kileleshwa">Kileleshwa</option>
-                                <option value="Lavington">Lavington</option>
-                                <option value="Kilimani">Kilimani</option>
-                                <option value="Langata">Langata</option>
-                                <option value="Upper Hill">Upper Hill</option>
-                                <option value="Industrial Area">Industrial Area</option>
-                                <option value="South B">South B</option>
-                                <option value="Ngong Road">Ngong Road</option>
-                            </select>
+                        <div class="chart-canvas-wrapper" style="position: relative; min-height: 240px; height: 260px;">
+                            <canvas id="degradationChart" class="trend-canvas"></canvas>
+                            <div id="trendEmptyState" class="canvas-placeholder hidden" style="position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; background: rgba(15, 23, 42, 0.75);">
+                                <p style="color: #94a3b8; font-size: 0.85rem;"><i class='bx bx-info-circle'></i> Not enough historical report data is available for this period.</p>
+                            </div>
+                        </div>
+                        <div class="chart-legend" id="trendLegend" style="display: flex; gap: 1rem; flex-wrap: wrap; margin-top: 0.5rem;">
+                            <!-- Dynamically populated series legend -->
+                        </div>
+                        <!-- Secondary Summary Metrics Strip -->
+                        <div class="trend-summary-strip" id="trendSummaryStrip" style="display: flex; gap: 1.5rem; flex-wrap: wrap; margin-top: 0.75rem; padding-top: 0.6rem; border-top: 1px solid rgba(255, 255, 255, 0.08); font-size: 0.78rem; color: #94a3b8;">
+                            <div>Most reported defect: <strong id="trendSummaryMostReported" style="color: #f1f5f9;">—</strong></div>
+                            <div>Critical reports this period: <strong id="trendSummaryCritical" style="color: #ef4444;">—</strong></div>
+                            <div>Reports resolved: <strong id="trendSummaryResolved" style="color: #10b981;">—</strong></div>
+                            <div>Most active monitored corridor: <strong id="trendSummaryActiveLocation" style="color: #38bdf8;">—</strong></div>
                         </div>
                     </div>
-                    <div class="chart-canvas-wrapper" style="position: relative; min-height: 240px;">
-                        <canvas id="degradationChart" class="trend-canvas"></canvas>
-                        <div id="trendEmptyState" class="canvas-placeholder hidden" style="position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; background: rgba(15, 23, 42, 0.75);">
-                            <p style="color: #94a3b8; font-size: 0.85rem;"><i class='bx bx-info-circle'></i> Not enough historical report data is available for this period.</p>
+
+                    <!-- Critical Reports Calendar Heatmap (Sections 28 & 29) -->
+                    <div class="glass-card calendar-card" id="criticalCalendarCard">
+                        <div class="card-header-bar" style="flex-wrap: wrap; gap: 0.5rem;">
+                            <div>
+                                <span class="step-tag">CRITICAL REPORTS CALENDAR</span>
+                                <span class="mode-tag" id="calSubtitle">Temporal Incident Concentration</span>
+                            </div>
+                            <div class="filter-controls" style="display: flex; gap: 0.4rem; align-items: center;">
+                                <select id="calRangeSelect" class="filter-select" style="font-size: 0.78rem; padding: 4px 8px;">
+                                    <option value="3m">Last 3 Months</option>
+                                    <option value="6m" selected>Last 6 Months</option>
+                                    <option value="12m">Last 12 Months</option>
+                                </select>
+                            </div>
                         </div>
-                    </div>
-                    <div class="chart-legend" id="trendLegend" style="display: flex; gap: 1rem; flex-wrap: wrap; margin-top: 0.5rem;">
-                        <!-- Dynamically populated series legend -->
-                    </div>
-                    <!-- Secondary Summary Metrics Strip -->
-                    <div class="trend-summary-strip" id="trendSummaryStrip" style="display: flex; gap: 1.5rem; flex-wrap: wrap; margin-top: 0.75rem; padding-top: 0.6rem; border-top: 1px solid rgba(255, 255, 255, 0.08); font-size: 0.78rem; color: #94a3b8;">
-                        <div>Most reported defect: <strong id="trendSummaryMostReported" style="color: #f1f5f9;">—</strong></div>
-                        <div>Critical reports this period: <strong id="trendSummaryCritical" style="color: #ef4444;">—</strong></div>
-                        <div>Reports resolved: <strong id="trendSummaryResolved" style="color: #10b981;">—</strong></div>
-                        <div>Most active monitored corridor: <strong id="trendSummaryActiveLocation" style="color: #38bdf8;">—</strong></div>
+
+                        <!-- Native Calendar Day Grid Container -->
+                        <div class="critical-calendar-wrapper" style="overflow-x: auto; padding: 0.75rem 0 0.25rem 0;">
+                            <div id="criticalCalendarGrid" class="critical-calendar-grid">
+                                <!-- Populated dynamically via JS -->
+                            </div>
+                        </div>
+
+                        <!-- Calendar Legend & Explicit Analytical Distinctions -->
+                        <div class="calendar-footer-strip" style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 0.75rem; margin-top: 0.6rem; padding-top: 0.5rem; border-top: 1px solid rgba(255, 255, 255, 0.08); font-size: 0.75rem; color: #94a3b8;">
+                            <div style="display: flex; align-items: center; gap: 0.5rem;">
+                                <span>Critical Reports:</span>
+                                <span class="cal-legend-box cal-intensity-0" title="0 reports">0</span>
+                                <span class="cal-legend-box cal-intensity-1" title="1 report">1</span>
+                                <span class="cal-legend-box cal-intensity-2" title="2 reports">2</span>
+                                <span class="cal-legend-box cal-intensity-3" title="3+ reports">3+</span>
+                            </div>
+                            <div style="font-style: italic; color: #64748b;">
+                                Temporal concentration over time &bull; Independent of geographic heatmap
+                            </div>
+                        </div>
+
+                        <!-- Recurrence Insights Strip (Section 31) -->
+                        <div class="recurrence-insights-container" id="dashboardRecurrenceInsights" style="margin-top: 0.75rem; display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 0.6rem;">
+                            <!-- Dynamically populated from actual data -->
+                        </div>
                     </div>
                 </div>
 
@@ -1570,6 +1643,7 @@
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
     <script src="https://unpkg.com/leaflet.markercluster@1.5.3/dist/leaflet.markercluster.js"></script>
     <script src="js/leaflet-heat.js"></script>
+    <script src="js/chart.umd.min.js"></script>
     <script src="js/api.js"></script>
     <script src="js/map.js"></script>
     <script src="js/submission.js"></script>

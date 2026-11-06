@@ -358,6 +358,19 @@ const Api = {
         return this.getDegradationTrends(params);
     },
 
+    async getCriticalCalendar(params = {}) {
+        const qry = new URLSearchParams(params).toString();
+        const url = qry ? `${API_BASE}/analytics/critical-calendar?${qry}` : `${API_BASE}/analytics/critical-calendar`;
+        const res = await this.safeFetch(url, {
+            headers: this.getHeaders()
+        });
+        if (!res.ok) {
+            const err = await res.json();
+            throw new Error(err.error || 'Failed to load critical calendar.');
+        }
+        return res.json();
+    },
+
     // Engineer Defect Review & Assessment Validation (FR-06)
     async submitReview(assessmentId, reviewData) {
         const res = await this.safeFetch(`${API_BASE}/reviews/${assessmentId}`, {
