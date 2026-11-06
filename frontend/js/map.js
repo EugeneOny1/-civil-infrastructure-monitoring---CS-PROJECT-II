@@ -13,6 +13,7 @@
 const DefectMap = {
     map: null,
     markerCluster: null,
+    reportMarkerLayer: null,
     advisoriesLayer: null,
     advisoryMarkers: {},
     tileLayer: null,
@@ -35,28 +36,27 @@ const DefectMap = {
     heatLayer: null,
     showHotspotLayer: true,
     heatGradient: {
-        0.30: '#10b981', // Clean low-density green
-        0.55: '#f59e0b', // Moderate yellow/amber
-        0.75: '#ea580c', // Higher orange
-        0.90: '#ef4444', // Concentrated core red
-        1.00: '#991b1b'  // Peak hotspot crimson
+        0.20: '#22c55e', // Clean low-density green (#10b981)
+        0.50: '#eab308', // Moderate yellow/amber
+        0.72: '#f59e0b', // Higher orange
+        1.00: '#ef4444'  // Peak hotspot crimson (#991b1b)
     },
 
     getZoomHeatOptions(zoom) {
-        // Zoom-aware radius, blur, and opacity scaling.
-        // Prevents country-scale ballooning and city-scale foggy halos.
+        // Zoom-aware radius, blur, and opacity scaling (Section 5 & 6).
+        // Keeps heat localized and analytically readable at every zoom without blanketing the map.
         if (zoom <= 7) {
-            // Far / country scale: strongly attenuated to prevent misleading nationwide clouds
-            return { radius: 10, blur: 8, minOpacity: 0.05, attenuated: true };
+            // Country / national scale: tight radius and controlled blur
+            return { radius: 14, blur: 10, minOpacity: 0.22, attenuated: false };
         } else if (zoom <= 10) {
-            // Regional / greater Nairobi view
-            return { radius: 14, blur: 10, minOpacity: 0.10, attenuated: false };
+            // Regional / county view
+            return { radius: 18, blur: 12, minOpacity: 0.24, attenuated: false };
         } else if (zoom <= 13) {
             // City / Nairobi default scale (zoom 11-13) - crisp point concentration, visible roads
-            return { radius: 18, blur: 12, minOpacity: 0.18, attenuated: false };
+            return { radius: 22, blur: 14, minOpacity: 0.26, attenuated: false };
         } else {
             // Street / neighbourhood scale (zoom >= 14)
-            return { radius: 26, blur: 16, minOpacity: 0.22, attenuated: false };
+            return { radius: 28, blur: 16, minOpacity: 0.28, attenuated: false };
         }
     },
 
@@ -74,23 +74,13 @@ const DefectMap = {
             gradient: this.heatGradient
         });
 
-        // Low-zoom attenuation: below analytical threshold (<= 7),
-        // remove heat layer from map so Nairobi does not cover all of Kenya,
-        // and restore automatically when zooming back in.
         if (this.showHotspotLayer) {
-            if (opts.attenuated) {
-                if (heatPane) heatPane.style.display = 'none';
-                if (this.map.hasLayer(this.heatLayer)) {
-                    this.map.removeLayer(this.heatLayer);
-                }
-            } else {
-                if (heatPane) heatPane.style.display = '';
-                if (!this.map.hasLayer(this.heatLayer)) {
-                    this.heatLayer.addTo(this.map);
-                }
-                if (typeof this.heatLayer.redraw === 'function') {
-                    this.heatLayer.redraw();
-                }
+            if (heatPane) heatPane.style.display = '';
+            if (!this.map.hasLayer(this.heatLayer)) {
+                this.heatLayer.addTo(this.map);
+            }
+            if (typeof this.heatLayer.redraw === 'function') {
+                this.heatLayer.redraw();
             }
         } else {
             if (heatPane) heatPane.style.display = 'none';
@@ -262,6 +252,12 @@ const DefectMap = {
                 heatPane.style.opacity = '0.85';
             }
 
+            // Section 15: Dedicated safety advisory pane above ordinary markers (600) and below popups (700)
+            if (!this.map.getPane('safetyAdvisoryPane')) {
+                const advPane = this.map.createPane('safetyAdvisoryPane');
+                advPane.style.zIndex = '675';
+            }
+
             // Sync initial hotspot button and legend state
             this.syncHotspotButtonState();
 
@@ -270,20 +266,24 @@ const DefectMap = {
                 this.updateZoomAwareHeatmap();
             });
 
-            // Initialize marker cluster group with severity-aware visual treatment
+            // Section 7 & 8: Dedicated individual marker layer for small/standard datasets (<= 150 reports)
+            // Displays individual points independently across national and city scales without collapsing into one cluster.
+            this.reportMarkerLayer = L.layerGroup().addTo(this.map);
+
+            // Adaptive cluster group for large datasets (> 150 reports)
             if (typeof L.markerClusterGroup === 'function') {
                 this.markerCluster = L.markerClusterGroup({
                     chunkedLoading: true,
-                    maxClusterRadius: 40,
+                    maxClusterRadius: 30,
                     spiderfyOnMaxZoom: true,
                     showCoverageOnHover: false,
                     zoomToBoundsOnClick: true,
+                    disableClusteringAtZoom: 14,
                     iconCreateFunction: (cluster) => {
                         const childMarkers = cluster.getAllChildMarkers();
                         const count = childMarkers.length;
 
                         // Severity composition weighting: Low = 1, Medium = 2, Critical = 3
-                        // cluster_severity_score = sum(report severity weights) / number of reports
                         let sumWeights = 0;
                         for (const m of childMarkers) {
                             const sev = (m.reportSeverity || m.options?.severity || 'Low').toLowerCase();
@@ -297,21 +297,16 @@ const DefectMap = {
                         }
 
                         const score = count > 0 ? (sumWeights / count) : 1.0;
-
-                        // Presentation bands:
-                        // 1.00 – 1.49 -> Green
-                        // 1.50 – 2.24 -> Amber
-                        // 2.25 – 3.00 -> Red
-                        let innerColor = '#10b981'; // Green: Low priority composition
+                        let innerColor = '#10b981';
                         let ringColor = 'rgba(16, 185, 129, 0.25)';
                         let shadowColor = 'rgba(16, 185, 129, 0.4)';
 
                         if (score >= 2.25) {
-                            innerColor = '#ef4444'; // Red: Critical density composition
+                            innerColor = '#ef4444';
                             ringColor = 'rgba(239, 68, 68, 0.25)';
                             shadowColor = 'rgba(239, 68, 68, 0.45)';
                         } else if (score >= 1.50) {
-                            innerColor = '#f59e0b'; // Amber: Medium priority composition
+                            innerColor = '#f59e0b';
                             ringColor = 'rgba(245, 158, 11, 0.25)';
                             shadowColor = 'rgba(245, 158, 11, 0.45)';
                         }
@@ -329,14 +324,12 @@ const DefectMap = {
                         });
                     }
                 });
-                this.map.addLayer(this.markerCluster);
             } else {
-                console.warn("[DefectMap] Leaflet.markercluster not found. Falling back to standard LayerGroup.");
-                this.markerCluster = L.layerGroup().addTo(this.map);
+                this.markerCluster = L.layerGroup();
             }
 
-            // Dedicated layer for active safety advisories
-            this.advisoriesLayer = L.layerGroup().addTo(this.map);
+            // Section 15: Dedicated layer for active safety advisories on safetyAdvisoryPane
+            this.advisoriesLayer = L.layerGroup([], { pane: 'safetyAdvisoryPane' }).addTo(this.map);
 
             this.isInitialized = true;
             this.invalidateSize();
@@ -517,6 +510,8 @@ const DefectMap = {
         const container = document.getElementById('infrastructureMapContainer');
 
         if (points.length === 0) {
+            if (this.reportMarkerLayer) this.reportMarkerLayer.clearLayers();
+            if (this.markerCluster) this.markerCluster.clearLayers();
             if (this.heatLayer && this.map && this.map.hasLayer(this.heatLayer)) {
                 this.heatLayer.setLatLngs([]);
             }
@@ -558,33 +553,56 @@ const DefectMap = {
 
             markers.push(marker);
 
-            // Section 11: Exclude Resolved reports from active hotspot density!
-            // Resolved reports remain visible as historical pins, but MUST NOT contribute active heat.
+            // Section 11: Exclude Resolved reports from active defect density heat!
+            // Resolved reports remain accessible as historical markers, but MUST NOT contribute to active heat.
             const isResolved = point.status === 'Resolved' || String(point.status).toLowerCase() === 'resolved';
             if (!isResolved) {
-                // Defect Report Density / Monitoring Priority intensity mapping:
-                // Low      = 0.35
-                // Medium   = 0.65
-                // Critical = 1.00
+                // Section 4: Visual priority weighting model
+                // Low = 0.35, Medium = 0.65, Critical = 1.00
                 const sev = (point.relative_severity || 'Low').toLowerCase();
-                let intensity = 0.35; // Low severity baseline
+                let intensity = 0.35;
                 if (sev === 'critical') {
                     intensity = 1.00;
                 } else if (sev === 'medium' || sev === 'moderate') {
                     intensity = 0.65;
                 }
 
+                // Section 3: Raw report coordinates feed the heatmap directly
                 heatPoints.push([lat, lng, intensity]);
             }
         });
 
-        if (typeof this.markerCluster.addLayers === 'function') {
-            this.markerCluster.addLayers(markers);
+        // Clear existing markers from both layers before applying adaptive strategy
+        if (this.reportMarkerLayer) this.reportMarkerLayer.clearLayers();
+        if (this.markerCluster) this.markerCluster.clearLayers();
+
+        // Section 7 & 8: Stop aggressive clustering for small datasets (<= 150 visible reports).
+        // At national-level and city-level zoom, reports remain individually visible as colored severity pins.
+        // Cluster grouping is adaptively reserved strictly for large datasets (> 150 visible reports).
+        const CLUSTER_THRESHOLD = 150;
+        if (points.length <= CLUSTER_THRESHOLD) {
+            if (this.markerCluster && this.map.hasLayer(this.markerCluster)) {
+                this.map.removeLayer(this.markerCluster);
+            }
+            if (this.reportMarkerLayer && !this.map.hasLayer(this.reportMarkerLayer)) {
+                this.reportMarkerLayer.addTo(this.map);
+            }
+            markers.forEach(m => this.reportMarkerLayer.addLayer(m));
         } else {
-            markers.forEach(m => this.markerCluster.addLayer(m));
+            if (this.reportMarkerLayer && this.map.hasLayer(this.reportMarkerLayer)) {
+                this.map.removeLayer(this.reportMarkerLayer);
+            }
+            if (this.markerCluster && !this.map.hasLayer(this.markerCluster)) {
+                this.markerCluster.addTo(this.map);
+            }
+            if (typeof this.markerCluster.addLayers === 'function') {
+                this.markerCluster.addLayers(markers);
+            } else {
+                markers.forEach(m => this.markerCluster.addLayer(m));
+            }
         }
 
-        // Update or initialize Leaflet heat/density layer underneath clusters
+        // Section 5 & 10: Update Leaflet heat/density layer underneath markers
         if (typeof L.heatLayer === 'function') {
             const currentZoom = this.map ? this.map.getZoom() : (this.config.default_zoom || 12);
             const zoomOpts = this.getZoomHeatOptions(currentZoom);
@@ -601,13 +619,14 @@ const DefectMap = {
                     scaleIntensity: false,
                     gradient: this.heatGradient
                 });
-                if (this.showHotspotLayer && !zoomOpts.attenuated && this.map) {
+                if (this.showHotspotLayer && this.map) {
                     if (heatPane) heatPane.style.display = '';
                     this.heatLayer.addTo(this.map);
                 } else if (heatPane) {
                     heatPane.style.display = 'none';
                 }
             } else {
+                // Section 10: setLatLngs synchronizes heat with filtered points
                 this.heatLayer.setLatLngs(heatPoints);
                 this.heatLayer.setOptions({
                     radius: zoomOpts.radius,
@@ -615,7 +634,7 @@ const DefectMap = {
                     minOpacity: zoomOpts.minOpacity,
                     gradient: this.heatGradient
                 });
-                if (this.showHotspotLayer && !zoomOpts.attenuated && this.map) {
+                if (this.showHotspotLayer && this.map) {
                     if (heatPane) heatPane.style.display = '';
                     if (!this.map.hasLayer(this.heatLayer)) {
                         this.heatLayer.addTo(this.map);
@@ -645,13 +664,15 @@ const DefectMap = {
             const lng = Number(adv.longitude);
             if (isNaN(lat) || isNaN(lng) || lat === 0 || lng === 0) return;
 
+            // Section 16: Distinct visual design: Dark navy/indigo + white shield
+            // Avoids red, amber, and green so it cannot be confused with defect severities or heat density.
             const advIcon = L.divIcon({
                 className: 'safety-advisory-leaflet-icon',
                 html: `
-                    <div class="safety-advisory-pin-wrap" style="position:relative; width:34px; height:34px; cursor:pointer;" title="Safety Advisory: ${adv.category}">
-                        <div style="position:absolute; inset:-4px; border-radius:50%; border:2px solid #f59e0b; opacity:0.8; animation: pulse 2s infinite;"></div>
-                        <div style="width:34px; height:34px; border-radius:50%; background:#d97706; color:#ffffff; display:flex; align-items:center; justify-content:center; box-shadow:0 3px 8px rgba(217,119,6,0.5); font-size:18px;">
-                            <i class='bx bx-shield-quarter'></i>
+                    <div class="safety-advisory-pin-wrap" style="position:relative; width:34px; height:34px; cursor:pointer;" title="Safety Advisory: ${adv.category || 'Inspection Notice'}">
+                        <div style="position:absolute; inset:-4px; border-radius:50%; border:2px solid #6366f1; opacity:0.85; animation: pulse 2s infinite;"></div>
+                        <div style="width:34px; height:34px; border-radius:50%; background:#1e1b4b; border:2px solid #4338ca; color:#ffffff; display:flex; align-items:center; justify-content:center; box-shadow:0 3px 10px rgba(30,27,75,0.7); font-size:18px;">
+                            <i class='bx bx-shield-quarter' style="color:#ffffff;"></i>
                         </div>
                     </div>
                 `,
@@ -660,29 +681,40 @@ const DefectMap = {
                 popupAnchor: [0, -17]
             });
 
-            const marker = L.marker([lat, lng], { icon: advIcon });
+            // Section 15: Safety Advisory marker placed in dedicated pane (z-index 675)
+            const marker = L.marker([lat, lng], {
+                icon: advIcon,
+                pane: 'safetyAdvisoryPane'
+            });
 
             const dateStr = adv.issued_at || adv.created_at
                 ? new Date(adv.issued_at || adv.created_at).toLocaleDateString('en-KE', { dateStyle: 'medium' })
                 : 'Active';
 
             const popupHtml = `
-                <div class="advisory-map-popup" style="font-family: inherit; min-width: 240px; padding: 2px;">
-                    <div style="display:flex; justify-content:space-between; align-items:center; border-bottom:1px solid #fed7aa; padding-bottom:6px; margin-bottom:8px;">
-                        <span style="font-weight:700; color:#c2410c; font-size:0.82rem;"><i class='bx bx-shield-quarter'></i> SAFETY ADVISORY</span>
-                        <span class="status-chip active" style="font-size:0.68rem; padding:2px 8px; background:#fff7ed; color:#c2410c; border:1px solid #fed7aa;">ACTIVE</span>
+                <div class="advisory-map-popup" style="font-family: inherit; min-width: 250px; padding: 4px;">
+                    <div style="display:flex; justify-content:space-between; align-items:center; border-bottom:1px solid #c7d2fe; padding-bottom:6px; margin-bottom:8px;">
+                        <span style="font-weight:700; color:#312e81; font-size:0.82rem;"><i class='bx bx-shield-quarter'></i> SAFETY ADVISORY</span>
+                        <span class="status-chip active" style="font-size:0.68rem; padding:2px 8px; background:#e0e7ff; color:#312e81; border:1px solid #c7d2fe;">ACTIVE</span>
                     </div>
-                    <div style="font-size:0.92rem; font-weight:700; color:#0f172a; margin-bottom:4px;">${adv.category}</div>
-                    <div style="font-size:0.8rem; color:#475569; margin-bottom:8px; line-height:1.4;">${adv.note || adv.comments || 'Exercise caution when traversing this section.'}</div>
-                    <div style="font-size:0.75rem; color:#64748b; margin-bottom:6px;"><i class='bx bx-map-pin'></i> ${adv.location_name || 'Corridor Infrastructure'}</div>
-                    <div style="font-size:0.72rem; color:#94a3b8; border-top:1px solid #f1f5f9; padding-top:6px; display:flex; justify-content:space-between; align-items:center;">
-                        <span><i class='bx bx-check-shield'></i> Verified Civil Engineer</span>
+                    <div style="font-size:0.92rem; font-weight:700; color:#0f172a; margin-bottom:4px;">${adv.category || 'Infrastructure Inspection Alert'}</div>
+                    <div style="font-size:0.8rem; color:#475569; margin-bottom:8px; line-height:1.4;">${adv.note || adv.comments || 'Exercise caution when traversing this monitored corridor section.'}</div>
+                    <div style="font-size:0.75rem; color:#64748b; margin-bottom:6px;"><i class='bx bx-map-pin'></i> ${adv.location_name || 'Monitored Corridor'}</div>
+                    <div style="font-size:0.72rem; color:#64748b; border-top:1px solid #f1f5f9; padding-top:6px; display:flex; justify-content:space-between; align-items:center;">
+                        <span style="color:#4338ca; font-weight:600;"><i class='bx bx-check-shield'></i> Verified Civil Engineer</span>
                         <span>${dateStr}</span>
                     </div>
                 </div>
             `;
 
-            marker.bindPopup(popupHtml, { maxWidth: 300, className: 'leaflet-custom-popup' });
+            marker.bindPopup(popupHtml, { maxWidth: 320, className: 'leaflet-custom-popup' });
+
+            // Section 17: Direct map marker click handling opens advisory
+            const advId = adv.advisory_id || adv._id || adv.report_id;
+            marker.on('click', () => {
+                this.openSafetyAdvisory(adv.advisory_id || adv._id, adv.report_id, lat, lng);
+            });
+
             this.advisoriesLayer.addLayer(marker);
 
             if (adv.advisory_id) this.advisoryMarkers[adv.advisory_id] = marker;
@@ -691,20 +723,27 @@ const DefectMap = {
         });
     },
 
-    focusOnAdvisory(advisoryId, reportId, lat, lng) {
+    // Section 17: Unified advisory opening function shared by direct map-click and notification deep-link
+    openSafetyAdvisory(advisoryId, reportId, lat, lng) {
         if (!this.map) return;
         this.invalidateSize();
 
         if (lat && lng && !isNaN(lat) && !isNaN(lng)) {
-            this.map.setView([lat, lng], Math.max(this.map.getZoom(), 15), { animate: true });
+            this.map.setView([lat, lng], Math.max(this.map.getZoom(), 14), { animate: true });
         }
 
         setTimeout(() => {
-            const marker = (advisoryId && this.advisoryMarkers[advisoryId]) || (reportId && this.advisoryMarkers[reportId]);
+            const marker = (advisoryId && this.advisoryMarkers[advisoryId]) ||
+                           (reportId && this.advisoryMarkers[reportId]) ||
+                           (advisoryId && this.advisoryMarkers[String(advisoryId)]);
             if (marker) {
                 marker.openPopup();
             }
-        }, 300);
+        }, 250);
+    },
+
+    focusOnAdvisory(advisoryId, reportId, lat, lng) {
+        this.openSafetyAdvisory(advisoryId, reportId, lat, lng);
     }
 };
 
