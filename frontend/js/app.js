@@ -174,6 +174,16 @@ const App = {
             refreshBtn.addEventListener('click', () => this.loadTrackingData());
         }
 
+        // Section 20: Tracking view mode toggle (List vs Gallery)
+        const btnListView = document.getElementById('btnTrackingListView');
+        const btnGalleryView = document.getElementById('btnTrackingGalleryView');
+        if (btnListView) {
+            btnListView.addEventListener('click', () => this.setTrackingViewMode('list'));
+        }
+        if (btnGalleryView) {
+            btnGalleryView.addEventListener('click', () => this.setTrackingViewMode('gallery'));
+        }
+
         // Admin Dashboard refresh
         const refreshAdminDashBtn = document.getElementById('btnRefreshAdminDashboard');
         if (refreshAdminDashBtn) {
@@ -742,20 +752,97 @@ const App = {
         }
     },
 
+    // Section 18-23: Citizen My Reports Master-Detail Explorer
+    trackingViewMode: 'list',
+    selectedTrackingReportId: null,
+
+    setTrackingViewMode(mode) {
+        this.trackingViewMode = mode;
+        const btnListView = document.getElementById('btnTrackingListView');
+        const btnGalleryView = document.getElementById('btnTrackingGalleryView');
+        const listContainer = document.getElementById('trackingListContainer');
+        const galleryContainer = document.getElementById('trackingGalleryContainer');
+
+        if (mode === 'gallery') {
+            if (btnGalleryView) {
+                btnGalleryView.classList.add('active');
+                btnGalleryView.style.background = '#2563eb';
+                btnGalleryView.style.color = '#ffffff';
+            }
+            if (btnListView) {
+                btnListView.classList.remove('active');
+                btnListView.style.background = 'transparent';
+                btnListView.style.color = '#94a3b8';
+            }
+            if (listContainer) listContainer.classList.add('hidden');
+            if (galleryContainer) galleryContainer.classList.remove('hidden');
+        } else {
+            if (btnListView) {
+                btnListView.classList.add('active');
+                btnListView.style.background = '#2563eb';
+                btnListView.style.color = '#ffffff';
+            }
+            if (btnGalleryView) {
+                btnGalleryView.classList.remove('active');
+                btnGalleryView.style.background = 'transparent';
+                btnGalleryView.style.color = '#94a3b8';
+            }
+            if (galleryContainer) galleryContainer.classList.add('hidden');
+            if (listContainer) listContainer.classList.remove('hidden');
+        }
+
+        if (this.selectedTrackingReportId) {
+            this.highlightTrackingSelection(this.selectedTrackingReportId);
+        }
+    },
+
+    closeTrackingDetail() {
+        this.selectedTrackingReportId = null;
+        document.querySelectorAll('.tracking-table-row').forEach(r => r.classList.remove('selected-tracking-row'));
+        document.querySelectorAll('.citizen-report-card').forEach(c => c.classList.remove('selected-gallery-card'));
+
+        const detailCol = document.getElementById('trackingDetailCol');
+        if (detailCol) detailCol.classList.add('hidden');
+        const detailCard = document.getElementById('trackingActiveDetailCard');
+        if (detailCard) detailCard.classList.add('hidden');
+
+        const explorerCol = document.getElementById('trackingExplorerCol');
+        if (explorerCol) {
+            explorerCol.style.flex = '1 1 100%';
+            explorerCol.style.maxWidth = '100%';
+        }
+    },
+
+    highlightTrackingSelection(canonicalId) {
+        document.querySelectorAll('.tracking-table-row').forEach(r => r.classList.remove('selected-tracking-row'));
+        document.querySelectorAll('.citizen-report-card').forEach(c => c.classList.remove('selected-gallery-card'));
+
+        const rowEl = document.getElementById(`tracking-row-${canonicalId}`);
+        if (rowEl) rowEl.classList.add('selected-tracking-row');
+        const cardEl = document.getElementById(`tracking-card-${canonicalId}`);
+        if (cardEl) cardEl.classList.add('selected-gallery-card');
+    },
+
     // Citizen Tracking View (FR-08)
     async loadTrackingData() {
         const tbody = document.getElementById('trackingTableBody');
+        const galleryGrid = document.getElementById('trackingGalleryGrid');
         if (!tbody) return;
 
         if (!this.currentUser) {
             tbody.innerHTML = `
                 <tr>
-                    <td colspan="7" style="text-align:center; padding: 2.5rem; color: #86868b;">
+                    <td colspan="6" style="text-align:center; padding: 2.5rem; color: #86868b;">
                         Please <button type="button" class="btn-micro btn-accent" onclick="window.App.showAuthView('login')">Sign In</button> to view your submitted infrastructure defect reports.
                     </td>
                 </tr>`;
-            const detailCard = document.getElementById('trackingActiveDetailCard');
-            if (detailCard) detailCard.classList.add('hidden');
+            if (galleryGrid) {
+                galleryGrid.innerHTML = `
+                    <div style="grid-column: 1 / -1; text-align: center; padding: 2.5rem; color: #86868b;">
+                        Please <button type="button" class="btn-micro btn-accent" onclick="window.App.showAuthView('login')">Sign In</button> to view your submitted infrastructure defect reports.
+                    </div>`;
+            }
+            this.closeTrackingDetail();
             return;
         }
 
@@ -767,55 +854,110 @@ const App = {
             if (reports.length === 0) {
                 tbody.innerHTML = `
                     <tr>
-                        <td colspan="7" style="text-align:center; padding: 2.5rem; color: #86868b;">
+                        <td colspan="6" style="text-align:center; padding: 2.5rem; color: #86868b;">
                             No defect reports submitted yet. Use the 'Report Defect' tab to photograph and submit an infrastructure defect!
                         </td>
                     </tr>`;
-                const detailCard = document.getElementById('trackingActiveDetailCard');
-                if (detailCard) detailCard.classList.add('hidden');
+                if (galleryGrid) {
+                    galleryGrid.innerHTML = `
+                        <div style="grid-column: 1 / -1; text-align: center; padding: 2.5rem; color: #86868b;">
+                            No defect reports submitted yet. Use the 'Report Defect' tab to photograph and submit an infrastructure defect!
+                        </div>`;
+                }
+                this.closeTrackingDetail();
                 return;
             }
 
-            tbody.innerHTML = reports.map((item, idx) => {
+            // Section 20: Render List View Rows
+            tbody.innerHTML = reports.map((item) => {
                 const rep = item.report;
                 const ai = item.assessment || {};
-                const sev = ai.relative_severity || rep.metadata?.relative_severity || 'Low';
+                const sev = (ai.relative_severity || rep.metadata?.relative_severity || 'Low').toLowerCase();
                 const status = rep.status || 'Received';
-                const statusSlug = status.toLowerCase().replace(' ', '-');
+                const statusSlug = status.toLowerCase().replace(/\s+/g, '-');
                 const isUnusual = rep.metadata?.is_unusual === true || rep.validation_status === 'unusual';
-                const dateStr = rep.date_submitted ? new Date(rep.date_submitted).toLocaleDateString() : 'Recent';
+                const dateStr = rep.date_submitted ? new Date(rep.date_submitted).toLocaleDateString('en-KE', { dateStyle: 'medium' }) : 'Recent';
                 const location = rep.metadata?.location_name || 'Corridor Asset';
                 const canonicalId = rep.report_id || String(rep._id);
                 const rawDisplayId = rep.display_id || (rep.report_id ? `#REP-${rep.report_id.slice(-6).toUpperCase()}` : `#REP-${String(rep._id).slice(-6).toUpperCase()}`);
                 const displayId = rawDisplayId.startsWith('#') ? rawDisplayId : '#' + rawDisplayId;
-                const isFirst = idx === 0;
+                const imgUrl = item.image_url ? window.Api.resolveImageUrl(item.image_url) : (rep.metadata?.image_url ? window.Api.resolveImageUrl(rep.metadata.image_url) : '');
 
                 return `
-                    <tr class="tracking-table-row ${isFirst ? 'selected-tracking-row' : ''}" id="tracking-row-${canonicalId}" style="cursor: pointer;" onclick="App.selectTrackingReport('${canonicalId}')">
-                        <td><code>${displayId}</code></td>
-                        <td>${dateStr}</td>
-                        <td>${location}</td>
-                        <td><strong>${ai.defect_class || rep.metadata?.defect_class || 'Pavement Distress'}</strong></td>
-                        <td><span class="severity-pill ${sev.toLowerCase()}">${sev.toUpperCase()}</span></td>
+                    <tr class="tracking-table-row" id="tracking-row-${canonicalId}" style="cursor: pointer;" onclick="App.selectTrackingReport('${canonicalId}')">
+                        <td style="width: 56px; padding: 6px 12px;">
+                            ${imgUrl ? `<img src="${imgUrl}" class="tracking-evidence-thumb" alt="Defect" style="width: 44px; height: 44px; object-fit: cover; border-radius: 6px; border: 1px solid #334155;" onerror="this.parentElement.innerHTML='<div class=\\'tracking-evidence-thumb\\' style=\\'width:44px;height:44px;background:#1e293b;border-radius:6px;display:flex;align-items:center;justify-content:center;color:#64748b;\\'><i class=\\\'bx bx-image\\\'></i></div>'">` : `<div class="tracking-evidence-thumb" style="width:44px;height:44px;background:#1e293b;border-radius:6px;display:flex;align-items:center;justify-content:center;color:#64748b;"><i class='bx bx-image'></i></div>`}
+                        </td>
+                        <td>
+                            <strong style="color: #f1f5f9; display: block; font-size: 0.88rem;">${location}</strong>
+                            <code style="font-size: 0.72rem; color: #64748b;">${displayId}</code>
+                        </td>
+                        <td>
+                            <span style="font-weight: 600; color: #cbd5e1;">${ai.defect_class || rep.metadata?.defect_class || 'Pavement Distress'}</span>
+                        </td>
+                        <td>
+                            <span class="severity-pill ${sev}">${sev.toUpperCase()}</span>
+                        </td>
                         <td>
                             <span class="status-chip ${statusSlug}">${status}</span>
-                            ${isUnusual ? `<span class="badge-tag" style="background:#fff7ed;color:#c2410c;border:1px solid #fed7aa;margin-left:4px;"><i class='bx bx-error-circle'></i> Unusual Pairing</span>` : ''}
+                            ${isUnusual ? `<span class="badge-tag" style="background:#fff7ed;color:#c2410c;border:1px solid #fed7aa;margin-left:4px;"><i class='bx bx-error-circle'></i> Unusual</span>` : ''}
                         </td>
-                        <td>
-                            <button type="button" class="btn-micro btn-accent" onclick="event.stopPropagation(); App.selectTrackingReport('${canonicalId}', true)">
-                                <i class='bx bx-git-branch'></i> Track
-                            </button>
-                        </td>
+                        <td style="color: #94a3b8; font-size: 0.82rem;">${dateStr}</td>
                     </tr>
                 `;
             }).join('');
 
-            // Automatically display the first report in the detailed progression stepper
-            const firstId = reports[0].report.report_id || String(reports[0].report._id);
-            this.selectTrackingReport(firstId, false);
+            // Section 20: Render Gallery View Cards
+            if (galleryGrid) {
+                galleryGrid.innerHTML = reports.map((item) => {
+                    const rep = item.report;
+                    const ai = item.assessment || {};
+                    const sev = (ai.relative_severity || rep.metadata?.relative_severity || 'Low').toLowerCase();
+                    const status = rep.status || 'Received';
+                    const statusSlug = status.toLowerCase().replace(/\s+/g, '-');
+                    const dateStr = rep.date_submitted ? new Date(rep.date_submitted).toLocaleDateString('en-KE', { dateStyle: 'medium' }) : 'Recent';
+                    const location = rep.metadata?.location_name || 'Corridor Asset';
+                    const canonicalId = rep.report_id || String(rep._id);
+                    const defect = ai.defect_class || rep.metadata?.defect_class || 'Pavement Distress';
+                    const imgUrl = item.image_url ? window.Api.resolveImageUrl(item.image_url) : (rep.metadata?.image_url ? window.Api.resolveImageUrl(rep.metadata.image_url) : '');
+                    const isMultiView = Boolean(rep.combined_multi_view_assessment || rep.metadata?.combined_multi_view_assessment);
+
+                    return `
+                        <div class="citizen-report-card" id="tracking-card-${canonicalId}" style="background: #0f172a; border: 1px solid #334155; border-radius: 8px; overflow: hidden; cursor: pointer; transition: all 0.2s ease;" onclick="App.selectTrackingReport('${canonicalId}')">
+                            <div class="report-card-media" style="position: relative; width: 100%; height: 160px; background: #1e293b;">
+                                ${imgUrl ? `<img src="${imgUrl}" alt="${defect}" style="width: 100%; height: 100%; object-fit: cover;" onerror="this.parentElement.style.background='#1e293b'">` : `<div style="width:100%;height:100%;display:flex;align-items:center;justify-content:center;color:#64748b;"><i class='bx bx-image' style="font-size:2rem;"></i></div>`}
+                                <div style="position: absolute; top: 8px; left: 8px;">
+                                    <span class="severity-pill ${sev}" style="font-size: 0.7rem; padding: 2px 8px;">${sev.toUpperCase()}</span>
+                                </div>
+                                ${isMultiView ? `<div style="position: absolute; top: 8px; right: 8px; background: rgba(15,23,42,0.85); color: #38bdf8; font-size: 0.68rem; font-weight: 600; padding: 2px 6px; border-radius: 4px; border: 1px solid #38bdf8;"><i class='bx bx-layer'></i> Multi-View</div>` : ''}
+                            </div>
+                            <div class="report-card-body" style="padding: 0.9rem; display: flex; flex-direction: column; gap: 0.4rem;">
+                                <div style="font-size: 0.92rem; font-weight: 700; color: #f8fafc; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;" title="${location}">
+                                    <i class='bx bx-map-pin' style="color: #38bdf8;"></i> ${location}
+                                </div>
+                                <div style="display: flex; justify-content: space-between; align-items: center; font-size: 0.8rem;">
+                                    <span style="font-weight: 600; color: #cbd5e1;">${defect}</span>
+                                    <span class="status-chip ${statusSlug}" style="font-size: 0.68rem; padding: 2px 8px;">${status}</span>
+                                </div>
+                                <div style="font-size: 0.72rem; color: #64748b; border-top: 1px solid #1e293b; padding-top: 0.4rem; margin-top: 0.2rem; display: flex; justify-content: space-between;">
+                                    <span><i class='bx bx-calendar'></i> ${dateStr}</span>
+                                    <span style="color: #38bdf8;">Select to View →</span>
+                                </div>
+                            </div>
+                        </div>
+                    `;
+                }).join('');
+            }
+
+            // Section 18 & 21: Default: NO report detail open by default!
+            if (this.selectedTrackingReportId) {
+                this.selectTrackingReport(this.selectedTrackingReportId, false);
+            } else {
+                this.closeTrackingDetail();
+            }
         } catch (e) {
             console.error("Failed to load tracking data:", e);
-            tbody.innerHTML = `<tr><td colspan="7" style="text-align:center; padding: 2rem; color: #dc2626;">Failed to load defect reports.</td></tr>`;
+            tbody.innerHTML = `<tr><td colspan="6" style="text-align:center; padding: 2rem; color: #dc2626;">Failed to load defect reports.</td></tr>`;
         }
     },
 
@@ -832,16 +974,28 @@ const App = {
 
         const rep = item.report;
         const canonicalId = rep.report_id || String(rep._id);
+        this.selectedTrackingReportId = canonicalId;
 
-        // Highlight selected row in table
-        document.querySelectorAll('.tracking-table-row').forEach(r => r.classList.remove('selected-tracking-row'));
-        const rowEl = document.getElementById(`tracking-row-${canonicalId}`) || document.getElementById(`tracking-row-${reportId}`);
-        if (rowEl) rowEl.classList.add('selected-tracking-row');
+        // Section 21: Highlight selected row and card
+        this.highlightTrackingSelection(canonicalId);
+
+        // Section 21 & 22: Open detail column and adjust master-detail proportions
+        const detailCol = document.getElementById('trackingDetailCol');
+        const explorerCol = document.getElementById('trackingExplorerCol');
+        const cardEl = document.getElementById('trackingActiveDetailCard');
+        if (detailCol) detailCol.classList.remove('hidden');
+        if (cardEl) cardEl.classList.remove('hidden');
+
+        if (explorerCol && window.innerWidth >= 992) {
+            explorerCol.style.flex = '1 1 58%';
+            explorerCol.style.maxWidth = '58%';
+        }
 
         const ai = item.assessment || {};
         const rev = item.review || {};
         const status = rep.status || 'Received';
-        const dateStr = rep.date_submitted ? new Date(rep.date_submitted).toLocaleString() : 'Recently Submitted';
+        const statusSlug = status.toLowerCase().replace(/\s+/g, '-');
+        const dateStr = rep.date_submitted ? new Date(rep.date_submitted).toLocaleString('en-KE', { dateStyle: 'medium', timeStyle: 'short' }) : 'Recently Submitted';
         const location = rep.metadata?.location_name || 'Corridor Asset';
         const asset = rep.metadata?.asset_type || 'Road / Pavement';
         const defect = ai.defect_class || rep.metadata?.defect_class || 'Pavement Distress';
@@ -861,7 +1015,6 @@ const App = {
         const currentIdx = stages.indexOf(status) >= 0 ? stages.indexOf(status) : 0;
         const fillPercent = (currentIdx / 3) * 100;
 
-        // Clear explanation and next steps:
         let stageSummary = '';
         let whatHappensNext = '';
         if (status === 'Received') {
@@ -878,173 +1031,112 @@ const App = {
             whatHappensNext = 'Remediation and site maintenance have addressed this defect. The infrastructure record is archived as resolved.';
         }
 
-        // Reviewer Attribution & Professional Actions
         const reviewerName = rev.reviewer_name || (rep.metadata?.status_history && rep.metadata.status_history.slice(-1)[0]?.updated_by) || (status !== 'Received' ? 'Accredited Civil Engineer' : null);
-        const reviewDate = rev.review_date ? new Date(rev.review_date).toLocaleString() : (rep.metadata?.status_history && rep.metadata.status_history.slice(-1)[0]?.timestamp ? new Date(rep.metadata.status_history.slice(-1)[0].timestamp).toLocaleString() : null);
+        const reviewDate = rev.review_date ? new Date(rev.review_date).toLocaleString('en-KE', { dateStyle: 'medium', timeStyle: 'short' }) : (rep.metadata?.status_history && rep.metadata.status_history.slice(-1)[0]?.timestamp ? new Date(rep.metadata.status_history.slice(-1)[0].timestamp).toLocaleString('en-KE', { dateStyle: 'medium', timeStyle: 'short' }) : null);
         const nextAction = rev.next_action || rep.metadata?.next_action || (status === 'Verified' ? 'Refer to maintenance team' : (status === 'Resolved' ? 'No further action required' : 'Engineering assessment pending'));
         const followUpDate = rev.follow_up_date || rep.metadata?.follow_up_date || null;
         const reviewNotes = rev.notes || (rep.metadata?.status_history && rep.metadata.status_history.slice(-1)[0]?.notes) || (status !== 'Received' ? 'Engineering validation in progress.' : 'Awaiting professional assessment.');
 
-        const cardEl = document.getElementById('trackingActiveDetailCard');
-        if (!cardEl) return;
-        cardEl.classList.remove('hidden');
-
+        // Section 22: Structure details in exact specified order:
+        // Location + submitted date -> Evidence image -> Lifecycle -> Defect Assessment -> Professional Review -> Next Action / Target Date -> Engineer Notes
         cardEl.innerHTML = `
-            <div class="tracking-card-header">
-                <div class="tracking-card-title-group">
-                    <h3><i class='bx bx-check-shield' style="color: #0284c7;"></i> Defect Inspection Lifecycle & Tracking</h3>
-                    <p style="margin: 0; font-size: 0.85rem; color: #64748b;">
-                        Case ID: <strong>${displayId}</strong> &bull; Submitted on <strong>${dateStr}</strong> &bull; Location: <strong>${location}</strong>
+            <!-- 1. Location + Submitted Date + Close Button -->
+            <div class="tracking-card-header" style="display: flex; justify-content: space-between; align-items: flex-start; padding-bottom: 0.75rem; border-bottom: 1px solid #1e293b; margin-bottom: 1rem;">
+                <div class="tracking-card-title-group" style="flex: 1;">
+                    <div style="display: flex; align-items: center; gap: 6px;">
+                        <i class='bx bx-map-pin' style="color: #38bdf8; font-size: 1.15rem;"></i>
+                        <h3 style="margin: 0; font-size: 1.05rem; color: #f8fafc;">${location}</h3>
+                    </div>
+                    <p style="margin: 0.25rem 0 0 0; font-size: 0.78rem; color: #94a3b8;">
+                        Submitted on <strong>${dateStr}</strong> &bull; Case Ref: <code style="color: #64748b;">${displayId}</code>
                     </p>
                 </div>
                 <div style="display: flex; gap: 0.5rem; align-items: center;">
-                    <span class="status-chip ${status.toLowerCase().replace(' ', '-')}">${status}</span>
-                    <span class="severity-pill ${sev.toLowerCase()}">${sev}</span>
+                    <span class="status-chip ${statusSlug}" style="font-size: 0.72rem; padding: 2px 8px;">${status}</span>
+                    <button type="button" class="btn-close-detail" onclick="App.closeTrackingDetail()" title="Close details" style="background: transparent; border: 1px solid #334155; color: #94a3b8; border-radius: 6px; width: 28px; height: 28px; display: flex; align-items: center; justify-content: center; cursor: pointer; font-size: 1.1rem; line-height: 1;">
+                        <i class='bx bx-x'></i>
+                    </button>
                 </div>
             </div>
 
-            <!-- Uber-like Status Progression Stepper -->
-            <div class="tracking-stepper-container">
+            <!-- 2. Evidence Image / Gallery -->
+            ${imgUrl ? `
+            <div style="width: 100%; height: 180px; border-radius: 8px; overflow: hidden; background: #0f172a; margin-bottom: 1rem; border: 1px solid #1e293b;">
+                <img src="${imgUrl}" alt="Defect Evidence" style="width: 100%; height: 100%; object-fit: cover;" onerror="this.parentElement.style.display='none'">
+            </div>` : ''}
+
+            <!-- 3. Current Lifecycle Progression Stepper -->
+            <div class="tracking-stepper-container" style="margin-bottom: 1rem;">
                 <div class="tracking-stepper">
                     <div class="tracking-stepper-line">
                         <div class="tracking-stepper-fill" style="width: ${fillPercent}%;"></div>
                     </div>
-
-                    <!-- Step 1: Received -->
                     <div class="tracking-step ${currentIdx > 0 ? 'completed' : (currentIdx === 0 ? 'active' : 'upcoming')}">
-                        <div class="tracking-step-node">
-                            <i class='bx ${currentIdx > 0 ? 'bx-check' : 'bx-clipboard'}'></i>
-                        </div>
+                        <div class="tracking-step-node"><i class='bx ${currentIdx > 0 ? 'bx-check' : 'bx-clipboard'}'></i></div>
                         <span class="tracking-step-title">1. Received</span>
-                        <span class="tracking-step-sub">AI Registered</span>
+                        <span class="tracking-step-sub">Registered</span>
                     </div>
-
-                    <!-- Step 2: Under Review -->
                     <div class="tracking-step ${currentIdx > 1 ? 'completed' : (currentIdx === 1 ? 'active' : 'upcoming')}">
-                        <div class="tracking-step-node">
-                            <i class='bx ${currentIdx > 1 ? 'bx-check' : 'bx-time'}'></i>
-                        </div>
+                        <div class="tracking-step-node"><i class='bx ${currentIdx > 1 ? 'bx-check' : 'bx-time'}'></i></div>
                         <span class="tracking-step-title">2. Under Review</span>
-                        <span class="tracking-step-sub">Engineer Assessing</span>
+                        <span class="tracking-step-sub">Assessing</span>
                     </div>
-
-                    <!-- Step 3: Verified -->
                     <div class="tracking-step ${currentIdx > 2 ? 'completed' : (currentIdx === 2 ? 'active' : 'upcoming')}">
-                        <div class="tracking-step-node">
-                            <i class='bx ${currentIdx > 2 ? 'bx-check' : 'bx-badge-check'}'></i>
-                        </div>
+                        <div class="tracking-step-node"><i class='bx ${currentIdx > 2 ? 'bx-check' : 'bx-badge-check'}'></i></div>
                         <span class="tracking-step-title">3. Verified</span>
-                        <span class="tracking-step-sub">Accredited Validation</span>
+                        <span class="tracking-step-sub">Validated</span>
                     </div>
-
-                    <!-- Step 4: Resolved -->
                     <div class="tracking-step ${currentIdx === 3 ? 'completed active' : 'upcoming'}">
-                        <div class="tracking-step-node">
-                            <i class='bx ${currentIdx === 3 ? 'bx-check-double' : 'bx-check-circle'}'></i>
-                        </div>
+                        <div class="tracking-step-node"><i class='bx ${currentIdx === 3 ? 'bx-check-double' : 'bx-check-circle'}'></i></div>
                         <span class="tracking-step-title">4. Resolved</span>
-                        <span class="tracking-step-sub">Site Remediated</span>
+                        <span class="tracking-step-sub">Remediated</span>
                     </div>
                 </div>
             </div>
 
-            <!-- Status Summary & What Happens Next -->
-            <div class="tracking-summary-panel">
-                <div style="display: flex; align-items: flex-start; gap: 0.75rem;">
-                    <i class='bx bx-info-circle' style="font-size: 1.35rem; color: #0284c7; line-height: 1.2;"></i>
-                    <div style="flex: 1;">
-                        <div style="font-weight: 700; color: #0f172a; font-size: 0.95rem; margin-bottom: 2px;">
-                            ${stageSummary}
-                        </div>
-                        <div style="color: #475569; font-size: 0.85rem; line-height: 1.45;">
-                            <strong>What happens next:</strong> ${whatHappensNext}
-                        </div>
-                    </div>
-                </div>
+            <div class="tracking-summary-panel" style="margin-bottom: 1rem; background: #0f172a; border: 1px solid #1e293b; border-radius: 6px; padding: 0.75rem 1rem;">
+                <div style="font-weight: 700; color: #f1f5f9; font-size: 0.88rem; margin-bottom: 2px;">${stageSummary}</div>
+                <div style="color: #94a3b8; font-size: 0.8rem; line-height: 1.4;"><strong>Next step:</strong> ${whatHappensNext}</div>
             </div>
 
-            <!-- Details 3-Column Grid -->
-            <div class="tracking-grid-columns">
-                <!-- Box 1: Defect & AI Inspection Metrics -->
-                <div class="tracking-info-box">
-                    <div class="tracking-info-title">
+            <!-- 4. Defect Assessment & 5. Professional Review -->
+            <div style="display: flex; flex-direction: column; gap: 0.75rem;">
+                <!-- 4. Defect Assessment -->
+                <div class="tracking-info-box" style="background: #0f172a; border: 1px solid #1e293b; border-radius: 6px; padding: 0.75rem 1rem;">
+                    <div class="tracking-info-title" style="font-weight: 700; color: #38bdf8; font-size: 0.82rem; text-transform: uppercase; margin-bottom: 0.5rem;">
                         <i class='bx bx-scan'></i> Defect Assessment
                     </div>
-                    <div style="display: flex; flex-direction: column; gap: 0.5rem; font-size: 0.85rem;">
-                        <div style="display: flex; justify-content: space-between;">
-                            <span style="color: #64748b;">Defect Class:</span>
-                            <strong>${defect}</strong>
-                        </div>
-                        <div style="display: flex; justify-content: space-between;">
-                            <span style="color: #64748b;">Infrastructure:</span>
-                            <span>${asset}</span>
-                        </div>
-                        <div style="display: flex; justify-content: space-between;">
-                            <span style="color: #64748b;">Model Confidence:</span>
-                            <span>${conf} (SSD-MobileNetV2)</span>
-                        </div>
-                        <div style="display: flex; justify-content: space-between;">
-                            <span style="color: #64748b;">Visual Severity:</span>
-                            <span class="severity-pill ${sev.toLowerCase()}">${sev}</span>
-                        </div>
-                        <div style="display: flex; justify-content: space-between;">
-                            <span style="color: #64748b;">Area Extent:</span>
-                            <span>${areaRatio}</span>
-                        </div>
+                    <div style="display: flex; flex-direction: column; gap: 0.4rem; font-size: 0.82rem;">
+                        <div style="display: flex; justify-content: space-between;"><span style="color: #94a3b8;">Defect Class:</span><strong style="color: #f1f5f9;">${defect}</strong></div>
+                        <div style="display: flex; justify-content: space-between;"><span style="color: #94a3b8;">Infrastructure:</span><span style="color: #cbd5e1;">${asset}</span></div>
+                        <div style="display: flex; justify-content: space-between;"><span style="color: #94a3b8;">Visual Severity:</span><span class="severity-pill ${sev.toLowerCase()}">${sev}</span></div>
+                        <div style="display: flex; justify-content: space-between;"><span style="color: #94a3b8;">Model Confidence:</span><span style="color: #cbd5e1;">${conf}</span></div>
+                        <div style="display: flex; justify-content: space-between;"><span style="color: #94a3b8;">Defect Extent:</span><span style="color: #cbd5e1;">${areaRatio}</span></div>
                     </div>
                 </div>
 
-                <!-- Box 2: Professional Engineer Attribution & Action -->
-                <div class="tracking-info-box">
-                    <div class="tracking-info-title">
+                <!-- 5. Professional Engineering Review & 6. Next Action / Target Date -->
+                <div class="tracking-info-box" style="background: #0f172a; border: 1px solid #1e293b; border-radius: 6px; padding: 0.75rem 1rem;">
+                    <div class="tracking-info-title" style="font-weight: 700; color: #10b981; font-size: 0.82rem; text-transform: uppercase; margin-bottom: 0.5rem;">
                         <i class='bx bx-user-check'></i> Professional Engineering Review
                     </div>
-                    <div style="display: flex; flex-direction: column; gap: 0.5rem; font-size: 0.85rem;">
-                        <div style="display: flex; justify-content: space-between;">
-                            <span style="color: #64748b;">Reviewer:</span>
-                            <strong>${reviewerName || 'Queue Pending'}</strong>
+                    <div style="display: flex; flex-direction: column; gap: 0.4rem; font-size: 0.82rem;">
+                        <div style="display: flex; justify-content: space-between;"><span style="color: #94a3b8;">Reviewer:</span><strong style="color: #f1f5f9;">${reviewerName || 'Queue Pending'}</strong></div>
+                        ${reviewDate ? `<div style="display: flex; justify-content: space-between;"><span style="color: #94a3b8;">Validated Date:</span><span style="color: #cbd5e1;">${reviewDate}</span></div>` : ''}
+                        <div style="display: flex; justify-content: space-between; align-items: center;"><span style="color: #94a3b8;">Next Action:</span><span style="font-weight: 600; color: #38bdf8;">${nextAction}</span></div>
+                        ${followUpDate ? `<div style="display: flex; justify-content: space-between;"><span style="color: #94a3b8;">Target Date:</span><strong style="color: #f59e0b;">${followUpDate}</strong></div>` : ''}
+                        
+                        <!-- 7. Engineer Notes -->
+                        <div style="border-top: 1px solid #1e293b; padding-top: 0.4rem; margin-top: 0.2rem;">
+                            <span style="color: #94a3b8; font-size: 0.75rem; display: block; margin-bottom: 2px;">Engineer Remarks:</span>
+                            <p style="margin: 0; color: #cbd5e1; font-size: 0.8rem; font-style: italic;">"${reviewNotes}"</p>
                         </div>
-                        ${reviewDate ? `
-                        <div style="display: flex; justify-content: space-between;">
-                            <span style="color: #64748b;">Last Updated:</span>
-                            <span>${reviewDate}</span>
-                        </div>` : ''}
-                        <div style="display: flex; justify-content: space-between; align-items: center;">
-                            <span style="color: #64748b;">Next Action:</span>
-                            <span style="font-weight: 600; color: #0284c7;">${nextAction}</span>
-                        </div>
-                        ${followUpDate ? `
-                        <div style="display: flex; justify-content: space-between;">
-                            <span style="color: #64748b;">Target Date:</span>
-                            <strong>${followUpDate}</strong>
-                        </div>` : ''}
-                        <div style="border-top: 1px solid #f1f5f9; padding-top: 0.4rem; margin-top: 0.2rem;">
-                            <span style="color: #64748b; font-size: 0.78rem; display: block; margin-bottom: 2px;">Engineer Notes / Observations:</span>
-                            <p style="margin: 0; color: #334155; font-size: 0.82rem; font-style: italic;">
-                                "${reviewNotes}"
-                            </p>
-                        </div>
-                    </div>
-                </div>
-
-                <!-- Box 3: Location & Photographic Evidence -->
-                <div class="tracking-info-box">
-                    <div class="tracking-info-title">
-                        <i class='bx bx-map-pin'></i> Geographic Evidence
-                    </div>
-                    ${imgUrl ? `
-                    <div style="width: 100%; height: 110px; border-radius: 6px; overflow: hidden; background: #0f172a; margin-bottom: 0.65rem;">
-                        <img src="${imgUrl}" alt="Evidence" style="width: 100%; height: 100%; object-fit: cover;" onerror="this.parentElement.style.display='none'">
-                    </div>` : ''}
-                    <div style="font-size: 0.82rem; color: #475569;">
-                        <div><strong>Location:</strong> ${location}</div>
-                        ${lat && lng ? `<div style="font-size: 0.75rem; color: #64748b; font-family: var(--font-mono); margin-top: 2px;">GPS: ${Number(lat).toFixed(4)}°, ${Number(lng).toFixed(4)}°</div>` : ''}
                     </div>
                 </div>
             </div>
         `;
 
-        if (scroll) {
+        if (scroll && window.innerWidth <= 768) {
             cardEl.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
         }
     },
