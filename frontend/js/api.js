@@ -617,6 +617,20 @@ const Api = {
             throw new Error(data.error || 'Failed to mark all notifications as read.');
         }
         return data;
+    },
+
+    // Inspection Notebook & Compliance (Sections 30-33, 43)
+    async updateInspectionNotebook(reportId, notebookData) {
+        const res = await this.safeFetch(`${API_BASE}/reviews/report/${reportId}/inspection-notebook`, {
+            method: 'POST',
+            headers: this.getHeaders(false),
+            body: JSON.stringify(notebookData)
+        });
+        const data = await res.json();
+        if (!res.ok) {
+            throw new Error(data.error || 'Failed to save inspection notebook.');
+        }
+        return data;
     }
 };
 

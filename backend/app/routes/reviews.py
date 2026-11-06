@@ -85,6 +85,13 @@ def submit_review(current_user, assessment_id):
             is_self_review = bool(submitter_id and submitter_id == reviewer_id)
             reviewer_name = current_user.get('name', 'Civil Engineer')
 
+            # Engineer Ownership & Accountability (Section 28)
+            if not meta.get('assigned_engineer_id'):
+                meta['assigned_engineer_id'] = reviewer_id
+                meta['assigned_engineer_name'] = reviewer_name
+                meta['assigned_engineer_email'] = current_user.get('email', '')
+                meta['assigned_at'] = now_iso
+
             history = meta.get('status_history', [])
             note_prefix = "Engineer (Self-submitted inspection)" if is_self_review else "Engineer"
             action_log = f" [Next Action: {next_action}]" if next_action else ""
@@ -200,6 +207,13 @@ def review_by_report(current_user, report_id):
     submitter_id = str(report.get('user_id') or meta.get('submitted_by_id') or '')
     is_self_review = bool(submitter_id and submitter_id == reviewer_id)
 
+    # Engineer Ownership & Accountability (Section 28)
+    if not meta.get('assigned_engineer_id'):
+        meta['assigned_engineer_id'] = reviewer_id
+        meta['assigned_engineer_name'] = reviewer_name
+        meta['assigned_engineer_email'] = current_user.get('email', '')
+        meta['assigned_at'] = now_iso
+
     history = meta.get('status_history', [])
     note_prefix = "Review (Self-submitted report)" if is_self_review else "Review"
     action_log = f" [Next Action: {next_action}]" if next_action else ""
@@ -244,6 +258,7 @@ def review_by_report(current_user, report_id):
 
     # Automatically mark associated safety advisory inactive when report is Resolved
     if target_status == InfrastructureReport.STATUS_RESOLVED:
+        meta['resolved_at'] = now_iso
         db_service.update_many('safety_advisories', {'report_id': report_id}, {
             'status': 'inactive',
             'closed_at': now_iso,
@@ -378,3 +393,44 @@ def issue_safety_advisory(current_user, report_id):
         'message': 'Safety advisory published successfully.',
         'advisory': advisory_doc
     }), 201
+
+
+@reviews_bp.route('/report/<report_id>/inspection-notebook', methods=['POST', 'PUT'])
+@role_required('engineer', 'admin')
+def update_inspection_notebook(current_user, report_id):
+    """
+    Sections 30-33 & 43: Saves inspection checklist, visual note cards, and building compliance context
+    for the specified defect report.
+    """
+    data = request.get_json() or {}
+    report = db_service.find_one('infrastructure_reports', {'_id': report_id})
+    if not report:
+        return jsonify({'error': 'Infrastructure report not found.'}), 404
+
+    now_iso = datetime.now(timezone.utc).isoformat()
+    meta = report.get('metadata') or {}
+    notebook = meta.get('inspection_notebook') or {}
+
+    cl = data.get('checklist') or data.get('inspection_checklist')
+    if cl is not None:
+        notebook['checklist'] = cl
+    if 'note_cards' in data:
+        notebook['note_cards'] = data['note_cards']
+    if 'compliance_context' in data:
+        notebook['compliance_context'] = data['compliance_context']
+
+    notebook['last_updated_at'] = now_iso
+    notebook['last_updated_by'] = current_user.get('name', 'Civil Engineer')
+
+    meta['inspection_notebook'] = notebook
+
+    db_service.update_one('infrastructure_reports', {'_id': report_id}, {
+        'metadata': meta,
+        'last_updated_at': now_iso
+    })
+
+    return jsonify({
+        'message': 'Inspection notebook updated successfully.',
+        'inspection_notebook': notebook
+    }), 200
+

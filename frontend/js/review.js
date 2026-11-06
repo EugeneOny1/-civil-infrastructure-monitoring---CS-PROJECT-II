@@ -100,6 +100,42 @@ const Review = {
             btnResolved.addEventListener('click', () => this.handleLifecycleTransition('Resolved', 'Infrastructure defect remediation and road maintenance confirmed resolved.'));
         }
 
+        // Section 24: Direct "Show on Map" button in Defect Review
+        const btnShowOnMap = document.getElementById('btnReviewShowOnMap');
+        if (btnShowOnMap) {
+            btnShowOnMap.addEventListener('click', () => {
+                if (!this.currentReport) {
+                    window.App?.showToast("Please select a report first.", true);
+                    return;
+                }
+                const lat = this.currentReport.latitude || this.currentReport.metadata?.latitude;
+                const lng = this.currentReport.longitude || this.currentReport.metadata?.longitude;
+                if (!lat || !lng) {
+                    window.App?.showToast("No geographic coordinates recorded for this defect report.", true);
+                    return;
+                }
+                const reportId = this.currentReport.report_id || this.currentReport._id;
+                window.App?.navigateTo('view-map');
+                window.DefectMap?.showReportOnMap(reportId, lat, lng);
+            });
+        }
+
+        // Sections 30-33 & 43: Inspection Notebook & Objective Handlers
+        const btnSaveNb = document.getElementById('btnSaveInspectionNotebook');
+        if (btnSaveNb) {
+            btnSaveNb.addEventListener('click', () => this.saveInspectionNotebook());
+        }
+
+        const btnAddCustom = document.getElementById('btnAddCustomObjective');
+        if (btnAddCustom) {
+            btnAddCustom.addEventListener('click', () => this.addCustomObjective());
+        }
+
+        const btnAddNote = document.getElementById('btnAddNoteCard');
+        if (btnAddNote) {
+            btnAddNote.addEventListener('click', () => this.addNoteCard());
+        }
+
         // Engineer Report-Linked Safety Advisory (Section S)
         const btnAdvisory = document.getElementById('btnOpenSafetyAdvisory');
         const modalAdvisory = document.getElementById('safetyAdvisoryModal');
@@ -233,7 +269,22 @@ const Review = {
                 assetType.includes(q)
             );
 
-            const matchesStatus = !sf || status === sf;
+            let matchesStatus = true;
+            if (sf) {
+                const currentUserId = String(window.App?.currentUser?.id || window.App?.currentUser?.user_id || window.App?.currentUser?._id || '');
+                const assignedId = String(rep.assigned_engineer_id || rep.metadata?.assigned_engineer_id || rep.metadata?.reviewer_id || '');
+                if (sf === 'awaiting_review') {
+                    matchesStatus = (status === 'received');
+                } else if (sf === 'my_reviews') {
+                    matchesStatus = (status === 'under review') && (assignedId && assignedId === currentUserId);
+                } else if (sf === 'my_verified') {
+                    matchesStatus = (status === 'verified') && (assignedId && assignedId === currentUserId);
+                } else if (sf === 'resolved') {
+                    matchesStatus = (status === 'resolved');
+                } else {
+                    matchesStatus = (status === sf);
+                }
+            }
 
             return matchesQuery && matchesStatus;
         });
@@ -342,6 +393,37 @@ const Review = {
             if (lifecycleEl) {
                 lifecycleEl.innerHTML = `<span class="status-chip ${statusSlug}">${status}</span>`;
             }
+
+            // Assigned Engineer & Header Status (Sections 25 & 28)
+            const assignedEng = data.report.assigned_engineer_name || data.report.metadata?.assigned_engineer_name || data.report.metadata?.reviewed_by || 'Unassigned';
+            const assignedEl = document.getElementById('reviewAssignedEngineer');
+            if (assignedEl) assignedEl.textContent = assignedEng;
+            const topOwnerBadge = document.getElementById('reviewTopOwnerBadge');
+            if (topOwnerBadge) topOwnerBadge.textContent = assignedEng;
+
+            const topStatusBadge = document.getElementById('reviewTopStatusBadge');
+            if (topStatusBadge) {
+                topStatusBadge.textContent = status;
+                topStatusBadge.className = `status-chip ${statusSlug}`;
+            }
+
+            // Contextual Lifecycle Action Card (Sections 25, 26, 27)
+            const wfStageBadge = document.getElementById('reviewWorkflowStageBadge');
+            if (wfStageBadge) {
+                wfStageBadge.textContent = status;
+                wfStageBadge.className = `status-chip ${statusSlug}`;
+            }
+
+            const stageReceived = document.getElementById('actionStageReceived');
+            const stageUnderReview = document.getElementById('actionStageUnderReview');
+            const stageVerified = document.getElementById('actionStageVerified');
+
+            if (stageReceived) stageReceived.style.display = (status === 'Received') ? 'flex' : 'none';
+            if (stageUnderReview) stageUnderReview.style.display = (status === 'Under Review') ? 'flex' : 'none';
+            if (stageVerified) stageVerified.style.display = (status === 'Verified') ? 'flex' : 'none';
+
+            // Render inspection notebook & objectives (Sections 30-33 & 43)
+            this.renderInspectionNotebook(data.report, assetType);
 
             const locName = data.asset?.location || data.report.metadata?.location_name || 'Corridor Asset';
             const lat = data.report.latitude || data.report.metadata?.latitude;
@@ -997,6 +1079,299 @@ const Review = {
         } catch (e) {
             console.error("[Review] Sign off error:", e);
             window.App.showToast(e.message || "Failed to submit professional validation.", true);
+        }
+    },
+
+    // -------------------------------------------------------------------------
+    // Sections 30-33 & 43: Professional Inspection Notebook & Field Work Notes
+    // -------------------------------------------------------------------------
+    currentNotebook: {
+        checklist: [],
+        note_cards: [],
+        compliance_context: {}
+    },
+
+    renderInspectionNotebook(report, assetType = '') {
+        const isBuilding = assetType.toLowerCase().includes('building') || assetType.toLowerCase().includes('structure');
+        const meta = report.metadata || {};
+        const savedNb = meta.inspection_notebook || {};
+
+        // Default objectives based on asset type (Sections 31 & 32)
+        const defaultRoadItems = [
+            "Confirm reported defect type",
+            "Inspect surrounding pavement condition",
+            "Determine extent of visible distress",
+            "Check for additional cracking/potholes/ravelling",
+            "Review drainage/ponding evidence",
+            "Assess road-user impact",
+            "Determine likely maintenance priority",
+            "Determine whether structural evaluation is required",
+            "Record recommended remedial action",
+            "Schedule follow-up inspection if necessary"
+        ];
+
+        const defaultBuildingItems = [
+            "Visual condition of structural elements reviewed",
+            "Visible additions/alterations reviewed",
+            "Surrounding ground/slope/drainage reviewed",
+            "Available construction/design history reviewed",
+            "Further structural assessment required",
+            "Non-destructive testing recommended",
+            "Material testing recommended",
+            "Remedial work recommendation recorded"
+        ];
+
+        const defaultLabels = isBuilding ? defaultBuildingItems : defaultRoadItems;
+        const savedList = savedNb.checklist || [];
+
+        // Merge saved checklist state with defaults
+        const mergedChecklist = defaultLabels.map(label => {
+            const found = savedList.find(item => item.label === label);
+            return {
+                label,
+                checked: Boolean(found && found.checked),
+                custom: false
+            };
+        });
+
+        // Retain any saved custom items
+        savedList.filter(item => item.custom).forEach(item => {
+            mergedChecklist.push({
+                label: item.label,
+                checked: Boolean(item.checked),
+                custom: true
+            });
+        });
+
+        this.currentNotebook.checklist = mergedChecklist;
+        this.currentNotebook.note_cards = savedNb.note_cards || [];
+        this.currentNotebook.compliance_context = savedNb.compliance_context || {};
+
+        const titleEl = document.getElementById('checklistTitle');
+        if (titleEl) {
+            titleEl.textContent = isBuilding ? "Building / Structural Inspection Objectives" : "Road / Pavement Inspection Objectives";
+        }
+
+        this.renderChecklistItems();
+
+        // Building Compliance Card (Section 43)
+        const compCard = document.getElementById('reviewBuildingComplianceCard');
+        if (compCard) {
+            if (isBuilding) {
+                compCard.classList.remove('hidden');
+                compCard.style.display = 'block';
+                const ctx = this.currentNotebook.compliance_context;
+                const selAppr = document.getElementById('compApprovalSelect');
+                const selAlt = document.getElementById('compAlterationSelect');
+                const selFl = document.getElementById('compFloorsSelect');
+                const selNca = document.getElementById('compNcaSelect');
+                const inpNotes = document.getElementById('compNotesInput');
+
+                if (selAppr) selAppr.value = ctx.approval_info || 'Unknown';
+                if (selAlt) selAlt.value = ctx.alterations || 'Unknown';
+                if (selFl) selFl.value = ctx.additional_floors || 'Unknown';
+                if (selNca) selNca.value = ctx.nca_county_verification || 'No';
+                if (inpNotes) inpNotes.value = ctx.notes || '';
+            } else {
+                compCard.classList.add('hidden');
+                compCard.style.display = 'none';
+            }
+        }
+
+        this.renderNoteCards();
+    },
+
+    renderChecklistItems() {
+        const container = document.getElementById('reviewChecklistItems');
+        const progressEl = document.getElementById('checklistProgress');
+        if (!container) return;
+
+        const items = this.currentNotebook.checklist;
+        const total = items.length;
+        const checkedCount = items.filter(i => i.checked).length;
+
+        if (progressEl) {
+            progressEl.textContent = `${checkedCount} of ${total} completed`;
+        }
+
+        container.innerHTML = items.map((item, idx) => {
+            return `
+                <label style="display: flex; align-items: flex-start; gap: 0.5rem; cursor: pointer; padding: 3px 0;">
+                    <input type="checkbox" data-index="${idx}" ${item.checked ? 'checked' : ''} style="margin-top: 2px;">
+                    <span style="flex: 1; ${item.checked ? 'text-decoration: line-through; color: #64748b;' : 'color: #1e293b;'}">${item.label}</span>
+                    ${item.custom ? `<button type="button" data-remove-index="${idx}" style="background:none; border:none; color:#94a3b8; cursor:pointer; font-size:12px;" title="Remove custom objective">✕</button>` : ''}
+                </label>
+            `;
+        }).join('');
+
+        container.querySelectorAll('input[type="checkbox"]').forEach(cb => {
+            cb.addEventListener('change', (e) => {
+                const idx = parseInt(e.target.getAttribute('data-index'), 10);
+                if (this.currentNotebook.checklist[idx]) {
+                    this.currentNotebook.checklist[idx].checked = e.target.checked;
+                    this.renderChecklistItems();
+                }
+            });
+        });
+
+        container.querySelectorAll('button[data-remove-index]').forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                const idx = parseInt(e.currentTarget.getAttribute('data-remove-index'), 10);
+                this.currentNotebook.checklist.splice(idx, 1);
+                this.renderChecklistItems();
+            });
+        });
+    },
+
+    addCustomObjective() {
+        const inp = document.getElementById('customObjectiveInput');
+        if (!inp) return;
+        const val = inp.value.trim();
+        if (!val) return;
+
+        this.currentNotebook.checklist.push({
+            label: val,
+            checked: false,
+            custom: true
+        });
+        inp.value = '';
+        this.renderChecklistItems();
+    },
+
+    renderNoteCards() {
+        const container = document.getElementById('reviewNoteCardsList');
+        const countEl = document.getElementById('noteCardsCount');
+        if (!container) return;
+
+        const cards = this.currentNotebook.note_cards || [];
+        if (countEl) countEl.textContent = `${cards.length} card${cards.length === 1 ? '' : 's'}`;
+
+        if (cards.length === 0) {
+            container.innerHTML = `
+                <div style="font-size: 0.78rem; color: #94a3b8; font-style: italic; text-align: center; padding: 0.5rem;">
+                    No inspection note cards recorded yet.
+                </div>
+            `;
+            return;
+        }
+
+        const categoryColors = {
+            'Observation': { bg: '#f0f9ff', border: '#bae6fd', text: '#0369a1' },
+            'Follow-Up': { bg: '#fffbeb', border: '#fde68a', text: '#b45309' },
+            'Maintenance': { bg: '#f0fdf4', border: '#bbf7d0', text: '#15803d' },
+            'Compliance Context': { bg: '#fff7ed', border: '#fed7aa', text: '#c2410c' }
+        };
+
+        container.innerHTML = cards.map((card, idx) => {
+            const cat = card.category || 'Observation';
+            const colors = categoryColors[cat] || categoryColors['Observation'];
+            const dateStr = card.timestamp ? new Date(card.timestamp).toLocaleString('en-KE', { dateStyle: 'short', timeStyle: 'short' }) : 'Recent';
+            return `
+                <div style="background: ${colors.bg}; border: 1px solid ${colors.border}; border-radius: 6px; padding: 0.5rem 0.65rem; display: flex; flex-direction: column; gap: 0.25rem;">
+                    <div style="display: flex; justify-content: space-between; align-items: center; font-size: 0.7rem;">
+                        <span style="font-weight: 700; color: ${colors.text}; text-transform: uppercase; letter-spacing: 0.04em;">${cat}</span>
+                        <div style="display: flex; align-items: center; gap: 0.4rem; color: #64748b;">
+                            <span>${card.author || 'Engineer'} • ${dateStr}</span>
+                            <button type="button" data-del-card="${idx}" style="background:none; border:none; color:#94a3b8; cursor:pointer; font-size:12px; line-height:1;" title="Delete note card">✕</button>
+                        </div>
+                    </div>
+                    <p style="margin: 0; font-size: 0.8rem; color: #0f172a; line-height: 1.35;">${card.text}</p>
+                </div>
+            `;
+        }).join('');
+
+        container.querySelectorAll('button[data-del-card]').forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                const idx = parseInt(e.currentTarget.getAttribute('data-del-card'), 10);
+                this.currentNotebook.note_cards.splice(idx, 1);
+                this.renderNoteCards();
+            });
+        });
+    },
+
+    addNoteCard() {
+        const catSelect = document.getElementById('noteCategorySelect');
+        const textInp = document.getElementById('noteCardTextInput');
+        if (!textInp) return;
+        const text = textInp.value.trim();
+        if (!text) {
+            window.App?.showToast("Please enter text for the note card.", true);
+            return;
+        }
+
+        const category = catSelect?.value || 'Observation';
+        const author = window.App?.currentUser?.name || 'Reviewing Engineer';
+        const timestamp = new Date().toISOString();
+
+        if (!this.currentNotebook.note_cards) {
+            this.currentNotebook.note_cards = [];
+        }
+
+        this.currentNotebook.note_cards.unshift({
+            id: 'card_' + Date.now(),
+            category,
+            text,
+            author,
+            timestamp
+        });
+
+        textInp.value = '';
+        this.renderNoteCards();
+    },
+
+    async saveInspectionNotebook() {
+        if (!this.currentReport) {
+            window.App?.showToast("No active report loaded to save notebook.", true);
+            return;
+        }
+
+        const reportId = this.currentReport.report_id || this.currentReport._id;
+
+        const selAppr = document.getElementById('compApprovalSelect');
+        const selAlt = document.getElementById('compAlterationSelect');
+        const selFl = document.getElementById('compFloorsSelect');
+        const selNca = document.getElementById('compNcaSelect');
+        const inpNotes = document.getElementById('compNotesInput');
+
+        const compliance_context = {
+            approval_info: selAppr?.value || 'Unknown',
+            alterations: selAlt?.value || 'Unknown',
+            additional_floors: selFl?.value || 'Unknown',
+            nca_county_verification: selNca?.value || 'No',
+            notes: inpNotes?.value.trim() || ''
+        };
+
+        const payload = {
+            checklist: this.currentNotebook.checklist,
+            note_cards: this.currentNotebook.note_cards,
+            compliance_context
+        };
+
+        try {
+            const btnSave = document.getElementById('btnSaveInspectionNotebook');
+            if (btnSave) {
+                btnSave.disabled = true;
+                btnSave.innerHTML = "<i class='bx bx-loader-alt bx-spin'></i> Saving...";
+            }
+
+            await window.Api.updateInspectionNotebook(reportId, payload);
+            window.App?.showToast("Inspection notebook and work notes saved successfully.");
+
+            if (btnSave) {
+                btnSave.disabled = false;
+                btnSave.innerHTML = "<i class='bx bx-check'></i> Saved";
+                setTimeout(() => {
+                    btnSave.innerHTML = "<i class='bx bx-save'></i> Save Notebook";
+                }, 2000);
+            }
+        } catch (err) {
+            console.error("[Review] Failed saving inspection notebook:", err);
+            window.App?.showToast(err.message || "Failed to save inspection notebook.", true);
+            const btnSave = document.getElementById('btnSaveInspectionNotebook');
+            if (btnSave) {
+                btnSave.disabled = false;
+                btnSave.innerHTML = "<i class='bx bx-save'></i> Save Notebook";
+            }
         }
     }
 };
