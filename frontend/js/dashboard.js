@@ -4,6 +4,7 @@
  */
 const Dashboard = {
     trendChart: null,
+    selectedDateFilter: null,
 
     init() {
         this.bindEvents();
@@ -13,6 +14,16 @@ const Dashboard = {
         const filterSelect = document.getElementById('filterSeveritySelect');
         if (filterSelect) {
             filterSelect.addEventListener('change', () => this.loadReportsList());
+        }
+
+        const btnClearDate = document.getElementById('btnClearDateFilter');
+        if (btnClearDate) {
+            btnClearDate.addEventListener('click', () => {
+                this.selectedDateFilter = null;
+                const notice = document.getElementById('queueDateFilterNotice');
+                if (notice) notice.classList.add('hidden');
+                this.loadReportsList();
+            });
         }
 
         const kpiVerified = document.getElementById('kpiCardVerified');
@@ -47,11 +58,13 @@ const Dashboard = {
         if (countySelect) countySelect.addEventListener('change', () => {
             this.loadDegradationChart();
             this.loadCriticalCalendar();
+            this.loadReportsList();
         });
 
         if (wardSelect) wardSelect.addEventListener('change', () => {
             this.loadDegradationChart();
             this.loadCriticalCalendar();
+            this.loadReportsList();
         });
 
         if (calRangeSelect) calRangeSelect.addEventListener('change', () => {
@@ -130,6 +143,9 @@ const Dashboard = {
         // Render recurrence insights from real database history (Section 31)
         this.renderRecurrenceInsights(summary.recurrence_insights);
 
+        // Render monitoring insights panel (Sections 34, 35, 36)
+        this.renderMonitoringInsights(apiData?.monitoring_insights);
+
         // Update mode subtitle
         const subEl = document.getElementById('trendSubtitle');
         if (subEl) {
@@ -145,7 +161,7 @@ const Dashboard = {
             'Surface deterioration': '#0284c7',
             'Critical': '#ef4444',
             'Medium': '#f59e0b',
-            'Low': '#10b981'
+            'Low': '#0284c7'
         };
 
         // Render dynamic legend
@@ -172,7 +188,7 @@ const Dashboard = {
             if (emptyState) emptyState.classList.add('hidden');
         }
 
-        // Section 25: Use Chart.js with smooth monotone cubic interpolation
+        // Section 25 & 39: Chart.js with smooth monotone cubic interpolation
         if (typeof Chart !== 'undefined') {
             if (this.trendChart) {
                 this.trendChart.destroy();
@@ -192,7 +208,7 @@ const Dashboard = {
                     tension: 0.35,
                     cubicInterpolationMode: 'monotone',
                     fill: false,
-                    pointRadius: 3.5,
+                    pointRadius: 3,
                     pointHoverRadius: 6,
                     pointBackgroundColor: color,
                     pointBorderColor: '#0f172a',
@@ -282,6 +298,32 @@ const Dashboard = {
         }
     },
 
+    getCalTooltip() {
+        let el = document.getElementById('calCustomTooltip');
+        if (!el) {
+            el = document.createElement('div');
+            el.id = 'calCustomTooltip';
+            el.style.cssText = `
+                position: fixed;
+                display: none;
+                z-index: 10000;
+                background: #0f172a;
+                color: #f8fafc;
+                border: 1px solid #334155;
+                border-radius: 6px;
+                padding: 8px 12px;
+                font-size: 0.75rem;
+                box-shadow: 0 4px 16px rgba(0, 0, 0, 0.45);
+                pointer-events: none;
+                max-width: 260px;
+                line-height: 1.45;
+                transition: opacity 0.12s ease;
+            `;
+            document.body.appendChild(el);
+        }
+        return el;
+    },
+
     renderCriticalCalendarGrid(calData) {
         const gridContainer = document.getElementById('criticalCalendarGrid');
         const subTitle = document.getElementById('calSubtitle');
@@ -297,6 +339,18 @@ const Dashboard = {
             gridContainer.innerHTML = '<div style="padding:1rem; color:#94a3b8; font-size:0.8rem;">No critical incidents recorded in this timeframe.</div>';
             return;
         }
+
+        const formatCalDate = (dateStr) => {
+            if (!dateStr) return '';
+            try {
+                const parts = dateStr.split('-');
+                if (parts.length === 3) {
+                    const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+                    return `${parseInt(parts[2], 10)} ${months[parseInt(parts[1], 10) - 1]} ${parts[0]}`;
+                }
+            } catch (e) {}
+            return dateStr;
+        };
 
         // Group continuous daily records into columns of weeks (7 days per column)
         const weekCols = [];
@@ -329,37 +383,97 @@ const Dashboard = {
                     if (!d) {
                         return '<div class="cal-day-cell" style="opacity:0; pointer-events:none;"></div>';
                     }
-                    const reportLabel = d.count > 0 && d.reports && d.reports.length
-                        ? `\nCases: ${d.reports.slice(0, 3).join(', ')}${d.reports.length > 3 ? ' +' + (d.reports.length - 3) + ' more' : ''}`
-                        : '';
-                    const titleText = `${d.date}: ${d.count} critical report${d.count === 1 ? '' : 's'}${reportLabel}`;
                     return `
                         <div class="cal-day-cell cal-intensity-${d.intensity}"
                              data-date="${d.date}"
                              data-count="${d.count}"
-                             title="${titleText}">
+                             data-breakdown='${JSON.stringify(d.defect_breakdown || {})}'
+                             data-corridor="${(d.top_corridor || '').replace(/"/g, '&quot;')}"
+                             tabindex="0"
+                             role="button"
+                             aria-label="${d.date}: ${d.count} critical reports">
                         </div>
                     `;
                 }).join('')}
             </div>
         `).join('');
 
-        // Wire cell click behavior (Section 29: Low-risk filter to prioritized queue)
-        gridContainer.querySelectorAll('.cal-day-cell').forEach(cell => {
+        // Wire interactive hover tooltip (Section 40) & click filter (Section 41)
+        const cells = gridContainer.querySelectorAll('.cal-day-cell:not([style*="opacity:0"])');
+        cells.forEach(cell => {
+            const date = cell.getAttribute('data-date');
             const cnt = parseInt(cell.getAttribute('data-count') || '0', 10);
-            if (cnt > 0) {
-                cell.addEventListener('click', () => {
-                    const date = cell.getAttribute('data-date');
-                    const severitySelect = document.getElementById('filterSeveritySelect');
-                    if (severitySelect) {
-                        severitySelect.value = 'Critical';
-                        this.loadReportsList();
+            let breakdown = {};
+            try { breakdown = JSON.parse(cell.getAttribute('data-breakdown') || '{}'); } catch (e) {}
+            const corridor = cell.getAttribute('data-corridor') || '';
+
+            const showTooltip = (e) => {
+                const tip = this.getCalTooltip();
+                const formattedDate = formatCalDate(date);
+                let html = `<div style="font-weight:700; color:#f8fafc; margin-bottom:4px; font-size:0.8rem;">${formattedDate}</div>`;
+
+                if (cnt === 0) {
+                    html += `<div style="color:#94a3b8; font-size:0.75rem;">0 Critical Reports</div>`;
+                } else {
+                    html += `<div style="font-weight:700; color:#ef4444; margin-bottom:6px; font-size:0.78rem;">${cnt} Critical Report${cnt === 1 ? '' : 's'}</div>`;
+
+                    const breakdownEntries = Object.entries(breakdown);
+                    if (breakdownEntries.length > 0) {
+                        const lines = breakdownEntries.map(([cls, c]) => `<span>${c} ${cls}${c > 1 ? 's' : ''}</span>`);
+                        html += `<div style="color:#cbd5e1; margin-bottom:6px; font-size:0.74rem; display:flex; flex-direction:column; gap:2px;">${lines.join('')}</div>`;
                     }
+
+                    if (corridor) {
+                        html += `<div style="color:#94a3b8; font-size:0.72rem; margin-top:4px; border-top:1px solid #334155; padding-top:4px;">Most active corridor:<br><strong style="color:#38bdf8;">${corridor}</strong></div>`;
+                    }
+                }
+
+                tip.innerHTML = html;
+                tip.style.display = 'block';
+                tip.style.opacity = '1';
+
+                const rect = cell.getBoundingClientRect();
+                const tipWidth = 220;
+                let left = rect.left + (rect.width / 2) - (tipWidth / 2);
+                if (left < 10) left = 10;
+                if (left + tipWidth > window.innerWidth - 10) left = window.innerWidth - tipWidth - 10;
+                tip.style.left = `${left}px`;
+                tip.style.top = `${Math.max(10, rect.top - 100)}px`;
+            };
+
+            const hideTooltip = () => {
+                const tip = document.getElementById('calCustomTooltip');
+                if (tip) {
+                    tip.style.display = 'none';
+                    tip.style.opacity = '0';
+                }
+            };
+
+            cell.addEventListener('mouseenter', showTooltip);
+            cell.addEventListener('focus', showTooltip);
+            cell.addEventListener('mouseleave', hideTooltip);
+            cell.addEventListener('blur', hideTooltip);
+
+            // Click behavior: filter prioritized queue to reports on this date (Section 41)
+            cell.addEventListener('click', () => {
+                if (cnt > 0) {
+                    this.selectedDateFilter = date;
+                    const dateNotice = document.getElementById('queueDateFilterNotice');
+                    const dateVal = document.getElementById('queueDateFilterVal');
+                    if (dateNotice && dateVal) {
+                        dateNotice.classList.remove('hidden');
+                        dateVal.textContent = `${formatCalDate(date)} (${cnt} Critical Report${cnt === 1 ? '' : 's'})`;
+                    }
+                    this.loadReportsList();
                     if (window.App && typeof window.App.showToast === 'function') {
-                        window.App.showToast(`Filtered queue to Critical reports. Date selected: ${date} (${cnt} case${cnt === 1 ? '' : 's'})`, 'info');
+                        window.App.showToast(`Filtered queue to reports on ${formatCalDate(date)}`, 'info');
                     }
-                });
-            }
+                } else {
+                    if (window.App && typeof window.App.showToast === 'function') {
+                        window.App.showToast(`No critical reports recorded on ${formatCalDate(date)}`, 'info');
+                    }
+                }
+            });
         });
     },
 
@@ -391,6 +505,114 @@ const Dashboard = {
         `).join('');
     },
 
+    renderMonitoringInsights(insights) {
+        const container = document.getElementById('monitoringInsightsContent');
+        if (!container) return;
+
+        if (!insights || !insights.has_sufficient_data) {
+            container.innerHTML = `
+                <div style="padding: 1.25rem; color: #64748b; font-size: 0.85rem; background: rgba(15, 23, 42, 0.04); border-radius: 6px; border: 1px dashed var(--border-color); display: flex; align-items: center; gap: 10px;">
+                    <i class='bx bx-info-circle' style="font-size: 1.35rem; color: #0284c7; flex-shrink: 0;"></i>
+                    <span>Not enough historical data yet to calculate empirical recurrence or corridor velocity.</span>
+                </div>
+            `;
+            return;
+        }
+
+        const cards = [];
+
+        // 1. Critical Defect Activity (Last 30 Days)
+        const isUp = insights.critical_change && insights.critical_change.includes('+');
+        cards.push(`
+            <div class="recurrence-insight-card">
+                <div class="insight-header">
+                    <i class='bx bx-alarm-exclamation' style="color: #ef4444; font-size: 1rem;"></i>
+                    <span>30-Day Critical Defect Volume</span>
+                </div>
+                <div class="insight-value">
+                    ${insights.critical_last_30d ?? 0} Reports
+                    <span style="font-size: 0.76rem; font-weight: 600; color: ${isUp ? '#ef4444' : '#10b981'}; margin-left: 4px;">
+                        (${insights.critical_change || 'No prior period comparison'})
+                    </span>
+                </div>
+                <div class="insight-basis">Empirical rolling 30-day window comparison</div>
+            </div>
+        `);
+
+        // 2. Highest Repeat Corridor
+        cards.push(`
+            <div class="recurrence-insight-card">
+                <div class="insight-header">
+                    <i class='bx bx-map-pin' style="color: #f59e0b; font-size: 1rem;"></i>
+                    <span>Corridor Defect Recurrence</span>
+                </div>
+                <div class="insight-value">${insights.top_corridor_repeat || 'Not enough historical data yet'}</div>
+                <div class="insight-basis">Corridor with highest repeat-incident density</div>
+            </div>
+        `);
+
+        // 3. Top Affected Infrastructure Asset
+        cards.push(`
+            <div class="recurrence-insight-card">
+                <div class="insight-header">
+                    <i class='bx bx-building' style="color: #0284c7; font-size: 1rem;"></i>
+                    <span>Primary Asset Classification</span>
+                </div>
+                <div class="insight-value">${insights.top_asset_type || 'Road / Pavement'}</div>
+                <div class="insight-basis">Most frequently affected civil infrastructure asset</div>
+            </div>
+        `);
+
+        // 4. Operational Lifecycle Velocity
+        cards.push(`
+            <div class="recurrence-insight-card">
+                <div class="insight-header">
+                    <i class='bx bx-time-five' style="color: #10b981; font-size: 1rem;"></i>
+                    <span>Average Lifecycle Velocity</span>
+                </div>
+                <div class="insight-value" style="display: flex; gap: 1rem; font-size: 0.82rem; flex-wrap: wrap;">
+                    <span>Received → Verified: <strong>${insights.avg_received_to_verified || 'Pending data'}</strong></span>
+                    <span>Verified → Resolved: <strong>${insights.avg_verified_to_resolved || 'Pending data'}</strong></span>
+                </div>
+                <div class="insight-basis">Recorded duration across professional review transitions</div>
+            </div>
+        `);
+
+        // 5. Historical Weather Context (Sections 36, 37, 38)
+        if (insights.weather_insight) {
+            const w = insights.weather_insight;
+            if (w.observation) {
+                cards.push(`
+                    <div class="recurrence-insight-card" style="border-left: 3px solid #0284c7;">
+                        <div class="insight-header">
+                            <i class='bx bx-cloud-rain' style="color: #0284c7; font-size: 1rem;"></i>
+                            <span>${w.headline || 'Observed Weather Association'}</span>
+                        </div>
+                        <div class="insight-value" style="font-size: 0.82rem; font-weight: 500; color: #1e293b; line-height: 1.45;">
+                            ${w.observation}
+                        </div>
+                        <div class="insight-basis">${w.qualification || 'Observed historical precipitation association. Does not constitute mechanical causation.'}</div>
+                    </div>
+                `);
+            } else if (w.headline) {
+                cards.push(`
+                    <div class="recurrence-insight-card">
+                        <div class="insight-header">
+                            <i class='bx bx-cloud' style="color: #64748b; font-size: 1rem;"></i>
+                            <span>${w.headline}</span>
+                        </div>
+                        <div class="insight-value" style="font-size: 0.8rem; color: #64748b;">
+                            ${w.message || 'Not enough historical weather data yet.'}
+                        </div>
+                        <div class="insight-basis">${w.qualification || 'Historical precipitation data from Open-Meteo archive.'}</div>
+                    </div>
+                `);
+            }
+        }
+
+        container.innerHTML = cards.join('');
+    },
+
     drawDegradationChart(trendData, threshold = 68) {
         // Backwards compatibility alias
         this.loadDegradationChart();
@@ -401,6 +623,8 @@ const Dashboard = {
         if (!queueContainer) return;
 
         const filterVal = document.getElementById('filterSeveritySelect')?.value || '';
+        const countyVal = document.getElementById('trendCountySelect')?.value || 'all';
+        const wardVal = document.getElementById('trendWardSelect')?.value || 'all';
 
         try {
             const params = {};
@@ -425,6 +649,29 @@ const Dashboard = {
 
             if (filterVal === 'Flagged') {
                 reports = reports.filter(r => r.validation_status === 'unusual' || r.requires_engineer_review === true || r.metadata?.is_unusual === true);
+            }
+
+            // County / Ward filter
+            if (countyVal && countyVal.toLowerCase() !== 'all') {
+                reports = reports.filter(r => {
+                    const loc = (r.asset?.location || r.metadata?.location_name || '').toLowerCase();
+                    return loc.includes(countyVal.toLowerCase());
+                });
+            }
+
+            if (wardVal && wardVal.toLowerCase() !== 'all' && wardVal.toLowerCase() !== 'all areas') {
+                reports = reports.filter(r => {
+                    const loc = (r.asset?.location || r.metadata?.location_name || '').toLowerCase();
+                    return loc.includes(wardVal.toLowerCase());
+                });
+            }
+
+            // Calendar date filter (Section 41)
+            if (this.selectedDateFilter) {
+                reports = reports.filter(r => {
+                    const dtStr = r.date_submitted || r.created_at || '';
+                    return dtStr.startsWith(this.selectedDateFilter);
+                });
             }
 
             if (reports.length === 0) {

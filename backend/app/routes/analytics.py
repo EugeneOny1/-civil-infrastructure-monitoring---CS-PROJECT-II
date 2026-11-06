@@ -3,7 +3,19 @@ import calendar
 from collections import defaultdict
 from flask import Blueprint, jsonify, request, make_response
 from ..services.database import db_service
+from ..services.weather_service import weather_service
 from ..utils.auth_helpers import role_required
+
+KENYA_47_COUNTIES = [
+    'Mombasa', 'Kwale', 'Kilifi', 'Tana River', 'Lamu', 'Taita Taveta',
+    'Garissa', 'Wajir', 'Mandera', 'Marsabit', 'Isiolo', 'Meru',
+    'Tharaka Nithi', 'Embu', 'Kitui', 'Machakos', 'Makueni', 'Nyandarua',
+    'Nyeri', 'Kirinyaga', "Murang'a", 'Kiambu', 'Turkana', 'West Pokot',
+    'Samburu', 'Trans Nzoia', 'Uasin Gishu', 'Elgeyo Marakwet', 'Nandi',
+    'Baringo', 'Laikipia', 'Nakuru', 'Narok', 'Kajiado', 'Kericho',
+    'Bomet', 'Kakamega', 'Vihiga', 'Bungoma', 'Busia', 'Siaya',
+    'Kisumu', 'Homa Bay', 'Migori', 'Kisii', 'Nyamira', 'Nairobi'
+]
 
 analytics_bp = Blueprint('analytics', __name__, url_prefix='/api/analytics')
 
@@ -323,6 +335,109 @@ def get_historical_defect_trends(current_user):
             'basis': 'Corridor-level defect recurrence pattern'
         })
 
+    # -------------------------------------------------------------------------
+    # Sections 34, 35, 36: Dynamic Data-Driven Monitoring Insights
+    # -------------------------------------------------------------------------
+    thirty_days_ago = now - timedelta(days=30)
+    sixty_days_ago = now - timedelta(days=60)
+    crit_30d = 0
+    crit_prev_30d = 0
+    asset_type_counts = defaultdict(int)
+    corridor_total_counts = defaultdict(int)
+
+    received_to_verified_durations = []
+    verified_to_resolved_durations = []
+
+    for rep in all_reports:
+        meta = rep.get('metadata') or {}
+        dt_str = rep.get('date_submitted') or rep.get('created_at')
+        if not dt_str:
+            continue
+        try:
+            clean_str = dt_str.replace('Z', '+00:00')
+            if '+' in clean_str[10:] or '-' in clean_str[10:]:
+                dt = datetime.fromisoformat(clean_str)
+            else:
+                dt = datetime.fromisoformat(clean_str).replace(tzinfo=timezone.utc)
+        except Exception:
+            continue
+
+        raw_sev = str(meta.get('relative_severity') or rep.get('relative_severity') or '').strip().lower()
+        if raw_sev in ['critical', 'high']:
+            if thirty_days_ago <= dt <= now:
+                crit_30d += 1
+            elif sixty_days_ago <= dt < thirty_days_ago:
+                crit_prev_30d += 1
+
+        a_type = meta.get('asset_type') or rep.get('asset_type') or 'Road / Pavement'
+        asset_type_counts[a_type] += 1
+
+        c_loc = meta.get('location_name') or rep.get('location_name') or rep.get('description') or ''
+        if c_loc:
+            corridor_total_counts[c_loc] += 1
+
+        hist = meta.get('status_history') or []
+        rec_time = None
+        ver_time = None
+        res_time = None
+        for h in hist:
+            s = str(h.get('status')).lower()
+            t_str = h.get('timestamp')
+            if not t_str:
+                continue
+            try:
+                clean_t = t_str.replace('Z', '+00:00')
+                if '+' in clean_t[10:] or '-' in clean_t[10:]:
+                    t_val = datetime.fromisoformat(clean_t)
+                else:
+                    t_val = datetime.fromisoformat(clean_t).replace(tzinfo=timezone.utc)
+                if s == 'received' and not rec_time:
+                    rec_time = t_val
+                elif s == 'verified' and not ver_time:
+                    ver_time = t_val
+                elif s == 'resolved' and not res_time:
+                    res_time = t_val
+            except Exception:
+                continue
+
+        if rec_time and ver_time and ver_time >= rec_time:
+            received_to_verified_durations.append((ver_time - rec_time).total_seconds())
+        if ver_time and res_time and res_time >= ver_time:
+            verified_to_resolved_durations.append((res_time - ver_time).total_seconds())
+
+    avg_rec_to_ver_str = "Not enough historical data yet"
+    if received_to_verified_durations:
+        avg_hrs = sum(received_to_verified_durations) / (len(received_to_verified_durations) * 3600)
+        avg_rec_to_ver_str = f"{round(avg_hrs / 24, 1)} days" if avg_hrs >= 48 else f"{round(avg_hrs, 1)} hours"
+
+    avg_ver_to_res_str = "Not enough historical data yet"
+    if verified_to_resolved_durations:
+        avg_hrs = sum(verified_to_resolved_durations) / (len(verified_to_resolved_durations) * 3600)
+        avg_ver_to_res_str = f"{round(avg_hrs / 24, 1)} days" if avg_hrs >= 48 else f"{round(avg_hrs, 1)} hours"
+
+    crit_change_str = "No prior period comparison"
+    if crit_prev_30d > 0:
+        pct_change = round(((crit_30d - crit_prev_30d) / crit_prev_30d) * 100)
+        prefix = "+" if pct_change > 0 else ""
+        crit_change_str = f"{prefix}{pct_change}% vs previous 30 days"
+
+    top_asset = max(asset_type_counts.items(), key=lambda x: x[1])[0] if asset_type_counts else "Road / Pavement"
+    top_repeat_corridor = max(corridor_total_counts.items(), key=lambda x: x[1]) if corridor_total_counts else None
+
+    # Weather Association Analysis (Sections 36-38)
+    weather_insight = weather_service.analyze_weather_associations(all_reports)
+
+    monitoring_insights = {
+        'has_sufficient_data': len(all_reports) >= 3,
+        'critical_last_30d': crit_30d,
+        'critical_change': crit_change_str,
+        'top_asset_type': top_asset,
+        'top_corridor_repeat': f"{top_repeat_corridor[0]} ({top_repeat_corridor[1]} reports)" if top_repeat_corridor else "Not enough historical data yet",
+        'avg_received_to_verified': avg_rec_to_ver_str,
+        'avg_verified_to_resolved': avg_ver_to_res_str,
+        'weather_insight': weather_insight
+    }
+
     has_data = total_in_period > 0
 
     resp_data = {
@@ -340,8 +455,9 @@ def get_historical_defect_trends(current_user):
             'total_reports': total_in_period,
             'recurrence_insights': recurrence_insights
         },
+        'monitoring_insights': monitoring_insights,
         'filter_options': {
-            'counties': ['All Counties', 'Nairobi', 'Mombasa', 'Kisumu', 'Nakuru', 'Kiambu', 'Machakos', 'Uasin Gishu'],
+            'counties': ['All Counties'] + KENYA_47_COUNTIES,
             'wards': [
                 'All Areas',
                 'CBD',
@@ -366,7 +482,7 @@ def get_historical_defect_trends(current_user):
 @role_required('engineer', 'admin')
 def get_critical_calendar(current_user):
     """
-    Critical Reports Calendar (Sections 28 & 29).
+    Critical Reports Calendar (Sections 28 & 29, 40 & 41).
     Calculates concentration of Critical infrastructure reports over actual dates.
     Grounded strictly in verified database observations; no fabricated dates or counts.
     Explicitly represents: Critical Reports Calendar = Critical reports received over time.
@@ -391,6 +507,8 @@ def get_critical_calendar(current_user):
 
     daily_critical = defaultdict(int)
     daily_report_ids = defaultdict(list)
+    daily_defects = defaultdict(lambda: defaultdict(int))
+    daily_corridors = defaultdict(lambda: defaultdict(int))
     total_critical = 0
 
     for rep in all_reports:
@@ -425,6 +543,10 @@ def get_critical_calendar(current_user):
             daily_critical[day_key] += 1
             disp_id = rep.get('display_id') or (f"#REP-{rep.get('report_id')[-6:].upper()}" if rep.get('report_id') else f"#REP-{str(rep.get('_id'))[-6:].upper()}")
             daily_report_ids[day_key].append(disp_id)
+            d_class = meta.get('defect_class') or rep.get('defect_class') or 'Defect'
+            daily_defects[day_key][d_class] += 1
+            if loc_name:
+                daily_corridors[day_key][loc_name] += 1
             total_critical += 1
 
     # Build continuous day records for calendar grid
@@ -446,12 +568,18 @@ def get_critical_calendar(current_user):
         else:
             intensity = 3
 
+        defect_breakdown = dict(daily_defects.get(d_key, {}))
+        corridor_counts = daily_corridors.get(d_key, {})
+        top_corridor = max(corridor_counts.items(), key=lambda x: x[1])[0] if corridor_counts else ''
+
         days.append({
             'date': d_key,
             'day_of_week': cur.weekday(),
             'count': cnt,
             'intensity': intensity,
-            'reports': daily_report_ids.get(d_key, [])
+            'reports': daily_report_ids.get(d_key, []),
+            'defect_breakdown': defect_breakdown,
+            'top_corridor': top_corridor
         })
         cur += timedelta(days=1)
 
