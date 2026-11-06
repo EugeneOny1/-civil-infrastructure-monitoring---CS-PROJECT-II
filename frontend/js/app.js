@@ -717,6 +717,9 @@ const App = {
             t.classList.toggle('active', t.getAttribute('data-view') === viewId);
         });
 
+        // Section 7: Update sliding navigation active indicator
+        this.updateNavIndicator(viewId);
+
         // Toggle view sections
         document.querySelectorAll('.view-section').forEach(sec => {
             sec.classList.toggle('active', sec.id === viewId);
@@ -741,6 +744,21 @@ const App = {
         } else if (viewId === 'view-admin') {
             this.loadAdminData();
         }
+    },
+
+    updateNavIndicator(viewId) {
+        const indicator = document.getElementById('navSlidingIndicator');
+        const activeTab = document.querySelector(`.nav-tab[data-view="${viewId}"]`);
+        if (!indicator) return;
+        if (!activeTab || activeTab.classList.contains('hidden') || activeTab.offsetParent === null) {
+            indicator.style.opacity = '0';
+            return;
+        }
+        const left = activeTab.offsetLeft;
+        const width = activeTab.offsetWidth;
+        indicator.style.transform = `translateX(${left}px)`;
+        indicator.style.width = `${width}px`;
+        indicator.style.opacity = '1';
     },
 
     async checkBackendStatus() {
@@ -868,7 +886,7 @@ const App = {
                 return;
             }
 
-            // Section 20: Render List View Rows
+            // Section 20: Render List View Rows with High-Contrast Typography
             tbody.innerHTML = reports.map((item) => {
                 const rep = item.report;
                 const ai = item.assessment || {};
@@ -886,14 +904,14 @@ const App = {
                 return `
                     <tr class="tracking-table-row" id="tracking-row-${canonicalId}" style="cursor: pointer;" onclick="App.selectTrackingReport('${canonicalId}')">
                         <td style="width: 56px; padding: 6px 12px;">
-                            ${imgUrl ? `<img src="${imgUrl}" class="tracking-evidence-thumb" alt="Defect" style="width: 44px; height: 44px; object-fit: cover; border-radius: 6px; border: 1px solid #334155;" onerror="this.parentElement.innerHTML='<div class=\\'tracking-evidence-thumb\\' style=\\'width:44px;height:44px;background:#1e293b;border-radius:6px;display:flex;align-items:center;justify-content:center;color:#64748b;\\'><i class=\\\'bx bx-image\\\'></i></div>'">` : `<div class="tracking-evidence-thumb" style="width:44px;height:44px;background:#1e293b;border-radius:6px;display:flex;align-items:center;justify-content:center;color:#64748b;"><i class='bx bx-image'></i></div>`}
+                            ${imgUrl ? `<img src="${imgUrl}" class="tracking-evidence-thumb" alt="Defect" style="width: 44px; height: 44px; object-fit: cover; border-radius: 6px; border: 1px solid #cbd5e1;" onerror="this.parentElement.innerHTML='<div class=\\'tracking-evidence-thumb\\' style=\\'width:44px;height:44px;background:#f1f5f9;border-radius:6px;display:flex;align-items:center;justify-content:center;color:#64748b;\\'><i class=\\\'bx bx-image\\\'></i></div>'">` : `<div class="tracking-evidence-thumb" style="width:44px;height:44px;background:#f1f5f9;border-radius:6px;display:flex;align-items:center;justify-content:center;color:#64748b;"><i class='bx bx-image'></i></div>`}
                         </td>
                         <td>
-                            <strong style="color: #f1f5f9; display: block; font-size: 0.88rem;">${location}</strong>
-                            <code style="font-size: 0.72rem; color: #64748b;">${displayId}</code>
+                            <strong style="color: #0f172a; display: block; font-size: 0.88rem; font-weight: 700;">${location}</strong>
+                            <code style="font-size: 0.72rem; color: #475569; font-weight: 600;">${displayId}</code>
                         </td>
                         <td>
-                            <span style="font-weight: 600; color: #cbd5e1;">${ai.defect_class || rep.metadata?.defect_class || 'Pavement Distress'}</span>
+                            <span style="font-weight: 600; color: #1e293b;">${ai.defect_class || rep.metadata?.defect_class || 'Pavement Distress'}</span>
                         </td>
                         <td>
                             <span class="severity-pill ${sev}">${sev.toUpperCase()}</span>
@@ -902,12 +920,12 @@ const App = {
                             <span class="status-chip ${statusSlug}">${status}</span>
                             ${isUnusual ? `<span class="badge-tag" style="background:#fff7ed;color:#c2410c;border:1px solid #fed7aa;margin-left:4px;"><i class='bx bx-error-circle'></i> Unusual</span>` : ''}
                         </td>
-                        <td style="color: #94a3b8; font-size: 0.82rem;">${dateStr}</td>
+                        <td style="color: #334155; font-size: 0.82rem; font-weight: 500;">${dateStr}</td>
                     </tr>
                 `;
             }).join('');
 
-            // Section 20: Render Gallery View Cards
+            // Section 20: Render Gallery View Cards with High-Contrast Typography
             if (galleryGrid) {
                 galleryGrid.innerHTML = reports.map((item) => {
                     const rep = item.report;
@@ -923,25 +941,25 @@ const App = {
                     const isMultiView = Boolean(rep.combined_multi_view_assessment || rep.metadata?.combined_multi_view_assessment);
 
                     return `
-                        <div class="citizen-report-card" id="tracking-card-${canonicalId}" style="background: #0f172a; border: 1px solid #334155; border-radius: 8px; overflow: hidden; cursor: pointer; transition: all 0.2s ease;" onclick="App.selectTrackingReport('${canonicalId}')">
-                            <div class="report-card-media" style="position: relative; width: 100%; height: 160px; background: #1e293b;">
-                                ${imgUrl ? `<img src="${imgUrl}" alt="${defect}" style="width: 100%; height: 100%; object-fit: cover;" onerror="this.parentElement.style.background='#1e293b'">` : `<div style="width:100%;height:100%;display:flex;align-items:center;justify-content:center;color:#64748b;"><i class='bx bx-image' style="font-size:2rem;"></i></div>`}
+                        <div class="citizen-report-card" id="tracking-card-${canonicalId}" style="background: #ffffff; border: 1px solid #e2e8f0; border-radius: 8px; overflow: hidden; cursor: pointer; transition: all 0.2s ease; box-shadow: 0 1px 3px rgba(15,23,42,0.06);" onclick="App.selectTrackingReport('${canonicalId}')">
+                            <div class="report-card-media" style="position: relative; width: 100%; height: 160px; background: #f1f5f9;">
+                                ${imgUrl ? `<img src="${imgUrl}" alt="${defect}" style="width: 100%; height: 100%; object-fit: cover;" onerror="this.parentElement.style.background='#f1f5f9'">` : `<div style="width:100%;height:100%;display:flex;align-items:center;justify-content:center;color:#64748b;"><i class='bx bx-image' style="font-size:2rem;"></i></div>`}
                                 <div style="position: absolute; top: 8px; left: 8px;">
                                     <span class="severity-pill ${sev}" style="font-size: 0.7rem; padding: 2px 8px;">${sev.toUpperCase()}</span>
                                 </div>
                                 ${isMultiView ? `<div style="position: absolute; top: 8px; right: 8px; background: rgba(15,23,42,0.85); color: #38bdf8; font-size: 0.68rem; font-weight: 600; padding: 2px 6px; border-radius: 4px; border: 1px solid #38bdf8;"><i class='bx bx-layer'></i> Multi-View</div>` : ''}
                             </div>
-                            <div class="report-card-body" style="padding: 0.9rem; display: flex; flex-direction: column; gap: 0.4rem;">
-                                <div style="font-size: 0.92rem; font-weight: 700; color: #f8fafc; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;" title="${location}">
-                                    <i class='bx bx-map-pin' style="color: #38bdf8;"></i> ${location}
+                            <div class="report-card-body" style="padding: 0.9rem; display: flex; flex-direction: column; gap: 0.45rem;">
+                                <div style="font-size: 0.92rem; font-weight: 700; color: #0f172a; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;" title="${location}">
+                                    <i class='bx bx-map-pin' style="color: #0284c7;"></i> ${location}
                                 </div>
-                                <div style="display: flex; justify-content: space-between; align-items: center; font-size: 0.8rem;">
-                                    <span style="font-weight: 600; color: #cbd5e1;">${defect}</span>
+                                <div style="display: flex; justify-content: space-between; align-items: center; font-size: 0.82rem;">
+                                    <span style="font-weight: 600; color: #1e293b;">${defect}</span>
                                     <span class="status-chip ${statusSlug}" style="font-size: 0.68rem; padding: 2px 8px;">${status}</span>
                                 </div>
-                                <div style="font-size: 0.72rem; color: #64748b; border-top: 1px solid #1e293b; padding-top: 0.4rem; margin-top: 0.2rem; display: flex; justify-content: space-between;">
+                                <div style="font-size: 0.75rem; color: #475569; border-top: 1px solid #f1f5f9; padding-top: 0.45rem; margin-top: 0.2rem; display: flex; justify-content: space-between; align-items: center;">
                                     <span><i class='bx bx-calendar'></i> ${dateStr}</span>
-                                    <span style="color: #38bdf8;">Select to View →</span>
+                                    <span style="color: #2563eb; font-weight: 600;">View Details &rarr;</span>
                                 </div>
                             </div>
                         </div>
@@ -1037,23 +1055,23 @@ const App = {
         const followUpDate = rev.follow_up_date || rep.metadata?.follow_up_date || null;
         const reviewNotes = rev.notes || (rep.metadata?.status_history && rep.metadata.status_history.slice(-1)[0]?.notes) || (status !== 'Received' ? 'Engineering validation in progress.' : 'Awaiting professional assessment.');
 
-        // Section 22: Structure details in exact specified order:
-        // Location + submitted date -> Evidence image -> Lifecycle -> Defect Assessment -> Professional Review -> Next Action / Target Date -> Engineer Notes
+        // Section 20-24: Clean, high-contrast, cohesive layout with Show on Map action
+        // Location + submitted date -> Evidence image -> Lifecycle -> Defect Assessment -> Professional Review -> Next Action / Target Date -> Engineer Notes -> Show on Map
         cardEl.innerHTML = `
             <!-- 1. Location + Submitted Date + Close Button -->
-            <div class="tracking-card-header" style="display: flex; justify-content: space-between; align-items: flex-start; padding-bottom: 0.75rem; border-bottom: 1px solid #1e293b; margin-bottom: 1rem;">
+            <div class="tracking-card-header" style="display: flex; justify-content: space-between; align-items: flex-start; padding-bottom: 0.75rem; border-bottom: 1px solid #e2e8f0; margin-bottom: 1rem;">
                 <div class="tracking-card-title-group" style="flex: 1;">
                     <div style="display: flex; align-items: center; gap: 6px;">
-                        <i class='bx bx-map-pin' style="color: #38bdf8; font-size: 1.15rem;"></i>
-                        <h3 style="margin: 0; font-size: 1.05rem; color: #f8fafc;">${location}</h3>
+                        <i class='bx bx-map-pin' style="color: #0284c7; font-size: 1.15rem;"></i>
+                        <h3 style="margin: 0; font-size: 1.05rem; font-weight: 700; color: #0f172a;">${location}</h3>
                     </div>
-                    <p style="margin: 0.25rem 0 0 0; font-size: 0.78rem; color: #94a3b8;">
-                        Submitted on <strong>${dateStr}</strong> &bull; Case Ref: <code style="color: #64748b;">${displayId}</code>
+                    <p style="margin: 0.25rem 0 0 0; font-size: 0.78rem; color: #475569;">
+                        Submitted on <strong style="color: #1e293b;">${dateStr}</strong> &bull; Case Ref: <code style="color: #0284c7; font-weight: 600;">${displayId}</code>
                     </p>
                 </div>
                 <div style="display: flex; gap: 0.5rem; align-items: center;">
                     <span class="status-chip ${statusSlug}" style="font-size: 0.72rem; padding: 2px 8px;">${status}</span>
-                    <button type="button" class="btn-close-detail" onclick="App.closeTrackingDetail()" title="Close details" style="background: transparent; border: 1px solid #334155; color: #94a3b8; border-radius: 6px; width: 28px; height: 28px; display: flex; align-items: center; justify-content: center; cursor: pointer; font-size: 1.1rem; line-height: 1;">
+                    <button type="button" class="btn-close-detail" onclick="App.closeTrackingDetail()" title="Close details" style="background: transparent; border: 1px solid #cbd5e1; color: #64748b; border-radius: 6px; width: 28px; height: 28px; display: flex; align-items: center; justify-content: center; cursor: pointer; font-size: 1.1rem; line-height: 1;">
                         <i class='bx bx-x'></i>
                     </button>
                 </div>
@@ -1061,7 +1079,7 @@ const App = {
 
             <!-- 2. Evidence Image / Gallery -->
             ${imgUrl ? `
-            <div style="width: 100%; height: 180px; border-radius: 8px; overflow: hidden; background: #0f172a; margin-bottom: 1rem; border: 1px solid #1e293b;">
+            <div style="width: 100%; height: 180px; border-radius: 8px; overflow: hidden; background: #f8fafc; margin-bottom: 1rem; border: 1px solid #e2e8f0;">
                 <img src="${imgUrl}" alt="Defect Evidence" style="width: 100%; height: 100%; object-fit: cover;" onerror="this.parentElement.style.display='none'">
             </div>` : ''}
 
@@ -1094,45 +1112,52 @@ const App = {
                 </div>
             </div>
 
-            <div class="tracking-summary-panel" style="margin-bottom: 1rem; background: #0f172a; border: 1px solid #1e293b; border-radius: 6px; padding: 0.75rem 1rem;">
-                <div style="font-weight: 700; color: #f1f5f9; font-size: 0.88rem; margin-bottom: 2px;">${stageSummary}</div>
-                <div style="color: #94a3b8; font-size: 0.8rem; line-height: 1.4;"><strong>Next step:</strong> ${whatHappensNext}</div>
+            <div class="tracking-summary-panel" style="margin-bottom: 1rem; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 6px; padding: 0.75rem 1rem;">
+                <div style="font-weight: 700; color: #0f172a; font-size: 0.88rem; margin-bottom: 3px;">${stageSummary}</div>
+                <div style="color: #475569; font-size: 0.8rem; line-height: 1.4;"><strong style="color:#0f172a;">Next step:</strong> ${whatHappensNext}</div>
             </div>
 
             <!-- 4. Defect Assessment & 5. Professional Review -->
             <div style="display: flex; flex-direction: column; gap: 0.75rem;">
                 <!-- 4. Defect Assessment -->
-                <div class="tracking-info-box" style="background: #0f172a; border: 1px solid #1e293b; border-radius: 6px; padding: 0.75rem 1rem;">
-                    <div class="tracking-info-title" style="font-weight: 700; color: #38bdf8; font-size: 0.82rem; text-transform: uppercase; margin-bottom: 0.5rem;">
+                <div class="tracking-info-box" style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 6px; padding: 0.75rem 1rem;">
+                    <div class="tracking-info-title" style="font-weight: 700; color: #0284c7; font-size: 0.82rem; text-transform: uppercase; margin-bottom: 0.5rem;">
                         <i class='bx bx-scan'></i> Defect Assessment
                     </div>
                     <div style="display: flex; flex-direction: column; gap: 0.4rem; font-size: 0.82rem;">
-                        <div style="display: flex; justify-content: space-between;"><span style="color: #94a3b8;">Defect Class:</span><strong style="color: #f1f5f9;">${defect}</strong></div>
-                        <div style="display: flex; justify-content: space-between;"><span style="color: #94a3b8;">Infrastructure:</span><span style="color: #cbd5e1;">${asset}</span></div>
-                        <div style="display: flex; justify-content: space-between;"><span style="color: #94a3b8;">Visual Severity:</span><span class="severity-pill ${sev.toLowerCase()}">${sev}</span></div>
-                        <div style="display: flex; justify-content: space-between;"><span style="color: #94a3b8;">Model Confidence:</span><span style="color: #cbd5e1;">${conf}</span></div>
-                        <div style="display: flex; justify-content: space-between;"><span style="color: #94a3b8;">Defect Extent:</span><span style="color: #cbd5e1;">${areaRatio}</span></div>
+                        <div style="display: flex; justify-content: space-between;"><span style="color: #475569; font-weight: 500;">Defect Class:</span><strong style="color: #0f172a;">${defect}</strong></div>
+                        <div style="display: flex; justify-content: space-between;"><span style="color: #475569; font-weight: 500;">Infrastructure:</span><span style="color: #1e293b; font-weight: 600;">${asset}</span></div>
+                        <div style="display: flex; justify-content: space-between;"><span style="color: #475569; font-weight: 500;">Visual Severity:</span><span class="severity-pill ${sev.toLowerCase()}">${sev}</span></div>
+                        <div style="display: flex; justify-content: space-between;"><span style="color: #475569; font-weight: 500;">Model Confidence:</span><span style="color: #1e293b; font-weight: 600;">${conf}</span></div>
+                        <div style="display: flex; justify-content: space-between;"><span style="color: #475569; font-weight: 500;">Defect Extent:</span><span style="color: #1e293b; font-weight: 600;">${areaRatio}</span></div>
                     </div>
                 </div>
 
                 <!-- 5. Professional Engineering Review & 6. Next Action / Target Date -->
-                <div class="tracking-info-box" style="background: #0f172a; border: 1px solid #1e293b; border-radius: 6px; padding: 0.75rem 1rem;">
-                    <div class="tracking-info-title" style="font-weight: 700; color: #10b981; font-size: 0.82rem; text-transform: uppercase; margin-bottom: 0.5rem;">
+                <div class="tracking-info-box" style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 6px; padding: 0.75rem 1rem;">
+                    <div class="tracking-info-title" style="font-weight: 700; color: #059669; font-size: 0.82rem; text-transform: uppercase; margin-bottom: 0.5rem;">
                         <i class='bx bx-user-check'></i> Professional Engineering Review
                     </div>
                     <div style="display: flex; flex-direction: column; gap: 0.4rem; font-size: 0.82rem;">
-                        <div style="display: flex; justify-content: space-between;"><span style="color: #94a3b8;">Reviewer:</span><strong style="color: #f1f5f9;">${reviewerName || 'Queue Pending'}</strong></div>
-                        ${reviewDate ? `<div style="display: flex; justify-content: space-between;"><span style="color: #94a3b8;">Validated Date:</span><span style="color: #cbd5e1;">${reviewDate}</span></div>` : ''}
-                        <div style="display: flex; justify-content: space-between; align-items: center;"><span style="color: #94a3b8;">Next Action:</span><span style="font-weight: 600; color: #38bdf8;">${nextAction}</span></div>
-                        ${followUpDate ? `<div style="display: flex; justify-content: space-between;"><span style="color: #94a3b8;">Target Date:</span><strong style="color: #f59e0b;">${followUpDate}</strong></div>` : ''}
+                        <div style="display: flex; justify-content: space-between;"><span style="color: #475569; font-weight: 500;">Reviewer:</span><strong style="color: #0f172a;">${reviewerName || 'Queue Pending'}</strong></div>
+                        ${reviewDate ? `<div style="display: flex; justify-content: space-between;"><span style="color: #475569; font-weight: 500;">Validated Date:</span><span style="color: #1e293b; font-weight: 600;">${reviewDate}</span></div>` : ''}
+                        <div style="display: flex; justify-content: space-between; align-items: center;"><span style="color: #475569; font-weight: 500;">Next Action:</span><span style="font-weight: 600; color: #2563eb;">${nextAction}</span></div>
+                        ${followUpDate ? `<div style="display: flex; justify-content: space-between;"><span style="color: #475569; font-weight: 500;">Target Date:</span><strong style="color: #d97706;">${followUpDate}</strong></div>` : ''}
                         
                         <!-- 7. Engineer Notes -->
-                        <div style="border-top: 1px solid #1e293b; padding-top: 0.4rem; margin-top: 0.2rem;">
-                            <span style="color: #94a3b8; font-size: 0.75rem; display: block; margin-bottom: 2px;">Engineer Remarks:</span>
-                            <p style="margin: 0; color: #cbd5e1; font-size: 0.8rem; font-style: italic;">"${reviewNotes}"</p>
+                        <div style="border-top: 1px solid #e2e8f0; padding-top: 0.45rem; margin-top: 0.2rem;">
+                            <span style="color: #475569; font-size: 0.75rem; font-weight: 600; display: block; margin-bottom: 2px;">Engineer Remarks:</span>
+                            <p style="margin: 0; color: #1e293b; font-size: 0.82rem; font-style: italic; line-height: 1.4;">"${reviewNotes}"</p>
                         </div>
                     </div>
                 </div>
+
+                <!-- Section 24: Show on Map Action -->
+                ${(lat !== null && lng !== null && lat !== undefined && lng !== undefined) ? `
+                    <button type="button" class="btn-secondary btn-sm btn-show-on-map" style="width: 100%; margin-top: 0.5rem; display: flex; align-items: center; justify-content: center; gap: 6px; font-weight: 600; color: #0284c7; border: 1px solid #bae6fd; background: #f0f9ff; padding: 8px 12px; border-radius: 6px; cursor: pointer; transition: all 0.15s ease;" onclick="window.App.navigateTo('view-map'); window.DefectMap?.showReportOnMap('${canonicalId}', ${lat}, ${lng});">
+                        <i class='bx bx-map-pin' style="font-size: 1.15rem;"></i> Show on Infrastructure Map
+                    </button>
+                ` : ''}
             </div>
         `;
 

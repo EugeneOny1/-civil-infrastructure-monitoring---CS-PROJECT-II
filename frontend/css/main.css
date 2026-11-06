@@ -160,15 +160,43 @@ body, body.light-theme {
 }
 
 .nav-links {
+    position: relative;
     display: flex;
     align-items: center;
     gap: 0.35rem;
-    background: #ebebed;
+    background: rgba(235, 235, 237, 0.75);
     padding: 0.25rem 0.35rem;
     border-radius: var(--radius-full);
+    border: 1px solid rgba(226, 232, 240, 0.8);
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+}
+
+.nav-sliding-indicator {
+    position: absolute;
+    top: 4px;
+    bottom: 4px;
+    left: 0;
+    width: 0;
+    background: #ffffff;
+    border-radius: var(--radius-full);
+    box-shadow: 0 1px 3px rgba(15, 23, 42, 0.08), 0 2px 6px rgba(15, 23, 42, 0.04);
+    border: 1px solid rgba(226, 232, 240, 0.9);
+    transition: transform 220ms cubic-bezier(0.16, 1, 0.3, 1), width 220ms cubic-bezier(0.16, 1, 0.3, 1), opacity 150ms ease;
+    pointer-events: none;
+    z-index: 1;
+    opacity: 0;
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .nav-sliding-indicator {
+        transition: none !important;
+    }
 }
 
 .nav-tab {
+    position: relative;
+    z-index: 2;
     background: transparent;
     border: none;
     color: var(--text-secondary);
@@ -177,7 +205,7 @@ body, body.light-theme {
     font-size: 0.85rem;
     font-weight: 500;
     cursor: pointer;
-    transition: var(--transition-fast);
+    transition: color 180ms ease;
     display: flex;
     align-items: center;
     gap: 0.4rem;
@@ -188,9 +216,73 @@ body, body.light-theme {
 }
 
 .nav-tab.active {
-    background: #ffffff;
+    background: transparent !important;
     color: var(--text-primary);
-    box-shadow: 0 1px 4px rgba(0, 0, 0, 0.08);
+    font-weight: 600;
+}
+
+/* Section 22: My Reports Selection Popout & Contrast */
+.tracking-table-row {
+    transition: transform 200ms cubic-bezier(0.16, 1, 0.3, 1), box-shadow 200ms cubic-bezier(0.16, 1, 0.3, 1), background-color 150ms ease;
+}
+
+.tracking-table-row:hover {
+    background-color: #f8fafc !important;
+}
+
+.tracking-table-row.selected-tracking-row {
+    transform: translateY(-2px) scale(1.008);
+    background-color: #eff6ff !important;
+    box-shadow: 0 4px 14px rgba(37, 99, 235, 0.12);
+    outline: 2px solid #3b82f6;
+    outline-offset: -2px;
+}
+
+.citizen-report-card {
+    background: #ffffff !important;
+    border: 1px solid #e2e8f0 !important;
+    border-radius: 8px;
+    box-shadow: 0 1px 3px rgba(15, 23, 42, 0.05);
+    transition: transform 200ms cubic-bezier(0.16, 1, 0.3, 1), box-shadow 200ms cubic-bezier(0.16, 1, 0.3, 1), border-color 180ms ease;
+}
+
+.citizen-report-card:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 6px 16px rgba(15, 23, 42, 0.08);
+    border-color: #cbd5e1 !important;
+}
+
+.citizen-report-card.selected-gallery-card {
+    transform: translateY(-3px) scale(1.015);
+    box-shadow: 0 8px 24px rgba(37, 99, 235, 0.16);
+    border-color: #3b82f6 !important;
+    outline: 2px solid #3b82f6;
+}
+
+/* Section 23: Detail Panel Slide Transition */
+@keyframes detailPanelSlideIn {
+    from {
+        opacity: 0;
+        transform: translateX(14px);
+    }
+    to {
+        opacity: 1;
+        transform: translateX(0);
+    }
+}
+
+.tracking-detail-col:not(.hidden) {
+    animation: detailPanelSlideIn 240ms cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .tracking-table-row,
+    .citizen-report-card,
+    .tracking-detail-col:not(.hidden) {
+        animation: none !important;
+        transform: none !important;
+        transition: none !important;
+    }
 }
 
 /* User & Session Panel */
