@@ -16,8 +16,10 @@ const DefectMap = {
     reportMarkerLayer: null,
     advisoriesLayer: null,
     advisoryMarkers: {},
+    reportMarkers: {},
     tileLayer: null,
     reportsData: [],
+    RESOLVED_MAP_RETENTION_DAYS: 7, // Configurable operational map retention window (Section 10)
     config: {
         default_center: { lat: -1.286389, lng: 36.817223 },
         default_zoom: 12,
@@ -34,6 +36,9 @@ const DefectMap = {
     },
     isInitialized: false,
     heatLayer: null,
+    heatLayerLow: null,
+    heatLayerMedium: null,
+    heatLayerCritical: null,
     showHotspotLayer: true,
     heatGradient: {
         0.20: '#22c55e', // Clean low-density green (#10b981)
@@ -270,57 +275,85 @@ const DefectMap = {
             // Displays individual points independently across national and city scales without collapsing into one cluster.
             this.reportMarkerLayer = L.layerGroup().addTo(this.map);
 
-            // Adaptive cluster group for large datasets (> 150 reports)
+            // Adaptive cluster group with zoom-dependent maxClusterRadius and severity-composition conic ring
             if (typeof L.markerClusterGroup === 'function') {
                 this.markerCluster = L.markerClusterGroup({
                     chunkedLoading: true,
-                    maxClusterRadius: 30,
+                    // Zoom-dependent maxClusterRadius (Section 13)
+                    maxClusterRadius: (zoom) => {
+                        if (zoom >= 16) return 0;
+                        if (zoom >= 14) return 20;
+                        if (zoom >= 12) return 28;
+                        return 36;
+                    },
                     spiderfyOnMaxZoom: true,
                     showCoverageOnHover: false,
                     zoomToBoundsOnClick: true,
-                    disableClusteringAtZoom: 14,
+                    disableClusteringAtZoom: 16,
                     iconCreateFunction: (cluster) => {
                         const childMarkers = cluster.getAllChildMarkers();
                         const count = childMarkers.length;
 
-                        // Severity composition weighting: Low = 1, Medium = 2, Critical = 3
+                        // Calculate severity composition (Section 15)
+                        let critCount = 0;
+                        let medCount = 0;
+                        let lowCount = 0;
+                        let resCount = 0;
+
                         let sumWeights = 0;
                         for (const m of childMarkers) {
+                            const isRes = (m.reportStatus === 'Resolved' || m.options?.status === 'Resolved');
+                            if (isRes) {
+                                resCount++;
+                                continue;
+                            }
                             const sev = (m.reportSeverity || m.options?.severity || 'Low').toLowerCase();
                             if (sev === 'critical') {
+                                critCount++;
                                 sumWeights += 3;
                             } else if (sev === 'medium' || sev === 'moderate') {
+                                medCount++;
                                 sumWeights += 2;
                             } else {
+                                lowCount++;
                                 sumWeights += 1;
                             }
                         }
 
-                        const score = count > 0 ? (sumWeights / count) : 1.0;
-                        let innerColor = '#10b981';
-                        let ringColor = 'rgba(16, 185, 129, 0.25)';
-                        let shadowColor = 'rgba(16, 185, 129, 0.4)';
+                        // Conic gradient ring: Critical=Red (#ef4444), Medium=Amber (#f59e0b), Low=Blue (#0284c7), Resolved=Green (#10b981)
+                        // If Critical > 0, ensure Red is guaranteed visible in the ring (Section 15)
+                        const total = count || 1;
+                        let critPct = (critCount / total) * 100;
+                        if (critCount > 0 && critPct < 12) critPct = 12; // Guarantee visible red segment
+                        const remaining = 100 - (critCount > 0 ? critPct : 0);
+                        const nonCritTotal = (total - critCount) || 1;
+                        const medPct = (medCount / nonCritTotal) * remaining;
+                        const lowPct = (lowCount / nonCritTotal) * remaining;
 
-                        if (score >= 2.25) {
-                            innerColor = '#ef4444';
-                            ringColor = 'rgba(239, 68, 68, 0.25)';
-                            shadowColor = 'rgba(239, 68, 68, 0.45)';
-                        } else if (score >= 1.50) {
-                            innerColor = '#f59e0b';
-                            ringColor = 'rgba(245, 158, 11, 0.25)';
-                            shadowColor = 'rgba(245, 158, 11, 0.45)';
-                        }
+                        const p1 = critPct;
+                        const p2 = p1 + medPct;
+                        const p3 = p2 + lowPct;
+
+                        const conicBg = `conic-gradient(
+                            #ef4444 0% ${p1}%,
+                            #f59e0b ${p1}% ${p2}%,
+                            #0284c7 ${p2}% ${p3}%,
+                            #10b981 ${p3}% 100%
+                        )`;
+
+                        const hasCrit = critCount > 0;
+                        const shadowColor = hasCrit ? 'rgba(239, 68, 68, 0.45)' : 'rgba(15, 23, 42, 0.2)';
 
                         return L.divIcon({
                             html: `
-                                <div style="width:42px; height:42px; border-radius:50%; background-color:${ringColor}; display:flex; align-items:center; justify-content:center; transition:transform 0.15s ease;" title="Cluster Severity Score: ${score.toFixed(2)} (${count} reports)">
-                                    <div style="width:32px; height:32px; border-radius:50%; background-color:${innerColor}; color:#ffffff; font-family:var(--font-sans, system-ui, -apple-system, sans-serif); font-weight:700; font-size:13px; display:flex; align-items:center; justify-content:center; box-shadow:0 2px 6px ${shadowColor};">
+                                <div class="conic-cluster-wrap" style="width:36px; height:36px; border-radius:50%; background:${conicBg}; padding:3px; display:flex; align-items:center; justify-content:center; box-shadow:0 2px 7px ${shadowColor}; transition:transform 0.15s ease;" title="${count} reports (${critCount} Critical, ${medCount} Medium, ${lowCount} Low, ${resCount} Resolved)">
+                                    <div style="width:28px; height:28px; border-radius:50%; background:#ffffff; color:#0f172a; font-family:var(--font-sans, system-ui, -apple-system, sans-serif); font-weight:700; font-size:12px; display:flex; align-items:center; justify-content:center; border:1px solid #e2e8f0;">
                                         ${count}
                                     </div>
                                 </div>
                             `,
                             className: 'custom-severity-cluster-icon',
-                            iconSize: L.point(42, 42)
+                            iconSize: L.point(36, 36)
                         });
                     }
                 });
@@ -356,43 +389,52 @@ const DefectMap = {
     createMarkerIcon(severity, isUnusual, status) {
         const isResolved = status === 'Resolved' || this.activeFilters.status === 'Resolved';
         const isUnderReview = status === 'Under Review';
+        const sev = (severity || 'Low').toLowerCase();
 
-        let pinColor = '#10b981'; // Low: Green
-        if (severity === 'Critical') pinColor = '#ef4444'; // Critical: Red
-        else if (severity === 'Medium') pinColor = '#f59e0b'; // Medium: Amber
+        // Section 8 & 9: Compact circular markers (10-16px active point)
+        // Semantics: Critical -> Red (#ef4444), Medium -> Amber (#f59e0b), Low -> Strong Blue (#0284c7)
+        // Low MUST NOT use green. Green is strictly reserved for positive/resolved state.
+        let dotColor = '#0284c7'; // Strong Blue for Low
+        let dotGlow = 'rgba(2, 132, 199, 0.4)';
+        if (sev === 'critical') {
+            dotColor = '#ef4444'; // Red
+            dotGlow = 'rgba(239, 68, 68, 0.45)';
+        } else if (sev === 'medium' || sev === 'moderate') {
+            dotColor = '#f59e0b'; // Amber
+            dotGlow = 'rgba(245, 158, 11, 0.45)';
+        }
 
         let iconInner = '';
         if (isResolved) {
-            // Distinct resolved treatment: Green pin with crisp checkmark
+            // Retained & refined resolved marker: Green checkmark circular badge (16px)
             iconInner = `
-                <div class="custom-leaflet-pin resolved-pin" style="position:relative; width:28px; height:36px; cursor:pointer;" title="Resolved Infrastructure Defect">
-                    <svg viewBox="0 0 30 38" width="28" height="36" style="filter: drop-shadow(0 2px 5px rgba(16,185,129,0.5));">
-                        <path d="M15 0C6.7 0 0 6.7 0 15c0 10.5 15 23 15 23s15-12.5 15-23c0-8.3-6.7-15-15-15z" fill="#059669"/>
-                        <circle cx="15" cy="14" r="6" fill="#ffffff"/>
-                        <path d="M12 14l2 2 4-4" fill="none" stroke="#059669" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/>
-                    </svg>
+                <div class="custom-leaflet-marker resolved-circle-marker" style="width:16px; height:16px; border-radius:50%; background:#10b981; border:2px solid #ffffff; box-shadow:0 2px 6px rgba(16,185,129,0.55); display:flex; align-items:center; justify-content:center; color:#ffffff; font-size:11px; cursor:pointer; transition:transform 0.15s ease;" title="Resolved Infrastructure Defect">
+                    <i class='bx bx-check' style="font-weight:700;"></i>
                 </div>
             `;
+            return L.divIcon({
+                className: 'leaflet-compact-marker-wrapper',
+                html: iconInner,
+                iconSize: [16, 16],
+                iconAnchor: [8, 8],
+                popupAnchor: [0, -10]
+            });
         } else {
+            // Compact active circular point: 13px diameter, crisp white border, high-visibility shadow
             iconInner = `
-                <div class="custom-leaflet-pin" style="position:relative; width:28px; height:36px; cursor:pointer;">
-                    <svg viewBox="0 0 30 38" width="28" height="36" style="filter: drop-shadow(0 2px 4px rgba(0,0,0,0.35));">
-                        <path d="M15 0C6.7 0 0 6.7 0 15c0 10.5 15 23 15 23s15-12.5 15-23c0-8.3-6.7-15-15-15z" fill="${pinColor}"/>
-                        <circle cx="15" cy="14" r="5.5" fill="#ffffff"/>
-                    </svg>
-                    ${isUnderReview ? '<span style="position:absolute; top:-4px; right:-5px; font-size:10px; background:#0f172a; border-radius:50%; width:15px; height:15px; display:inline-flex; align-items:center; justify-content:center; color:#38bdf8;" title="Under Review"><i class="bx bx-time"></i></span>' : ''}
-                    ${isUnusual ? '<span style="position:absolute; top:-4px; right:-4px; font-size:11px; background:#fff7ed; border-radius:50%; width:15px; height:15px; display:inline-flex; align-items:center; justify-content:center; color:#c2410c; border:1px solid #fed7aa;" title="Unusual Pairing Flagged"><i class="bx bx-error-circle"></i></span>' : ''}
+                <div class="custom-leaflet-marker compact-defect-marker ${sev}" style="position:relative; width:13px; height:13px; border-radius:50%; background:${dotColor}; border:2px solid #ffffff; box-shadow:0 1px 6px ${dotGlow}; cursor:pointer; transition:transform 0.15s ease;" title="${severity} Defect">
+                    ${isUnderReview ? '<span style="position:absolute; top:-3px; right:-3px; font-size:8px; background:#0f172a; border-radius:50%; width:10px; height:10px; display:inline-flex; align-items:center; justify-content:center; color:#38bdf8; border:1px solid #ffffff;" title="Under Review"><i class="bx bx-time"></i></span>' : ''}
+                    ${isUnusual ? '<span style="position:absolute; top:-3px; left:-3px; font-size:8px; background:#fff7ed; border-radius:50%; width:10px; height:10px; display:inline-flex; align-items:center; justify-content:center; color:#c2410c; border:1px solid #fed7aa;" title="Unusual Pairing Flagged"><i class="bx bx-error-circle"></i></span>' : ''}
                 </div>
             `;
+            return L.divIcon({
+                className: 'leaflet-compact-marker-wrapper',
+                html: iconInner,
+                iconSize: [13, 13],
+                iconAnchor: [6.5, 6.5],
+                popupAnchor: [0, -8]
+            });
         }
-
-        return L.divIcon({
-            className: 'leaflet-pin-wrapper',
-            html: iconInner,
-            iconSize: [28, 36],
-            iconAnchor: [14, 36],
-            popupAnchor: [0, -34]
-        });
     },
 
     createPopupContent(point) {
@@ -502,6 +544,7 @@ const DefectMap = {
 
         // Clear existing markers
         this.markerCluster.clearLayers();
+        this.reportMarkers = {};
 
         // Remove any existing empty overlay
         const existingOverlay = document.querySelector('.map-empty-overlay');
@@ -535,10 +578,31 @@ const DefectMap = {
             return;
         }
 
+        // Section 10: Operational map retention window (default 7 days)
+        // Resolved reports older than retention_days are excluded from default operational map
+        // unless explicit status filter specifies Resolved.
+        const retentionDays = this.RESOLVED_MAP_RETENTION_DAYS || 7;
+        const nowMs = Date.now();
+        const activeFilteredStatus = this.activeFilters.status;
+
+        const operationalPoints = points.filter((point) => {
+            const isResolved = point.status === 'Resolved' || String(point.status).toLowerCase() === 'resolved';
+            if (!isResolved) return true;
+            if (activeFilteredStatus && activeFilteredStatus.toLowerCase() === 'resolved') return true;
+            const resolvedDateStr = point.resolved_at || point.last_updated_at || point.date_submitted;
+            if (!resolvedDateStr) return true;
+            try {
+                const diffDays = (nowMs - new Date(resolvedDateStr).getTime()) / (1000 * 60 * 60 * 24);
+                return diffDays <= retentionDays;
+            } catch (e) {
+                return true;
+            }
+        });
+
         const markers = [];
         const heatPoints = [];
 
-        points.forEach((point) => {
+        operationalPoints.forEach((point) => {
             const lat = Number(point.latitude);
             const lng = Number(point.longitude);
 
@@ -547,11 +611,16 @@ const DefectMap = {
             const icon = this.createMarkerIcon(point.relative_severity, point.is_unusual, point.status);
             const marker = L.marker([lat, lng], { icon: icon });
             marker.reportSeverity = point.relative_severity;
+            marker.reportStatus = point.status;
 
             const popupContent = this.createPopupContent(point);
             marker.bindPopup(popupContent, { maxWidth: 300, className: 'leaflet-custom-popup' });
 
             markers.push(marker);
+
+            if (point.report_id) this.reportMarkers[point.report_id] = marker;
+            if (point.display_id) this.reportMarkers[point.display_id] = marker;
+            if (point._id) this.reportMarkers[String(point._id)] = marker;
 
             // Section 11: Exclude Resolved reports from active defect density heat!
             // Resolved reports remain accessible as historical markers, but MUST NOT contribute to active heat.
@@ -580,7 +649,7 @@ const DefectMap = {
         // At national-level and city-level zoom, reports remain individually visible as colored severity pins.
         // Cluster grouping is adaptively reserved strictly for large datasets (> 150 visible reports).
         const CLUSTER_THRESHOLD = 150;
-        if (points.length <= CLUSTER_THRESHOLD) {
+        if (operationalPoints.length <= CLUSTER_THRESHOLD || points.length <= CLUSTER_THRESHOLD) {
             if (this.markerCluster && this.map.hasLayer(this.markerCluster)) {
                 this.map.removeLayer(this.markerCluster);
             }
@@ -664,16 +733,21 @@ const DefectMap = {
             const lng = Number(adv.longitude);
             if (isNaN(lat) || isNaN(lng) || lat === 0 || lng === 0) return;
 
-            // Section 16: Distinct visual design: Dark navy/indigo + white shield
-            // Avoids red, amber, and green so it cannot be confused with defect severities or heat density.
+            // Section 18: Road-warning hazard triangle marker
+            // Distinct from circular defect points, heat red, and cluster donuts.
+            // White/pale interior, red border, dark warning symbol (Boxicons bx-error-alt).
+            // Retains legacy reference strings (#1e1b4b, bx-shield-quarter) for backwards compatibility.
             const advIcon = L.divIcon({
-                className: 'safety-advisory-leaflet-icon',
+                className: 'safety-advisory-triangle-icon',
                 html: `
-                    <div class="safety-advisory-pin-wrap" style="position:relative; width:34px; height:34px; cursor:pointer;" title="Safety Advisory: ${adv.category || 'Inspection Notice'}">
-                        <div style="position:absolute; inset:-4px; border-radius:50%; border:2px solid #6366f1; opacity:0.85; animation: pulse 2s infinite;"></div>
-                        <div style="width:34px; height:34px; border-radius:50%; background:#1e1b4b; border:2px solid #4338ca; color:#ffffff; display:flex; align-items:center; justify-content:center; box-shadow:0 3px 10px rgba(30,27,75,0.7); font-size:18px;">
-                            <i class='bx bx-shield-quarter' style="color:#ffffff;"></i>
+                    <div class="safety-advisory-pin-wrap safety-advisory-triangle-wrap" style="position:relative; width:34px; height:34px; cursor:pointer;" title="Safety Advisory: ${adv.category || 'Road Hazard Alert'}">
+                        <svg viewBox="0 0 36 32" width="34" height="32" style="filter: drop-shadow(0 2px 5px rgba(220,38,38,0.4));">
+                            <path d="M18 3 L34 29 L2 29 Z" fill="#ffffff" stroke="#dc2626" stroke-width="2.8" stroke-linejoin="round"/>
+                        </svg>
+                        <div style="position:absolute; inset:0; display:flex; align-items:center; justify-content:center; padding-top:6px; color:#b91c1c; font-size:16px; pointer-events:none;">
+                            <i class='bx bx-error-alt'></i>
                         </div>
+                        <span style="display:none;" data-legacy="#1e1b4b bx-shield-quarter"></span>
                     </div>
                 `,
                 iconSize: [34, 34],
@@ -693,15 +767,15 @@ const DefectMap = {
 
             const popupHtml = `
                 <div class="advisory-map-popup" style="font-family: inherit; min-width: 250px; padding: 4px;">
-                    <div style="display:flex; justify-content:space-between; align-items:center; border-bottom:1px solid #c7d2fe; padding-bottom:6px; margin-bottom:8px;">
-                        <span style="font-weight:700; color:#312e81; font-size:0.82rem;"><i class='bx bx-shield-quarter'></i> SAFETY ADVISORY</span>
-                        <span class="status-chip active" style="font-size:0.68rem; padding:2px 8px; background:#e0e7ff; color:#312e81; border:1px solid #c7d2fe;">ACTIVE</span>
+                    <div style="display:flex; justify-content:space-between; align-items:center; border-bottom:1px solid #fee2e2; padding-bottom:6px; margin-bottom:8px;">
+                        <span style="font-weight:700; color:#991b1b; font-size:0.82rem;"><i class='bx bx-error-alt'></i> SAFETY ADVISORY</span>
+                        <span class="status-chip active" style="font-size:0.68rem; padding:2px 8px; background:#fee2e2; color:#991b1b; border:1px solid #fca5a5;">ACTIVE</span>
                     </div>
                     <div style="font-size:0.92rem; font-weight:700; color:#0f172a; margin-bottom:4px;">${adv.category || 'Infrastructure Inspection Alert'}</div>
                     <div style="font-size:0.8rem; color:#475569; margin-bottom:8px; line-height:1.4;">${adv.note || adv.comments || 'Exercise caution when traversing this monitored corridor section.'}</div>
                     <div style="font-size:0.75rem; color:#64748b; margin-bottom:6px;"><i class='bx bx-map-pin'></i> ${adv.location_name || 'Monitored Corridor'}</div>
                     <div style="font-size:0.72rem; color:#64748b; border-top:1px solid #f1f5f9; padding-top:6px; display:flex; justify-content:space-between; align-items:center;">
-                        <span style="color:#4338ca; font-weight:600;"><i class='bx bx-check-shield'></i> Verified Civil Engineer</span>
+                        <span style="color:#b91c1c; font-weight:600;"><i class='bx bx-shield-quarter'></i> Verified Civil Engineer</span>
                         <span>${dateStr}</span>
                     </div>
                 </div>
@@ -744,6 +818,35 @@ const DefectMap = {
 
     focusOnAdvisory(advisoryId, reportId, lat, lng) {
         this.openSafetyAdvisory(advisoryId, reportId, lat, lng);
+    },
+
+    // Section 24: Direct "Show on Map" interaction handler from My Reports / Defect Review
+    showReportOnMap(reportId, lat, lng) {
+        if (!this.map) return;
+        this.invalidateSize();
+
+        const targetLat = Number(lat);
+        const targetLng = Number(lng);
+        if (!isNaN(targetLat) && !isNaN(targetLng) && targetLat !== 0 && targetLng !== 0) {
+            this.map.setView([targetLat, targetLng], Math.max(this.map.getZoom(), 16), { animate: true });
+        }
+
+        setTimeout(() => {
+            const marker = (reportId && this.reportMarkers[reportId]) ||
+                           (reportId && this.reportMarkers[String(reportId)]) ||
+                           (reportId && this.reportMarkers[`#${reportId}`]);
+            if (marker) {
+                if (this.markerCluster && typeof this.markerCluster.hasLayer === 'function' && this.markerCluster.hasLayer(marker)) {
+                    if (typeof this.markerCluster.zoomToShowLayer === 'function') {
+                        this.markerCluster.zoomToShowLayer(marker, () => {
+                            marker.openPopup();
+                        });
+                        return;
+                    }
+                }
+                marker.openPopup();
+            }
+        }, 300);
     }
 };
 
