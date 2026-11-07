@@ -371,6 +371,19 @@ const Api = {
         return res.json();
     },
 
+    async getMonitoringIntelligence(params = {}) {
+        const qry = new URLSearchParams(params).toString();
+        const url = qry ? `${API_BASE}/analytics/intelligence?${qry}` : `${API_BASE}/analytics/intelligence`;
+        const res = await this.safeFetch(url, {
+            headers: this.getHeaders()
+        });
+        if (!res.ok) {
+            const err = await res.json().catch(() => ({}));
+            throw new Error(err.error || 'Failed to load monitoring intelligence.');
+        }
+        return res.json();
+    },
+
     // Engineer Defect Review & Assessment Validation (FR-06)
     async submitReview(assessmentId, reviewData) {
         const res = await this.safeFetch(`${API_BASE}/reviews/${assessmentId}`, {

@@ -1,18 +1,23 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>InfraVision | Civil Infrastructure Defect Monitoring System</title>
-    <meta name="description" content="Computer Vision-Based Civil Infrastructure Monitoring System for Automated Structural Defect Detection and Assessment using SSD-MobileNetV2.">
+    <meta name="description"
+        content="Computer Vision-Based Civil Infrastructure Monitoring System for Automated Structural Defect Detection and Assessment using SSD-MobileNetV2.">
     <!-- Google Fonts: Montserrat & JetBrains Mono -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+    <link
+        href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap"
+        rel="stylesheet">
     <link rel="stylesheet" href="css/main.css">
     <link rel="stylesheet" href="css/components.css">
     <!-- Leaflet & Leaflet.markercluster CSS -->
-    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="" />
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+        integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="" />
     <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.css" />
     <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.Default.css" />
     <!-- Boxicons CSS Library -->
@@ -20,6 +25,7 @@
     <!-- Google Identity Services (GIS) Client Library -->
     <script src="https://accounts.google.com/gsi/client" async defer></script>
 </head>
+
 <body class="light-theme">
     <!-- Navigation Bar -->
     <header class="app-header" id="appHeader">
@@ -57,7 +63,8 @@
                 </button>
 
                 <!-- Administrator Navigation (Visible only to authenticated admins) -->
-                <button class="nav-tab role-guarded role-admin hidden" id="tabAdminDashboard" data-view="view-admin-dashboard">
+                <button class="nav-tab role-guarded role-admin hidden" id="tabAdminDashboard"
+                    data-view="view-admin-dashboard">
                     <span class="tab-icon"><i class='bx bx-bar-chart-alt-2'></i></span> Admin Dashboard
                 </button>
                 <button class="nav-tab role-guarded role-admin hidden" id="tabAdmin" data-view="view-admin">
@@ -69,8 +76,11 @@
             <div class="user-session-panel" id="userSessionPanel">
                 <!-- Citizen Report Feedback Notifications (Section 11) -->
                 <div class="notification-panel-wrapper hidden" id="notificationPanelWrapper">
-                    <button type="button" class="btn-notification-bell" id="btnNotificationBell" title="Report notifications" aria-label="Notifications" aria-haspopup="true" aria-expanded="false">
-                        <svg class="bell-icon" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <button type="button" class="btn-notification-bell" id="btnNotificationBell"
+                        title="Report notifications" aria-label="Notifications" aria-haspopup="true"
+                        aria-expanded="false">
+                        <svg class="bell-icon" viewBox="0 0 24 24" width="18" height="18" fill="none"
+                            stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                             <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"></path>
                             <path d="M13.73 21a2 2 0 0 1-3.46 0"></path>
                         </svg>
@@ -89,7 +99,8 @@
 
                 <!-- Authenticated User Display with Interactive Account Dropdown (Section 8) -->
                 <div class="user-profile-wrapper" id="userProfileWrapper">
-                    <div class="user-profile-badge hidden" id="userProfileBadge" tabindex="0" role="button" aria-haspopup="true" aria-expanded="false" title="Click to open account menu">
+                    <div class="user-profile-badge hidden" id="userProfileBadge" tabindex="0" role="button"
+                        aria-haspopup="true" aria-expanded="false" title="Click to open account menu">
                         <span class="user-dot" id="userStatusDot"></span>
                         <div class="user-info-text">
                             <span class="user-name" id="currentUserName">User</span>
@@ -98,7 +109,8 @@
                                 <span class="verification-badge" id="currentVerificationBadge">Verified</span>
                             </div>
                         </div>
-                        <span class="dropdown-caret" style="font-size: 0.65rem; color: #64748b; margin-left: 3px;">▾</span>
+                        <span class="dropdown-caret"
+                            style="font-size: 0.65rem; color: #64748b; margin-left: 3px;">▾</span>
                     </div>
 
                     <!-- Clean Compact Account Dropdown Menu (Section 8) -->
@@ -146,12 +158,17 @@
                     <form id="loginForm" class="auth-form">
                         <!-- Google Identity Services Sign-In Button Container -->
                         <div id="googleSignInContainer" class="google-signin-wrapper">
-                            <button type="button" class="btn-google" id="btnGoogleSignIn" title="Sign in with verified Google account">
+                            <button type="button" class="btn-google" id="btnGoogleSignIn"
+                                title="Sign in with verified Google account">
                                 <svg class="google-icon" viewBox="0 0 24 24">
-                                    <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
-                                    <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/>
-                                    <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.63z"/>
-                                    <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z"/>
+                                    <path fill="#4285F4"
+                                        d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" />
+                                    <path fill="#34A853"
+                                        d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" />
+                                    <path fill="#FBBC05"
+                                        d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.63z" />
+                                    <path fill="#EA4335"
+                                        d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z" />
                                 </svg>
                                 Continue with Google
                             </button>
@@ -160,11 +177,13 @@
 
                         <div class="form-group">
                             <label for="loginEmail" class="field-label">Email Address</label>
-                            <input type="email" id="loginEmail" class="field-input" placeholder="e.g., user@strathmore.edu" required>
+                            <input type="email" id="loginEmail" class="field-input"
+                                placeholder="e.g., user@strathmore.edu" required>
                         </div>
                         <div class="form-group">
                             <label for="loginPassword" class="field-label">Password</label>
-                            <input type="password" id="loginPassword" class="field-input" placeholder="••••••••" required>
+                            <input type="password" id="loginPassword" class="field-input" placeholder="••••••••"
+                                required>
                         </div>
                         <div class="quick-login-hints">
                             <span class="hint-label">Quick test accounts:</span>
@@ -182,23 +201,30 @@
                     <!-- Two-Factor Authentication (2FA) OTP Verification Form -->
                     <form id="twoFactorForm" class="auth-form hidden">
                         <div class="two-factor-banner">
-                            <div class="two-factor-icon"><i class='bx bx-shield-quarter' style="font-size: 2rem; color: var(--primary);"></i></div>
+                            <div class="two-factor-icon"><i class='bx bx-shield-quarter'
+                                    style="font-size: 2rem; color: var(--primary);"></i></div>
                             <div>
                                 <h3 class="two-factor-title">Two-Factor Authentication</h3>
-                                <p class="two-factor-desc">A 6-digit security code has been dispatched to your email address: <strong id="twoFactorEmailDisplay">user@example.com</strong></p>
+                                <p class="two-factor-desc">A 6-digit security code has been dispatched to your email
+                                    address: <strong id="twoFactorEmailDisplay">user@example.com</strong></p>
                             </div>
                         </div>
                         <div class="form-group">
-                            <label for="twoFactorOtpInput" class="field-label">Security Verification Code (6 digits)</label>
+                            <label for="twoFactorOtpInput" class="field-label">Security Verification Code (6
+                                digits)</label>
                             <div class="input-with-button">
-                                <input type="text" id="twoFactorOtpInput" class="field-input text-center font-mono" maxlength="6" placeholder="000000" required>
-                                <button type="button" class="btn-secondary btn-sm" id="btnFillDemoOtp" title="Autofill active security code">
+                                <input type="text" id="twoFactorOtpInput" class="field-input text-center font-mono"
+                                    maxlength="6" placeholder="000000" required>
+                                <button type="button" class="btn-secondary btn-sm" id="btnFillDemoOtp"
+                                    title="Autofill active security code">
                                     Fill Demo Code
                                 </button>
                             </div>
                             <!-- Live Expiry Countdown Display (Section 12) -->
-                            <div class="otp-expiry-container" id="otpExpiryContainer" style="display: flex; justify-content: space-between; align-items: center; margin-top: 0.45rem;">
-                                <span class="otp-countdown-text" id="otpCountdownText" style="font-weight: 700; color: #dc2626; font-size: 0.85rem; font-family: var(--font-mono); display: inline-flex; align-items: center; gap: 4px;">
+                            <div class="otp-expiry-container" id="otpExpiryContainer"
+                                style="display: flex; justify-content: space-between; align-items: center; margin-top: 0.45rem;">
+                                <span class="otp-countdown-text" id="otpCountdownText"
+                                    style="font-weight: 700; color: #dc2626; font-size: 0.85rem; font-family: var(--font-mono); display: inline-flex; align-items: center; gap: 4px;">
                                     <i class='bx bx-time-five'></i> Code expires in 05:00
                                 </span>
                                 <span style="font-size: 0.75rem; color: #64748b;">Single-use verification</span>
@@ -207,16 +233,20 @@
                                 Enter the 6-digit verification code sent to your email.
                             </small>
                         </div>
-                        <div class="resend-otp-container" style="display: flex; align-items: center; justify-content: center; gap: 0.35rem; margin-bottom: 0.85rem; font-size: 0.82rem; color: #475569;">
+                        <div class="resend-otp-container"
+                            style="display: flex; align-items: center; justify-content: center; gap: 0.35rem; margin-bottom: 0.85rem; font-size: 0.82rem; color: #475569;">
                             <span>Didn't receive a code?</span>
-                            <button type="button" id="btnResendOtp" class="btn-resend-link" style="background: none; border: none; padding: 0; color: #0284c7; font-weight: 600; font-size: inherit; cursor: pointer; text-decoration: underline;" disabled>
+                            <button type="button" id="btnResendOtp" class="btn-resend-link"
+                                style="background: none; border: none; padding: 0; color: #0284c7; font-weight: 600; font-size: inherit; cursor: pointer; text-decoration: underline;"
+                                disabled>
                                 <span id="resendTimerText">Resend available in 60s</span>
                             </button>
                         </div>
                         <button type="submit" class="btn-primary btn-block" id="btnVerifyTwoFactor">
                             Verify & Complete Login
                         </button>
-                        <button type="button" class="btn-secondary btn-block" id="btnCancelTwoFactor" style="margin-top: 0.5rem;">
+                        <button type="button" class="btn-secondary btn-block" id="btnCancelTwoFactor"
+                            style="margin-top: 0.5rem;">
                             ← Back to Sign In
                         </button>
                     </form>
@@ -237,12 +267,14 @@
                         </div>
                         <div class="form-group">
                             <label for="regEmail" class="field-label">Email Address *</label>
-                            <input type="email" id="regEmail" class="field-input" placeholder="e.g., user@domain.com" required>
+                            <input type="email" id="regEmail" class="field-input" placeholder="e.g., user@domain.com"
+                                required>
                         </div>
                         <div class="form-group">
                             <label for="regPassword" class="field-label">Password *</label>
-                            <input type="password" id="regPassword" class="field-input" placeholder="••••••••" minlength="8" required>
-                            
+                            <input type="password" id="regPassword" class="field-input" placeholder="••••••••"
+                                minlength="8" required>
+
                             <!-- Live Password Requirement Feedback -->
                             <div class="password-strength-box" id="passwordStrengthBox">
                                 <div class="strength-bar-track">
@@ -279,20 +311,24 @@
                             </div>
                             <div class="form-group">
                                 <label for="regOrg" class="field-label">Organization / Authority</label>
-                                <input type="text" id="regOrg" class="field-input" placeholder="e.g., KeNHA, KURA, KeRRA, County Govt, or Consultant">
+                                <input type="text" id="regOrg" class="field-input"
+                                    placeholder="e.g., KeNHA, KURA, KeRRA, County Govt, or Consultant">
                             </div>
                             <div class="form-group">
                                 <label for="regPhone" class="field-label">Official Contact Phone</label>
-                                <input type="tel" id="regPhone" class="field-input" placeholder="e.g., +254 700 000 000">
+                                <input type="tel" id="regPhone" class="field-input"
+                                    placeholder="e.g., +254 700 000 000">
                             </div>
                             <div class="form-group checkbox-group">
                                 <label class="checkbox-label">
                                     <input type="checkbox" id="regTwoFactor" checked disabled>
-                                    <span>Mandatory Two-Factor Authentication (2FA) enforced for professional engineering roles</span>
+                                    <span>Mandatory Two-Factor Authentication (2FA) enforced for professional
+                                        engineering roles</span>
                                 </label>
                             </div>
                             <div class="notice-callout">
-                                ℹ️ Note: Engineer accounts require manual Administrator accreditation verification before inspection tools are unlocked.
+                                ℹ️ Note: Engineer accounts require manual Administrator accreditation verification
+                                before inspection tools are unlocked.
                             </div>
                         </div>
 
@@ -309,7 +345,8 @@
             <div class="view-header">
                 <div>
                     <h2 class="view-title">Infrastructure Defect Report Submission</h2>
-                    <p class="view-desc">Submit civil infrastructure defect imagery for automated SSD-MobileNetV2 analysis</p>
+                    <p class="view-desc">Submit civil infrastructure defect imagery for automated SSD-MobileNetV2
+                        analysis</p>
                 </div>
                 <div class="pipeline-badge">
                     <span class="badge-dot pulse"></span>
@@ -338,30 +375,40 @@
                         <div class="form-group">
                             <label for="defectLocation" class="field-label">DEFECT LOCATION *</label>
                             <div class="input-with-button">
-                                <input type="text" id="defectLocation" class="field-input" placeholder="e.g., Uhuru Highway near Nyayo Stadium" required>
-                                <button type="button" class="btn-secondary" id="btnAutoGps" title="Pinpoint defect location on interactive map">
+                                <input type="text" id="defectLocation" class="field-input"
+                                    placeholder="e.g., Uhuru Highway near Nyayo Stadium" required>
+                                <button type="button" class="btn-secondary" id="btnAutoGps"
+                                    title="Pinpoint defect location on interactive map">
                                     <span id="btnAutoGpsText"><i class='bx bx-map-pin'></i> Tag Location</span>
                                 </button>
                             </div>
                         </div>
 
                         <div class="form-group">
-                            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.35rem;">
+                            <div
+                                style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.35rem;">
                                 <label class="field-label" style="margin-bottom: 0;">DEFECT VISUAL EVIDENCE *</label>
                                 <span class="image-count-badge" id="imageCountBadge">0 / 3 photos</span>
                             </div>
                             <p class="field-help-text" style="margin-bottom: 0.65rem;">
-                                You may upload up to 3 photos of the same defect. One photo is sufficient, but additional angles can provide better context — for example, one wider/top-down view and one side or closer view. Only take additional photos when it is safe to do so.
+                                You may upload up to 3 photos of the same defect. One photo is sufficient, but
+                                additional angles can provide better context — for example, one wider/top-down view and
+                                one side or closer view. Only take additional photos when it is safe to do so.
                             </p>
                             <div class="upload-dropzone" id="uploadDropzone">
-                                <input type="file" id="imageFileInput" accept="image/png, image/jpeg, image/jpg, image/webp" multiple class="file-input-hidden">
+                                <input type="file" id="imageFileInput"
+                                    accept="image/png, image/jpeg, image/jpg, image/webp" multiple
+                                    class="file-input-hidden">
                                 <div class="dropzone-content" id="dropzonePrompt">
                                     <div class="upload-icon-circle"><i class='bx bx-camera'></i></div>
                                     <p class="upload-title">Upload Defect Photo(s)</p>
-                                    <p class="upload-meta">Upload 1 to 3 photos (PNG, JPG, JPEG, WEBP under 16MB each)</p>
+                                    <p class="upload-meta">Upload 1 to 3 photos (PNG, JPG, JPEG, WEBP under 16MB each)
+                                    </p>
                                     <div class="button-row">
-                                        <button type="button" class="btn-micro" id="btnTriggerUpload">Choose File(s) / Camera</button>
-                                        <button type="button" class="btn-micro btn-accent" id="btnSamplePhoto">Load Test Sample</button>
+                                        <button type="button" class="btn-micro" id="btnTriggerUpload">Choose File(s) /
+                                            Camera</button>
+                                        <button type="button" class="btn-micro btn-accent" id="btnSamplePhoto">Load Test
+                                            Sample</button>
                                     </div>
                                 </div>
                                 <div class="multi-preview-grid hidden" id="multiPreviewGrid">
@@ -374,26 +421,43 @@
                                 </div>
 
                                 <!-- Multi-Image Relationship Specification (FR: Coordinator Requirement) -->
-                                <div class="multi-image-relationship-box hidden" id="multiImageRelationshipGroup" style="margin-top: 0.85rem; background: rgba(15, 23, 42, 0.75); border: 1px solid #334155; border-radius: 8px; padding: 0.85rem 1rem;">
-                                    <span style="font-size: 0.8rem; font-weight: 700; color: #38bdf8; display: block; margin-bottom: 0.35rem; letter-spacing: 0.04em;">
+                                <div class="multi-image-relationship-box hidden" id="multiImageRelationshipGroup"
+                                    style="margin-top: 0.85rem; background: rgba(15, 23, 42, 0.75); border: 1px solid #334155; border-radius: 8px; padding: 0.85rem 1rem;">
+                                    <span
+                                        style="font-size: 0.8rem; font-weight: 700; color: #38bdf8; display: block; margin-bottom: 0.35rem; letter-spacing: 0.04em;">
                                         WHAT DO THESE PHOTOS SHOW?
                                     </span>
-                                    <div style="display: flex; flex-direction: column; gap: 0.5rem; margin-top: 0.25rem;">
-                                        <label style="display: flex; align-items: flex-start; gap: 0.6rem; cursor: pointer; font-size: 0.82rem; color: #f1f5f9;">
-                                            <input type="radio" name="multiImageRelationship" value="same_defect" checked style="margin-top: 2px;">
-                                            <span><strong>Multiple views of the same defect / location</strong><br><small style="color: #94a3b8;">Multiple angles, close-up, and wide perspectives combined into one defect assessment.</small></span>
+                                    <div
+                                        style="display: flex; flex-direction: column; gap: 0.5rem; margin-top: 0.25rem;">
+                                        <label
+                                            style="display: flex; align-items: flex-start; gap: 0.6rem; cursor: pointer; font-size: 0.82rem; color: #f1f5f9;">
+                                            <input type="radio" name="multiImageRelationship" value="same_defect"
+                                                checked style="margin-top: 2px;">
+                                            <span><strong>Multiple views of the same defect /
+                                                    location</strong><br><small style="color: #94a3b8;">Multiple angles,
+                                                    close-up, and wide perspectives combined into one defect
+                                                    assessment.</small></span>
                                         </label>
-                                        <label style="display: flex; align-items: flex-start; gap: 0.6rem; cursor: pointer; font-size: 0.82rem; color: #f1f5f9;">
-                                            <input type="radio" name="multiImageRelationship" value="multi_defect" style="margin-top: 2px;">
-                                            <span><strong>Different defects or observations in this report</strong><br><small style="color: #94a3b8;">Distinct defect types or separate observations along the same infrastructure corridor.</small></span>
+                                        <label
+                                            style="display: flex; align-items: flex-start; gap: 0.6rem; cursor: pointer; font-size: 0.82rem; color: #f1f5f9;">
+                                            <input type="radio" name="multiImageRelationship" value="multi_defect"
+                                                style="margin-top: 2px;">
+                                            <span><strong>Different defects or observations in this
+                                                    report</strong><br><small style="color: #94a3b8;">Distinct defect
+                                                    types or separate observations along the same infrastructure
+                                                    corridor.</small></span>
                                         </label>
                                     </div>
-                                    <p style="margin: 0.6rem 0 0 0; font-size: 0.75rem; color: #cbd5e1; border-top: 1px dashed #334155; padding-top: 0.4rem;">
-                                        <i class='bx bx-info-circle'></i> <em>Upload several photos when they show the same defect, nearby defects, or the same infrastructure location. Defects from different locations should be submitted as separate reports.</em>
+                                    <p
+                                        style="margin: 0.6rem 0 0 0; font-size: 0.75rem; color: #cbd5e1; border-top: 1px dashed #334155; padding-top: 0.4rem;">
+                                        <i class='bx bx-info-circle'></i> <em>Upload several photos when they show the
+                                            same defect, nearby defects, or the same infrastructure location. Defects
+                                            from different locations should be submitted as separate reports.</em>
                                     </p>
 
                                     <!-- Uber-Stops Style Dynamic Observations Container (Expands for multi_defect mode) -->
-                                    <div id="multiDefectObservationsContainer" class="hidden" style="margin-top: 0.85rem; display: flex; flex-direction: column; gap: 0.75rem;">
+                                    <div id="multiDefectObservationsContainer" class="hidden"
+                                        style="margin-top: 0.85rem; display: flex; flex-direction: column; gap: 0.75rem;">
                                         <!-- Dynamically populated observation cards: Observation 1, Observation 2, Observation 3 -->
                                     </div>
                                 </div>
@@ -401,10 +465,13 @@
                         </div>
 
                         <div class="form-group">
-                            <label for="defectNotes" class="field-label">DESCRIPTION / FIELD OBSERVATIONS (OPTIONAL)</label>
-                            <textarea id="defectNotes" class="field-textarea" rows="3" placeholder="Describe what you can see — e.g., approximate size/extent, whether the defect is getting worse, nearby landmarks, traffic or safety impact, how visible the defect is, or if it is actively being avoided by pedestrians/drivers..."></textarea>
+                            <label for="defectNotes" class="field-label">DESCRIPTION / FIELD OBSERVATIONS
+                                (OPTIONAL)</label>
+                            <textarea id="defectNotes" class="field-textarea" rows="3"
+                                placeholder="Describe what you can see — e.g., approximate size/extent, whether the defect is getting worse, nearby landmarks, traffic or safety impact, how visible the defect is, or if it is actively being avoided by pedestrians/drivers..."></textarea>
                             <small class="field-help-text">
-                                Visible context helps civil engineers prioritize inspection (e.g. vehicles swerving to avoid hazard, depth, or active weathering).
+                                Visible context helps civil engineers prioritize inspection (e.g. vehicles swerving to
+                                avoid hazard, depth, or active weathering).
                             </small>
                         </div>
 
@@ -430,20 +497,26 @@
                         <div class="detection-canvas-container" id="canvasContainer" style="position: relative;">
                             <canvas id="detectionCanvas" class="detection-canvas"></canvas>
                             <!-- Citizen Photo Carousel Navigation Overlay -->
-                            <div id="citizenCarouselNav" class="citizen-carousel-nav hidden" style="position: absolute; top: 50%; transform: translateY(-50%); width: 100%; display: flex; justify-content: space-between; padding: 0 0.5rem; pointer-events: none; z-index: 10;">
-                                <button type="button" id="btnCitizenPrev" class="carousel-nav-btn" title="Previous photo" style="pointer-events: auto; background: rgba(15, 23, 42, 0.85); color: #f8fafc; border: 1px solid #475569; border-radius: 50%; width: 34px; height: 34px; font-size: 1.15rem; line-height: 1; cursor: pointer; display: flex; align-items: center; justify-content: center; box-shadow: 0 4px 6px rgba(0,0,0,0.3); transition: background 0.15s ease;">‹</button>
-                                <button type="button" id="btnCitizenNext" class="carousel-nav-btn" title="Next photo" style="pointer-events: auto; background: rgba(15, 23, 42, 0.85); color: #f8fafc; border: 1px solid #475569; border-radius: 50%; width: 34px; height: 34px; font-size: 1.15rem; line-height: 1; cursor: pointer; display: flex; align-items: center; justify-content: center; box-shadow: 0 4px 6px rgba(0,0,0,0.3); transition: background 0.15s ease;">›</button>
+                            <div id="citizenCarouselNav" class="citizen-carousel-nav hidden"
+                                style="position: absolute; top: 50%; transform: translateY(-50%); width: 100%; display: flex; justify-content: space-between; padding: 0 0.5rem; pointer-events: none; z-index: 10;">
+                                <button type="button" id="btnCitizenPrev" class="carousel-nav-btn"
+                                    title="Previous photo"
+                                    style="pointer-events: auto; background: rgba(15, 23, 42, 0.85); color: #f8fafc; border: 1px solid #475569; border-radius: 50%; width: 34px; height: 34px; font-size: 1.15rem; line-height: 1; cursor: pointer; display: flex; align-items: center; justify-content: center; box-shadow: 0 4px 6px rgba(0,0,0,0.3); transition: background 0.15s ease;">‹</button>
+                                <button type="button" id="btnCitizenNext" class="carousel-nav-btn" title="Next photo"
+                                    style="pointer-events: auto; background: rgba(15, 23, 42, 0.85); color: #f8fafc; border: 1px solid #475569; border-radius: 50%; width: 34px; height: 34px; font-size: 1.15rem; line-height: 1; cursor: pointer; display: flex; align-items: center; justify-content: center; box-shadow: 0 4px 6px rgba(0,0,0,0.3); transition: background 0.15s ease;">›</button>
                             </div>
                             <div class="canvas-placeholder" id="canvasPlaceholder">
                                 <div class="scan-icon-wrapper" aria-hidden="true">
-                                    <svg class="scan-search-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                    <svg class="scan-search-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                                        stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                                         <path d="M3 7V5a2 2 0 0 1 2-2h2"></path>
                                         <path d="M17 3h2a2 2 0 0 1 2 2v2"></path>
                                         <path d="M21 17v2a2 2 0 0 1-2 2h-2"></path>
                                         <path d="M7 21H5a2 2 0 0 1-2-2v-2"></path>
                                         <circle cx="11" cy="11" r="3.5"></circle>
                                         <line x1="13.5" y1="13.5" x2="17.5" y2="17.5"></line>
-                                        <line x1="3" y1="12" x2="21" y2="12" stroke-dasharray="2 2" stroke-opacity="0.5"></line>
+                                        <line x1="3" y1="12" x2="21" y2="12" stroke-dasharray="2 2"
+                                            stroke-opacity="0.5"></line>
                                     </svg>
                                 </div>
                                 <h3 class="placeholder-heading">AI Defect Detection</h3>
@@ -451,12 +524,18 @@
                             </div>
                         </div>
                         <!-- Multi-Image Evidence Navigation Strip & Dots -->
-                        <div id="citizenImageGalleryStrip" class="citizen-gallery-strip hidden" style="display:none; flex-direction:column; gap:0.4rem; margin-top:0.5rem; background:#0f172a; padding:0.5rem 0.75rem; border-radius:6px; border:1px solid #1e293b;">
-                            <div style="display: flex; align-items: center; justify-content: space-between; width: 100%;">
-                                <span style="font-size:0.75rem; color:#94a3b8; font-weight:600; text-transform:uppercase;" id="citizenGalleryTitle">Evidence Views:</span>
-                                <span style="font-size:0.75rem; color:#38bdf8; font-weight:600;" id="citizenGalleryCounter">Photo 1 of 3</span>
+                        <div id="citizenImageGalleryStrip" class="citizen-gallery-strip hidden"
+                            style="display:none; flex-direction:column; gap:0.4rem; margin-top:0.5rem; background:#0f172a; padding:0.5rem 0.75rem; border-radius:6px; border:1px solid #1e293b;">
+                            <div
+                                style="display: flex; align-items: center; justify-content: space-between; width: 100%;">
+                                <span
+                                    style="font-size:0.75rem; color:#94a3b8; font-weight:600; text-transform:uppercase;"
+                                    id="citizenGalleryTitle">Evidence Views:</span>
+                                <span style="font-size:0.75rem; color:#38bdf8; font-weight:600;"
+                                    id="citizenGalleryCounter">Photo 1 of 3</span>
                             </div>
-                            <div id="citizenPaginationDots" style="display: flex; justify-content: center; gap: 6px;"></div>
+                            <div id="citizenPaginationDots" style="display: flex; justify-content: center; gap: 6px;">
+                            </div>
                         </div>
                         <!-- Multi-Detection Summary Badge Chips -->
                         <div class="multi-detection-badges" id="multiDetectionsList"></div>
@@ -483,31 +562,43 @@
                     </div>
 
                     <!-- Combined Multi-View Assessment Card (Report-Level Evidence Aggregation) -->
-                    <div id="combinedMultiViewCard" class="combined-multiview-card hidden" style="margin-top: 1rem; background: #0f172a; border: 1px solid #334155; border-radius: 8px; padding: 1rem; color: #f1f5f9;">
-                        <div style="display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid #1e293b; padding-bottom: 0.5rem; margin-bottom: 0.75rem;">
+                    <div id="combinedMultiViewCard" class="combined-multiview-card hidden"
+                        style="margin-top: 1rem; background: #0f172a; border: 1px solid #334155; border-radius: 8px; padding: 1rem; color: #f1f5f9;">
+                        <div
+                            style="display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid #1e293b; padding-bottom: 0.5rem; margin-bottom: 0.75rem;">
                             <div style="display: flex; align-items: center; gap: 6px;">
                                 <i class='bx bx-layer' style="color: #38bdf8; font-size: 1.1rem;"></i>
-                                <span style="font-size: 0.85rem; font-weight: 700; color: #38bdf8; text-transform: uppercase; letter-spacing: 0.05em;">Combined Multi-View Assessment</span>
+                                <span
+                                    style="font-size: 0.85rem; font-weight: 700; color: #38bdf8; text-transform: uppercase; letter-spacing: 0.05em;">Combined
+                                    Multi-View Assessment</span>
                             </div>
-                            <span id="combinedMultiViewSeverityPill" class="severity-pill critical" style="font-size: 0.75rem;">CRITICAL</span>
+                            <span id="combinedMultiViewSeverityPill" class="severity-pill critical"
+                                style="font-size: 0.75rem;">CRITICAL</span>
                         </div>
                         <div style="font-size: 0.78rem; color: #94a3b8; margin-bottom: 0.75rem;">
-                            Application-level evidence aggregation across <span id="combinedMultiViewCount" style="color: #f1f5f9; font-weight: 600;">3</span> independent photographic views.
+                            Application-level evidence aggregation across <span id="combinedMultiViewCount"
+                                style="color: #f1f5f9; font-weight: 600;">3</span> independent photographic views.
                         </div>
-                        <div id="combinedMultiViewClassesList" style="display: flex; flex-direction: column; gap: 0.6rem;"></div>
+                        <div id="combinedMultiViewClassesList"
+                            style="display: flex; flex-direction: column; gap: 0.6rem;"></div>
                     </div>
 
                     <!-- Batch Submission Completion Screen -->
-                    <div id="batchCompletionCard" class="batch-completion-card hidden" style="margin-top: 1rem; background: #0f172a; border: 1px solid #10b981; border-radius: 8px; padding: 1.25rem; color: #f1f5f9;">
+                    <div id="batchCompletionCard" class="batch-completion-card hidden"
+                        style="margin-top: 1rem; background: #0f172a; border: 1px solid #10b981; border-radius: 8px; padding: 1.25rem; color: #f1f5f9;">
                         <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 0.75rem;">
                             <i class='bx bx-check-circle' style="color: #10b981; font-size: 1.5rem;"></i>
-                            <h3 style="font-size: 1.05rem; font-weight: 700; margin: 0; color: #f8fafc;" id="batchCompletionHeading">3 Infrastructure Observations Submitted Successfully</h3>
+                            <h3 style="font-size: 1.05rem; font-weight: 700; margin: 0; color: #f8fafc;"
+                                id="batchCompletionHeading">3 Infrastructure Observations Submitted Successfully</h3>
                         </div>
                         <p style="font-size: 0.82rem; color: #94a3b8; margin-bottom: 1rem;">
-                            Each observation has been registered as an independent infrastructure report with its own location and AI assessment.
+                            Each observation has been registered as an independent infrastructure report with its own
+                            location and AI assessment.
                         </p>
-                        <div id="batchObservationsList" style="display: flex; flex-direction: column; gap: 0.5rem; margin-bottom: 1.25rem;"></div>
-                        <button type="button" class="btn-success btn-block" id="btnViewBatchInTracking">View My Reports →</button>
+                        <div id="batchObservationsList"
+                            style="display: flex; flex-direction: column; gap: 0.5rem; margin-bottom: 1.25rem;"></div>
+                        <button type="button" class="btn-success btn-block" id="btnViewBatchInTracking">View My Reports
+                            →</button>
                     </div>
 
                     <!-- Integrity Flag Banner for Unusual Combinations (e.g. Building + Pothole) -->
@@ -520,7 +611,8 @@
                             Unusual combination detected: Pothole on Building structure.
                         </p>
                         <p class="flag-sub">
-                            This report is retained under canonical status <strong>Received</strong> and flagged for civil engineer verification.
+                            This report is retained under canonical status <strong>Received</strong> and flagged for
+                            civil engineer verification.
                         </p>
                     </div>
 
@@ -528,13 +620,15 @@
                     <div class="system-notice-box" id="systemNoticeBox">
                         <p class="notice-title">Technical Disclaimer:</p>
                         <p class="notice-text" id="noticeText">
-                            AI assessment is an automated preliminary estimate based on image-derived relative visual severity and is subject to professional review and validation by a certified civil engineer.
+                            AI assessment is an automated preliminary estimate based on image-derived relative visual
+                            severity and is subject to professional review and validation by a certified civil engineer.
                         </p>
                     </div>
 
                     <div class="action-buttons-row">
                         <button type="button" class="btn-secondary" id="btnResetForm">Submit Another Defect</button>
-                        <button type="button" class="btn-success" id="btnViewTrackingAfterSubmit" disabled>View My Reports →</button>
+                        <button type="button" class="btn-success" id="btnViewTrackingAfterSubmit" disabled>View My
+                            Reports →</button>
                     </div>
                 </div>
             </div>
@@ -545,26 +639,33 @@
             <div class="view-header">
                 <div>
                     <h2 class="view-title">My Infrastructure Reports</h2>
-                    <p class="view-desc">Monitor the lifecycle status and professional engineering validation of your submitted defect reports</p>
+                    <p class="view-desc">Monitor the lifecycle status and professional engineering validation of your
+                        submitted defect reports</p>
                 </div>
                 <div style="display: flex; align-items: center; gap: 0.75rem;">
                     <!-- Section 20: List | Gallery View Switch -->
-                    <div class="view-mode-toggle" id="trackingViewModeToggle" style="display: flex; background: #0f172a; border: 1px solid #334155; border-radius: 6px; padding: 2px;">
-                        <button type="button" class="btn-view-toggle active" id="btnTrackingListView" title="List View" style="padding: 4px 10px; font-size: 0.78rem; border-radius: 4px; border: none; background: #2563eb; color: #ffffff; cursor: pointer; display: flex; align-items: center; gap: 4px;">
+                    <div class="view-mode-toggle" id="trackingViewModeToggle"
+                        style="display: flex; background: #0f172a; border: 1px solid #334155; border-radius: 6px; padding: 2px;">
+                        <button type="button" class="btn-view-toggle active" id="btnTrackingListView" title="List View"
+                            style="padding: 4px 10px; font-size: 0.78rem; border-radius: 4px; border: none; background: #2563eb; color: #ffffff; cursor: pointer; display: flex; align-items: center; gap: 4px;">
                             <i class='bx bx-list-ul'></i> List
                         </button>
-                        <button type="button" class="btn-view-toggle" id="btnTrackingGalleryView" title="Gallery View" style="padding: 4px 10px; font-size: 0.78rem; border-radius: 4px; border: none; background: transparent; color: #94a3b8; cursor: pointer; display: flex; align-items: center; gap: 4px;">
+                        <button type="button" class="btn-view-toggle" id="btnTrackingGalleryView" title="Gallery View"
+                            style="padding: 4px 10px; font-size: 0.78rem; border-radius: 4px; border: none; background: transparent; color: #94a3b8; cursor: pointer; display: flex; align-items: center; gap: 4px;">
                             <i class='bx bx-grid-alt'></i> Gallery
                         </button>
                     </div>
-                    <button class="btn-secondary btn-sm" id="btnRefreshTracking"><i class='bx bx-refresh'></i> Refresh Status</button>
+                    <button class="btn-secondary btn-sm" id="btnRefreshTracking"><i class='bx bx-refresh'></i> Refresh
+                        Status</button>
                 </div>
             </div>
 
             <!-- Section 21 & 22: Master-Detail Explorer Layout -->
-            <div class="tracking-layout-container" id="trackingLayoutContainer" style="display: flex; gap: 1.25rem; align-items: flex-start; width: 100%;">
+            <div class="tracking-layout-container" id="trackingLayoutContainer"
+                style="display: flex; gap: 1.25rem; align-items: flex-start; width: 100%;">
                 <!-- Left: Reports Explorer Column -->
-                <div class="tracking-explorer-col" id="trackingExplorerCol" style="flex: 1 1 100%; min-width: 0; transition: all 0.25s ease;">
+                <div class="tracking-explorer-col" id="trackingExplorerCol"
+                    style="flex: 1 1 100%; min-width: 0; transition: all 0.25s ease;">
                     <!-- List View Container -->
                     <div class="glass-card table-card" id="trackingListContainer">
                         <div class="table-container">
@@ -588,14 +689,16 @@
 
                     <!-- Gallery View Container (Section 20) -->
                     <div id="trackingGalleryContainer" class="hidden">
-                        <div class="citizen-reports-grid" id="trackingGalleryGrid" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 1rem;">
+                        <div class="citizen-reports-grid" id="trackingGalleryGrid"
+                            style="display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 1rem;">
                             <!-- Populated dynamically via JS -->
                         </div>
                     </div>
                 </div>
 
                 <!-- Right: Selected Report Detail Panel (Section 21, 22, 23) -->
-                <div class="tracking-detail-col hidden" id="trackingDetailCol" style="flex: 1 1 42%; max-width: 42%; min-width: 320px; transition: all 0.25s ease;">
+                <div class="tracking-detail-col hidden" id="trackingDetailCol"
+                    style="flex: 1 1 42%; max-width: 42%; min-width: 320px; transition: all 0.25s ease;">
                     <div class="tracking-active-card glass-card" id="trackingActiveDetailCard">
                         <!-- Populated dynamically via App.selectTrackingReport -->
                     </div>
@@ -608,11 +711,13 @@
             <div class="view-header">
                 <div>
                     <h2 class="view-title">Infrastructure Defect & Hotspot Map</h2>
-                    <p class="view-desc">Geographic distribution of reported infrastructure defects and civil inspection statuses</p>
+                    <p class="view-desc">Geographic distribution of reported infrastructure defects and civil inspection
+                        statuses</p>
                 </div>
                 <div style="display:flex; align-items:center; gap:0.75rem;">
                     <span class="badge-tag" id="mapReportCount">0 Reports</span>
-                    <button class="btn-secondary btn-sm" id="btnRefreshMap"><i class='bx bx-refresh'></i> Refresh Map</button>
+                    <button class="btn-secondary btn-sm" id="btnRefreshMap"><i class='bx bx-refresh'></i> Refresh
+                        Map</button>
                 </div>
             </div>
 
@@ -645,42 +750,67 @@
                             <option value="Bridge">Bridge / Viaduct</option>
                             <option value="Building">Building / Wall</option>
                         </select>
-                        <button type="button" class="btn-micro" id="btnResetMapFilters" title="Clear all filters">Reset</button>
-                        <button type="button" class="btn-micro active-hotspot" id="btnToggleHotspot" title="Hide defect density hotspot surface" aria-pressed="true"><i class="bx bxs-hot"></i> Hide Hotspots</button>
+                        <button type="button" class="btn-micro" id="btnResetMapFilters"
+                            title="Clear all filters">Reset</button>
+                        <button type="button" class="btn-micro active-hotspot" id="btnToggleHotspot"
+                            title="Hide defect density hotspot surface" aria-pressed="true"><i class="bx bxs-hot"></i>
+                            Hide Hotspots</button>
                     </div>
                 </div>
                 <div class="map-container" id="infrastructureMapContainer">
                     <!-- Leaflet + OpenStreetMap interactive infrastructure map -->
                 </div>
-                <div class="map-legend-bar" style="display: flex; flex-wrap: wrap; gap: 0.85rem; align-items: center; padding: 0.65rem 1rem; background: rgba(248, 250, 252, 0.95); border-top: 1px solid #e2e8f0;">
+                <div class="map-legend-bar"
+                    style="display: flex; flex-wrap: wrap; gap: 0.85rem; align-items: center; padding: 0.65rem 1rem; background: rgba(248, 250, 252, 0.95); border-top: 1px solid #e2e8f0;">
                     <!-- Section 8 & 17: Individual Report Severity -->
                     <div style="display: flex; align-items: center; gap: 7px;">
-                        <span style="font-size: 0.73rem; font-weight: 700; color: #1e293b; text-transform: uppercase;">Individual Reports:</span>
-                        <span class="map-legend-dot" style="background: #ef4444;" title="Critical Visual Severity"></span> <span style="font-size: 0.74rem; font-weight: 600; color: #334155;">Critical</span>
-                        <span class="map-legend-dot" style="background: #f59e0b;" title="Medium Visual Severity"></span> <span style="font-size: 0.74rem; font-weight: 600; color: #334155;">Medium</span>
-                        <span class="map-legend-dot" style="background: #0284c7;" title="Low Visual Severity"></span> <span style="font-size: 0.74rem; font-weight: 600; color: #334155;">Low</span>
-                        <span class="map-legend-dot" style="background: #10b981; display: inline-flex; align-items: center; justify-content: center; color: #ffffff; font-size: 9px;" title="Recently Resolved (&le; 7 days)"><i class='bx bx-check'></i></span> <span style="font-size: 0.74rem; font-weight: 600; color: #334155;">Recently Resolved</span>
+                        <span
+                            style="font-size: 0.73rem; font-weight: 700; color: #1e293b; text-transform: uppercase;">Individual
+                            Reports:</span>
+                        <span class="map-legend-dot" style="background: #ef4444;"
+                            title="Critical Visual Severity"></span> <span
+                            style="font-size: 0.74rem; font-weight: 600; color: #334155;">Critical</span>
+                        <span class="map-legend-dot" style="background: #f59e0b;" title="Medium Visual Severity"></span>
+                        <span style="font-size: 0.74rem; font-weight: 600; color: #334155;">Medium</span>
+                        <span class="map-legend-dot" style="background: #0284c7;" title="Low Visual Severity"></span>
+                        <span style="font-size: 0.74rem; font-weight: 600; color: #334155;">Low</span>
+                        <span class="map-legend-dot"
+                            style="background: #10b981; display: inline-flex; align-items: center; justify-content: center; color: #ffffff; font-size: 9px;"
+                            title="Recently Resolved (&le; 7 days)"><i class='bx bx-check'></i></span> <span
+                            style="font-size: 0.74rem; font-weight: 600; color: #334155;">Recently Resolved</span>
                     </div>
                     <!-- Section 15 & 17: Cluster Donut -->
-                    <div style="display: flex; align-items: center; gap: 6px; padding-left: 8px; border-left: 1px solid #cbd5e1;">
-                        <span style="display: inline-flex; align-items: center; justify-content: center; width: 16px; height: 16px; border-radius: 50%; background: conic-gradient(#ef4444 0% 25%, #f59e0b 25% 60%, #0284c7 60% 100%); padding: 2px;">
-                            <span style="width: 10px; height: 10px; border-radius: 50%; background: #ffffff; display: block;"></span>
+                    <div
+                        style="display: flex; align-items: center; gap: 6px; padding-left: 8px; border-left: 1px solid #cbd5e1;">
+                        <span
+                            style="display: inline-flex; align-items: center; justify-content: center; width: 16px; height: 16px; border-radius: 50%; background: conic-gradient(#ef4444 0% 25%, #f59e0b 25% 60%, #0284c7 60% 100%); padding: 2px;">
+                            <span
+                                style="width: 10px; height: 10px; border-radius: 50%; background: #ffffff; display: block;"></span>
                         </span>
-                        <span style="font-size: 0.74rem; color: #334155;"><strong>Cluster:</strong> Number = count &bull; Ring = severity composition</span>
+                        <span style="font-size: 0.74rem; color: #334155;"><strong>Cluster:</strong> Number = count
+                            &bull; Ring = severity composition</span>
                     </div>
                     <!-- Section 18: Safety Advisory Road Hazard Triangle -->
-                    <div style="display: flex; align-items: center; gap: 6px; padding-left: 8px; border-left: 1px solid #cbd5e1;">
-                        <span style="display: inline-flex; align-items: center; justify-content: center; width: 16px; height: 15px; color: #dc2626; font-size: 14px;">
+                    <div
+                        style="display: flex; align-items: center; gap: 6px; padding-left: 8px; border-left: 1px solid #cbd5e1;">
+                        <span
+                            style="display: inline-flex; align-items: center; justify-content: center; width: 16px; height: 15px; color: #dc2626; font-size: 14px;">
                             <i class='bx bx-error-alt'></i>
                         </span>
                         <span style="font-size: 0.74rem; font-weight: 700; color: #b91c1c;">Safety Advisory</span>
                     </div>
                     <!-- Section 12 & 17: Active Defect Density -->
-                    <div class="map-legend-item" id="hotspotLegendItem" style="display: flex; align-items: center; gap: 6px; padding-left: 8px; border-left: 1px solid #cbd5e1;">
-                        <span style="font-size: 0.73rem; font-weight: 700; color: #1e293b; text-transform: uppercase;">Active Defect Density:</span>
-                        <span class="map-legend-dot" style="background: #0284c7;"></span> <span style="font-size: 0.74rem; color: #334155;">Low</span>
-                        <span class="map-legend-dot" style="background: #f59e0b;"></span> <span style="font-size: 0.74rem; color: #334155;">Moderate</span>
-                        <span class="map-legend-dot" style="background: #ef4444;"></span> <span style="font-size: 0.74rem; color: #334155;">High Priority</span>
+                    <div class="map-legend-item" id="hotspotLegendItem"
+                        style="display: flex; align-items: center; gap: 6px; padding-left: 8px; border-left: 1px solid #cbd5e1;">
+                        <span
+                            style="font-size: 0.73rem; font-weight: 700; color: #1e293b; text-transform: uppercase;">Active
+                            Defect Density:</span>
+                        <span class="map-legend-dot" style="background: #0284c7;"></span> <span
+                            style="font-size: 0.74rem; color: #334155;">Low</span>
+                        <span class="map-legend-dot" style="background: #f59e0b;"></span> <span
+                            style="font-size: 0.74rem; color: #334155;">Moderate</span>
+                        <span class="map-legend-dot" style="background: #ef4444;"></span> <span
+                            style="font-size: 0.74rem; color: #334155;">High Priority</span>
                     </div>
                     <div class="map-legend-item" style="margin-left: auto; color: #64748b; font-size: 0.72rem;">
                         <i class="bx bx-shield-quarter"></i> Citizen Privacy Mode: Reporter identities protected.
@@ -694,7 +824,8 @@
             <div class="view-header">
                 <div>
                     <h2 class="view-title">User Account & Settings</h2>
-                    <p class="view-desc">Manage your personal infrastructure monitoring profile, professional credentials, and account security</p>
+                    <p class="view-desc">Manage your personal infrastructure monitoring profile, professional
+                        credentials, and account security</p>
                 </div>
             </div>
 
@@ -709,10 +840,12 @@
                         </div>
                     </div>
                     <nav class="settings-nav">
-                        <button type="button" class="settings-nav-btn active" id="tabProfileInfo" data-target="panelProfileInfo">
+                        <button type="button" class="settings-nav-btn active" id="tabProfileInfo"
+                            data-target="panelProfileInfo">
                             <span><i class='bx bx-user'></i></span> Profile Information
                         </button>
-                        <button type="button" class="settings-nav-btn" id="tabProfileSecurity" data-target="panelProfileSecurity">
+                        <button type="button" class="settings-nav-btn" id="tabProfileSecurity"
+                            data-target="panelProfileSecurity">
                             <span><i class='bx bx-shield-quarter'></i></span> Security & Credentials
                         </button>
                     </nav>
@@ -751,35 +884,44 @@
                             </div>
 
                             <!-- Professional Engineer Details (Visible for Engineers) -->
-                            <div id="profEngineerDetails" class="professional-details-box hidden" style="margin-top: 1rem; padding: 1.25rem; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: var(--radius-sm);">
-                                <h4 style="margin: 0 0 0.75rem 0; font-size: 0.95rem; color: #0f172a;">EBK Professional Accreditation</h4>
+                            <div id="profEngineerDetails" class="professional-details-box hidden"
+                                style="margin-top: 1rem; padding: 1.25rem; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: var(--radius-sm);">
+                                <h4 style="margin: 0 0 0.75rem 0; font-size: 0.95rem; color: #0f172a;">EBK Professional
+                                    Accreditation</h4>
                                 <div class="form-row-2">
                                     <div class="form-group">
                                         <label class="field-label">EBK Category</label>
-                                        <input type="text" id="profEngCategory" class="field-input readonly-input" readonly>
+                                        <input type="text" id="profEngCategory" class="field-input readonly-input"
+                                            readonly>
                                     </div>
                                     <div class="form-group">
                                         <label class="field-label">EBK Registration Number</label>
-                                        <input type="text" id="profEngRegNo" class="field-input readonly-input" readonly>
+                                        <input type="text" id="profEngRegNo" class="field-input readonly-input"
+                                            readonly>
                                     </div>
                                 </div>
                                 <div class="form-row-2">
                                     <div class="form-group">
                                         <label class="field-label">Professional Verification Status</label>
-                                        <input type="text" id="profEngStatus" class="field-input readonly-input" readonly>
+                                        <input type="text" id="profEngStatus" class="field-input readonly-input"
+                                            readonly>
                                     </div>
                                     <div class="form-group">
-                                        <label for="profOrganization" class="field-label">Organisation / Ministry</label>
-                                        <input type="text" id="profOrganization" class="field-input" placeholder="e.g., KeNHA / KeRRA / MoTI">
+                                        <label for="profOrganization" class="field-label">Organisation /
+                                            Ministry</label>
+                                        <input type="text" id="profOrganization" class="field-input"
+                                            placeholder="e.g., KeNHA / KeRRA / MoTI">
                                     </div>
                                 </div>
                                 <p class="field-help-text" style="margin-top: 0.5rem;">
-                                    Protected engineering credentials cannot be casually altered without administrative re-verification.
+                                    Protected engineering credentials cannot be casually altered without administrative
+                                    re-verification.
                                 </p>
                             </div>
 
                             <div class="form-actions" style="margin-top: 1.5rem;">
-                                <button type="submit" class="btn-primary" id="btnSaveProfile">Save Profile Changes</button>
+                                <button type="submit" class="btn-primary" id="btnSaveProfile">Save Profile
+                                    Changes</button>
                             </div>
                         </form>
                     </div>
@@ -788,24 +930,30 @@
                     <div class="settings-panel glass-card hidden" id="panelProfileSecurity">
                         <div class="settings-panel-header">
                             <h3 class="panel-title">Security & Credentials</h3>
-                            <p class="panel-subtitle">Manage your password, authentication requirements, and two-factor protection</p>
+                            <p class="panel-subtitle">Manage your password, authentication requirements, and two-factor
+                                protection</p>
                         </div>
 
                         <!-- Security Alert / Weak Password Recommendation Banner (Section 10) -->
-                        <div id="weakPasswordWarningBanner" class="security-alert-box hidden" style="margin-bottom: 1.5rem; padding: 1rem 1.25rem; background: #fffbeb; border: 1px solid #fde68a; border-radius: var(--radius-sm); display: flex; gap: 0.75rem; align-items: flex-start;">
+                        <div id="weakPasswordWarningBanner" class="security-alert-box hidden"
+                            style="margin-bottom: 1.5rem; padding: 1rem 1.25rem; background: #fffbeb; border: 1px solid #fde68a; border-radius: var(--radius-sm); display: flex; gap: 0.75rem; align-items: flex-start;">
                             <i class='bx bx-error' style="font-size: 1.25rem; color: #d97706;"></i>
                             <div>
-                                <strong style="color: #92400e; display: block; font-size: 0.9rem;">Security Recommendation</strong>
+                                <strong style="color: #92400e; display: block; font-size: 0.9rem;">Security
+                                    Recommendation</strong>
                                 <p style="color: #b45309; margin: 0.25rem 0 0; font-size: 0.85rem;">
-                                    Your current password does not meet the latest security recommendations. Update your password below.
+                                    Your current password does not meet the latest security recommendations. Update your
+                                    password below.
                                 </p>
                             </div>
                         </div>
 
                         <!-- 2FA Status Card -->
-                        <div style="padding: 1.25rem; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: var(--radius-sm); margin-bottom: 1.5rem; display: flex; justify-content: space-between; align-items: center;">
+                        <div
+                            style="padding: 1.25rem; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: var(--radius-sm); margin-bottom: 1.5rem; display: flex; justify-content: space-between; align-items: center;">
                             <div>
-                                <h4 style="margin: 0 0 0.25rem 0; font-size: 0.95rem; color: #0f172a;">Two-Factor Authentication (2FA)</h4>
+                                <h4 style="margin: 0 0 0.25rem 0; font-size: 0.95rem; color: #0f172a;">Two-Factor
+                                    Authentication (2FA)</h4>
                                 <p style="margin: 0; font-size: 0.82rem; color: #64748b;" id="twoFactorStatusDesc">
                                     Mandatory for professional accounts; optional for citizens.
                                 </p>
@@ -815,32 +963,42 @@
 
                         <!-- Change Password Form -->
                         <div style="border-top: 1px solid #e2e8f0; padding-top: 1.5rem;">
-                            <h4 style="margin: 0 0 1rem 0; font-size: 0.95rem; color: #0f172a;">Change Account Password</h4>
+                            <h4 style="margin: 0 0 1rem 0; font-size: 0.95rem; color: #0f172a;">Change Account Password
+                            </h4>
                             <form id="formChangePassword" class="settings-form">
                                 <div class="form-group">
                                     <label for="pwdCurrent" class="field-label">Current Password *</label>
-                                    <input type="password" id="pwdCurrent" class="field-input" placeholder="••••••••" required>
+                                    <input type="password" id="pwdCurrent" class="field-input" placeholder="••••••••"
+                                        required>
                                 </div>
                                 <div class="form-group">
                                     <label for="pwdNew" class="field-label">New Password *</label>
-                                    <input type="password" id="pwdNew" class="field-input" placeholder="••••••••" minlength="8" required>
+                                    <input type="password" id="pwdNew" class="field-input" placeholder="••••••••"
+                                        minlength="8" required>
                                 </div>
 
                                 <!-- Live Validation Checklist (Section 10) -->
-                                <div class="password-criteria-list" id="profilePasswordCriteria" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 0.4rem; margin-top: 0.5rem; margin-bottom: 1rem;">
-                                    <div class="criterion failed" id="critProfLength"><i class='bx bx-x'></i> At least 8 characters</div>
-                                    <div class="criterion failed" id="critProfNumber"><i class='bx bx-x'></i> At least one number (0-9)</div>
-                                    <div class="criterion failed" id="critProfSpecial"><i class='bx bx-x'></i> At least one special symbol (!@#$)</div>
-                                    <div class="criterion failed" id="critProfCase"><i class='bx bx-x'></i> Upper & lowercase letters</div>
+                                <div class="password-criteria-list" id="profilePasswordCriteria"
+                                    style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 0.4rem; margin-top: 0.5rem; margin-bottom: 1rem;">
+                                    <div class="criterion failed" id="critProfLength"><i class='bx bx-x'></i> At least 8
+                                        characters</div>
+                                    <div class="criterion failed" id="critProfNumber"><i class='bx bx-x'></i> At least
+                                        one number (0-9)</div>
+                                    <div class="criterion failed" id="critProfSpecial"><i class='bx bx-x'></i> At least
+                                        one special symbol (!@#$)</div>
+                                    <div class="criterion failed" id="critProfCase"><i class='bx bx-x'></i> Upper &
+                                        lowercase letters</div>
                                 </div>
 
                                 <div class="form-group">
                                     <label for="pwdConfirm" class="field-label">Confirm New Password *</label>
-                                    <input type="password" id="pwdConfirm" class="field-input" placeholder="••••••••" minlength="8" required>
+                                    <input type="password" id="pwdConfirm" class="field-input" placeholder="••••••••"
+                                        minlength="8" required>
                                 </div>
 
                                 <div class="form-actions" style="margin-top: 1.25rem;">
-                                    <button type="submit" class="btn-primary" id="btnSubmitChangePassword">Update Password</button>
+                                    <button type="submit" class="btn-primary" id="btnSubmitChangePassword">Update
+                                        Password</button>
                                 </div>
                             </form>
                         </div>
@@ -854,7 +1012,8 @@
             <div class="view-header">
                 <div>
                     <h2 class="view-title">Engineer Monitoring Dashboard</h2>
-                    <p class="view-desc">Infrastructure Condition Tracking, Prioritized Inspection Queue & Defect Analytics</p>
+                    <p class="view-desc">Infrastructure Condition Tracking, Prioritized Inspection Queue & Defect
+                        Analytics</p>
                 </div>
                 <div class="header-actions">
                     <span class="certifier-tag" id="engineerHeaderBadge">Civil Infrastructure Reviewer</span>
@@ -872,10 +1031,12 @@
                     <span class="kpi-footer">Awaiting engineer validation</span>
                 </div>
 
-                <div class="kpi-card" id="kpiCardVerified" style="cursor: pointer;" title="Click to filter prioritized queue by verified inspections (toggle)">
+                <div class="kpi-card" id="kpiCardVerified" style="cursor: pointer;"
+                    title="Click to filter prioritized queue by verified inspections (toggle)">
                     <div style="display: flex; justify-content: space-between; align-items: center;">
                         <span class="kpi-label">VERIFIED INSPECTIONS</span>
-                        <span id="kpiVerifiedActiveBadge" class="kpi-active-pill hidden"><i class='bx bx-check'></i> Active Filter</span>
+                        <span id="kpiVerifiedActiveBadge" class="kpi-active-pill hidden"><i class='bx bx-check'></i>
+                            Active Filter</span>
                     </div>
                     <div class="kpi-value-row">
                         <span class="kpi-number" id="kpiVerifiedCount">0</span>
@@ -904,7 +1065,8 @@
 
             <!-- Two Column Dashboard: Analytics (Trends + Critical Calendar) + Prioritized Queue -->
             <div class="dashboard-columns">
-                <div class="dashboard-analytics-col" style="display: flex; flex-direction: column; gap: 1.5rem; min-width: 0;">
+                <div class="dashboard-analytics-col"
+                    style="display: flex; flex-direction: column; gap: 1.5rem; min-width: 0;">
                     <!-- Historical Defect Trends Chart (Figure 4.7) -->
                     <div class="glass-card chart-card">
                         <div class="card-header-bar" style="flex-wrap: wrap; gap: 0.5rem;">
@@ -912,18 +1074,22 @@
                                 <span class="step-tag">HISTORICAL DEFECT TRENDS</span>
                                 <span class="mode-tag" id="trendSubtitle">Reports Over Time</span>
                             </div>
-                            <div class="filter-controls" style="display: flex; gap: 0.4rem; flex-wrap: wrap; align-items: center;">
-                                <select id="trendRangeSelect" class="filter-select" style="font-size: 0.78rem; padding: 4px 8px;">
+                            <div class="filter-controls"
+                                style="display: flex; gap: 0.4rem; flex-wrap: wrap; align-items: center;">
+                                <select id="trendRangeSelect" class="filter-select"
+                                    style="font-size: 0.78rem; padding: 4px 8px;">
                                     <option value="3m">Last 3 Months</option>
                                     <option value="6m" selected>Last 6 Months</option>
                                     <option value="12m">Last 12 Months</option>
                                     <option value="all">All Available Data</option>
                                 </select>
-                                <select id="trendViewBySelect" class="filter-select" style="font-size: 0.78rem; padding: 4px 8px;">
+                                <select id="trendViewBySelect" class="filter-select"
+                                    style="font-size: 0.78rem; padding: 4px 8px;">
                                     <option value="defect_class" selected>View by Defect Class</option>
                                     <option value="visual_severity">View by Visual Severity</option>
                                 </select>
-                                <select id="trendCountySelect" class="filter-select" style="font-size: 0.78rem; padding: 4px 8px;">
+                                <select id="trendCountySelect" class="filter-select"
+                                    style="font-size: 0.78rem; padding: 4px 8px;">
                                     <option value="all" selected>All Counties (Kenya)</option>
                                     <option value="Mombasa">Mombasa</option>
                                     <option value="Kwale">Kwale</option>
@@ -973,7 +1139,8 @@
                                     <option value="Nyamira">Nyamira</option>
                                     <option value="Nairobi">Nairobi</option>
                                 </select>
-                                <select id="trendWardSelect" class="filter-select" style="font-size: 0.78rem; padding: 4px 8px;">
+                                <select id="trendWardSelect" class="filter-select"
+                                    style="font-size: 0.78rem; padding: 4px 8px;">
                                     <option value="all" selected>All Areas / Wards</option>
                                     <option value="CBD">CBD</option>
                                     <option value="Westlands">Westlands</option>
@@ -990,19 +1157,29 @@
                         </div>
                         <div class="chart-canvas-wrapper" style="position: relative; min-height: 240px; height: 260px;">
                             <canvas id="degradationChart" class="trend-canvas"></canvas>
-                            <div id="trendEmptyState" class="trend-empty-overlay hidden" style="position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; background: rgba(248, 250, 252, 0.85); backdrop-filter: blur(2px); border-radius: 6px; z-index: 2; pointer-events: none;">
-                                <p id="trendEmptyStateText" style="color: #475569; font-size: 0.85rem; font-weight: 500;"><i class='bx bx-info-circle'></i> No defect reports recorded for this selection.</p>
+                            <div id="trendEmptyState" class="trend-empty-overlay hidden"
+                                style="position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; background: rgba(248, 250, 252, 0.85); backdrop-filter: blur(2px); border-radius: 6px; z-index: 2; pointer-events: none;">
+                                <p id="trendEmptyStateText"
+                                    style="color: #475569; font-size: 0.85rem; font-weight: 500;"><i
+                                        class='bx bx-info-circle'></i> No defect reports recorded for this selection.
+                                </p>
                             </div>
                         </div>
-                        <div class="chart-legend" id="trendLegend" style="display: flex; gap: 1rem; flex-wrap: wrap; margin-top: 0.5rem;">
+                        <div class="chart-legend" id="trendLegend"
+                            style="display: flex; gap: 1rem; flex-wrap: wrap; margin-top: 0.5rem;">
                             <!-- Dynamically populated series legend -->
                         </div>
                         <!-- Secondary Summary Metrics Strip -->
-                        <div class="trend-summary-strip" id="trendSummaryStrip" style="display: flex; gap: 1.5rem; flex-wrap: wrap; margin-top: 0.75rem; padding-top: 0.6rem; border-top: 1px solid rgba(255, 255, 255, 0.08); font-size: 0.78rem; color: #94a3b8;">
-                            <div>Most reported defect: <strong id="trendSummaryMostReported" style="color: #f1f5f9;">—</strong></div>
-                            <div>Critical reports this period: <strong id="trendSummaryCritical" style="color: #ef4444;">—</strong></div>
-                            <div>Reports resolved: <strong id="trendSummaryResolved" style="color: #10b981;">—</strong></div>
-                            <div>Most active monitored corridor: <strong id="trendSummaryActiveLocation" style="color: #38bdf8;">—</strong></div>
+                        <div class="trend-summary-strip" id="trendSummaryStrip"
+                            style="display: flex; gap: 1.5rem; flex-wrap: wrap; margin-top: 0.75rem; padding-top: 0.6rem; border-top: 1px solid rgba(255, 255, 255, 0.08); font-size: 0.78rem; color: #94a3b8;">
+                            <div>Most reported defect: <strong id="trendSummaryMostReported"
+                                    style="color: #f1f5f9;">—</strong></div>
+                            <div>Critical reports this period: <strong id="trendSummaryCritical"
+                                    style="color: #ef4444;">—</strong></div>
+                            <div>Reports resolved: <strong id="trendSummaryResolved" style="color: #10b981;">—</strong>
+                            </div>
+                            <div>Most active monitored corridor: <strong id="trendSummaryActiveLocation"
+                                    style="color: #38bdf8;">—</strong></div>
                         </div>
                     </div>
 
@@ -1015,11 +1192,16 @@
                             </div>
                             <div class="filter-controls" style="display: flex; gap: 0.5rem; align-items: center;">
                                 <div class="cal-nav-controls" style="display: flex; align-items: center; gap: 0.35rem;">
-                                    <button type="button" class="btn-cal-carousel-nav" id="btnCalPrevMonth" title="Previous Month" aria-label="Previous Month"><i class='bx bx-chevron-left'></i></button>
+                                    <button type="button" class="btn-cal-carousel-nav" id="btnCalPrevMonth"
+                                        title="Previous Month" aria-label="Previous Month"><i
+                                            class='bx bx-chevron-left'></i></button>
                                     <span id="calCurrentMonthLabel" class="cal-active-month-pill">Loading...</span>
-                                    <button type="button" class="btn-cal-carousel-nav" id="btnCalNextMonth" title="Next Month" aria-label="Next Month"><i class='bx bx-chevron-right'></i></button>
+                                    <button type="button" class="btn-cal-carousel-nav" id="btnCalNextMonth"
+                                        title="Next Month" aria-label="Next Month"><i
+                                            class='bx bx-chevron-right'></i></button>
                                 </div>
-                                <select id="calRangeSelect" class="filter-select" style="font-size: 0.78rem; padding: 4px 8px;">
+                                <select id="calRangeSelect" class="filter-select"
+                                    style="font-size: 0.78rem; padding: 4px 8px;">
                                     <option value="3m">Last 3 Months</option>
                                     <option value="6m" selected>Last 6 Months</option>
                                     <option value="12m">Last 12 Months</option>
@@ -1029,7 +1211,8 @@
 
                         <!-- Month-Centric Carousel Stage -->
                         <div class="critical-calendar-wrapper" style="overflow: hidden; padding: 0.75rem 0 0.25rem 0;">
-                            <div id="criticalCalendarCarouselStage" class="month-carousel-stage" tabindex="0" role="region" aria-label="Critical Reports Month Carousel">
+                            <div id="criticalCalendarCarouselStage" class="month-carousel-stage" tabindex="0"
+                                role="region" aria-label="Critical Reports Month Carousel">
                                 <!-- Populated dynamically with prev, active, next month cards -->
                             </div>
                         </div>
@@ -1040,7 +1223,8 @@
                         </div>
 
                         <!-- Calendar Legend & Explicit Analytical Distinctions -->
-                        <div class="calendar-footer-strip" style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 0.75rem; margin-top: 0.6rem; padding-top: 0.5rem; border-top: 1px solid rgba(255, 255, 255, 0.08); font-size: 0.75rem; color: #94a3b8;">
+                        <div class="calendar-footer-strip"
+                            style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 0.75rem; margin-top: 0.6rem; padding-top: 0.5rem; border-top: 1px solid rgba(255, 255, 255, 0.08); font-size: 0.75rem; color: #94a3b8;">
                             <div style="display: flex; align-items: center; gap: 0.5rem;">
                                 <span>Critical Reports:</span>
                                 <span class="cal-legend-box cal-intensity-0" title="0 reports">0</span>
@@ -1054,14 +1238,16 @@
                         </div>
 
                         <!-- Recurrence Insights Strip (Section 31) -->
-                        <div class="recurrence-insights-container" id="dashboardRecurrenceInsights" style="margin-top: 0.75rem; display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 0.6rem;">
+                        <div class="recurrence-insights-container" id="dashboardRecurrenceInsights"
+                            style="margin-top: 0.75rem; display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 0.6rem;">
                             <!-- Dynamically populated from actual data -->
                         </div>
                     </div>
                 </div>
 
                 <!-- Right Column: Prioritized Defect Queue & Monitoring Insights (Sections 34, 35, 36, 40, 41) -->
-                <div class="dashboard-queue-col" style="display: flex; flex-direction: column; gap: 1.5rem; min-width: 0;">
+                <div class="dashboard-queue-col"
+                    style="display: flex; flex-direction: column; gap: 1.5rem; min-width: 0;">
                     <!-- Prioritized Defect Queue (Figure 4.7) -->
                     <div class="glass-card queue-card">
                         <div class="card-header-bar">
@@ -1079,9 +1265,13 @@
                         </div>
 
                         <!-- Date Filter Indicator (Section 41) -->
-                        <div id="queueDateFilterNotice" class="hidden" style="margin-bottom: 0.75rem; background: #f0f9ff; border: 1px solid #bae6fd; border-radius: 6px; padding: 6px 12px; display: flex; justify-content: space-between; align-items: center; font-size: 0.8rem; color: #0369a1;">
-                            <span><i class='bx bx-calendar-event' style="vertical-align: -1px; margin-right: 4px;"></i> Filtered by date: <strong id="queueDateFilterVal"></strong></span>
-                            <button type="button" id="btnClearDateFilter" style="background: none; border: none; color: #0284c7; font-weight: 600; cursor: pointer; display: flex; align-items: center; gap: 2px;">Clear Date Filter ✕</button>
+                        <div id="queueDateFilterNotice" class="hidden"
+                            style="margin-bottom: 0.75rem; background: #f0f9ff; border: 1px solid #bae6fd; border-radius: 6px; padding: 6px 12px; display: flex; justify-content: space-between; align-items: center; font-size: 0.8rem; color: #0369a1;">
+                            <span><i class='bx bx-calendar-event' style="vertical-align: -1px; margin-right: 4px;"></i>
+                                Filtered by date: <strong id="queueDateFilterVal"></strong></span>
+                            <button type="button" id="btnClearDateFilter"
+                                style="background: none; border: none; color: #0284c7; font-weight: 600; cursor: pointer; display: flex; align-items: center; gap: 2px;">Clear
+                                Date Filter ✕</button>
                         </div>
 
                         <div class="defect-queue-list" id="defectQueueList">
@@ -1089,20 +1279,136 @@
                         </div>
                     </div>
 
-                    <!-- Monitoring & Historical Context Insights Panel (Sections 34, 35, 36) -->
-                    <div class="glass-card" id="monitoringInsightsPanel" style="padding: 1.25rem;">
-                        <div class="card-header-bar" style="margin-bottom: 0.75rem;">
+                    <!-- Monitoring Intelligence Workspace (Sections 1-20) -->
+                    <div class="glass-card monitoring-intelligence-workspace" id="monitoringInsightsPanel"
+                        style="padding: 1.5rem; background: #ffffff; border: 1px solid #e2e8f0; border-radius: 12px; box-shadow: 0 4px 20px rgba(15, 23, 42, 0.06);">
+                        <!-- Workspace Header -->
+                        <div class="card-header-bar"
+                            style="margin-bottom: 0.5rem; border-bottom: 1px solid #f1f5f9; padding-bottom: 0.75rem;">
                             <div>
-                                <span class="step-tag">MONITORING INTELLIGENCE</span>
-                                <span class="mode-tag">Infrastructure Pattern & Weather Correlation</span>
+                                <div style="display: flex; align-items: center; gap: 0.5rem;">
+                                    <span class="step-tag"
+                                        style="background: rgba(0, 112, 209, 0.1); color: #0070d1; border: 1px solid rgba(0, 112, 209, 0.25);">MONITORING
+                                        INTELLIGENCE</span>
+                                    <span class="mode-tag"
+                                        style="background: #f8fafc; color: #475569; border: 1px solid #e2e8f0;">Pattern
+                                        Analysis Workspace</span>
+                                </div>
+                                <p style="margin: 0.4rem 0 0 0; font-size: 0.85rem; color: #475569; line-height: 1.4;">
+                                    Choose an analysis to explore patterns in infrastructure reports and historical
+                                    monitoring data.
+                                </p>
                             </div>
                         </div>
-                        <div id="monitoringInsightsContent" style="display: flex; flex-direction: column; gap: 0.75rem;">
-                            <!-- Populated dynamically via Dashboard.renderMonitoringInsights -->
+
+                        <!-- Hub Selector: "What would you like to monitor?" -->
+                        <div class="intel-hub-section" style="margin-top: 1rem;">
+                            <label class="field-label"
+                                style="font-size: 0.78rem; font-weight: 700; color: #1e293b; letter-spacing: 0.04em; margin-bottom: 0.65rem; display: block;">
+                                WHAT WOULD YOU LIKE TO MONITOR?
+                            </label>
+                            <div class="intel-mode-selector-grid" id="intelModeSelector">
+                                <button type="button" class="intel-mode-btn is-active"
+                                    data-mode="rainfall_defect_pattern">
+                                    <div class="mode-btn-icon"><i class='bx bx-cloud-rain'></i></div>
+                                    <div class="mode-btn-content">
+                                        <span class="mode-btn-title">Rainfall Patterns</span>
+                                        <span class="mode-btn-sub">Preceding precipitation & defect correlation</span>
+                                    </div>
+                                </button>
+                                <button type="button" class="intel-mode-btn" data-mode="corridor_recurrence">
+                                    <div class="mode-btn-icon"><i class='bx bx-map-pin'></i></div>
+                                    <div class="mode-btn-content">
+                                        <span class="mode-btn-title">Road Recurrence</span>
+                                        <span class="mode-btn-sub">Spatial clusters & repeat report intervals</span>
+                                    </div>
+                                </button>
+                                <button type="button" class="intel-mode-btn" data-mode="seasonal_defect_pattern">
+                                    <div class="mode-btn-icon"><i class='bx bx-calendar-alt'></i></div>
+                                    <div class="mode-btn-content">
+                                        <span class="mode-btn-title">Seasonal Patterns</span>
+                                        <span class="mode-btn-sub">Long Rains (MAM) vs Short Rains (OND)</span>
+                                    </div>
+                                </button>
+                                <button type="button" class="intel-mode-btn" data-mode="critical_defect_concentration">
+                                    <div class="mode-btn-icon"><i class='bx bx-error-circle'></i></div>
+                                    <div class="mode-btn-content">
+                                        <span class="mode-btn-title">Critical Reports</span>
+                                        <span class="mode-btn-sub">Severe hazard concentration & status</span>
+                                    </div>
+                                </button>
+                                <button type="button" class="intel-mode-btn" data-mode="resolution_response_trend">
+                                    <div class="mode-btn-icon"><i class='bx bx-check-double'></i></div>
+                                    <div class="mode-btn-content">
+                                        <span class="mode-btn-title">Response Trends</span>
+                                        <span class="mode-btn-sub">Verification velocity & resolution rate</span>
+                                    </div>
+                                </button>
+                            </div>
                         </div>
-                    </div>
-                        <div id="monitoringInsightsContent" style="display: flex; flex-direction: column; gap: 0.75rem;">
-                            <!-- Populated dynamically via Dashboard.renderMonitoringInsights -->
+
+                        <!-- Lightweight Natural-Language Analytics Interface ("Ask InfraVision") (Section 20) -->
+                        <div class="intel-nlp-section"
+                            style="margin-top: 1rem; padding: 0.85rem 1rem; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px;">
+                            <div
+                                style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem;">
+                                <span
+                                    style="font-size: 0.72rem; font-weight: 700; color: #475569; letter-spacing: 0.05em; text-transform: uppercase;">
+                                    <i class='bx bx-search-alt-2' style="color: #0070d1; margin-right: 4px;"></i> Or Ask
+                                    InfraVision
+                                </span>
+                                <span style="font-size: 0.68rem; color: #64748b; font-style: italic;">Natural-Language
+                                    Analytics Interface</span>
+                            </div>
+                            <form id="intelNlpForm" class="intel-nlp-form"
+                                style="display: flex; gap: 0.5rem; align-items: center;">
+                                <div style="position: relative; flex: 1;">
+                                    <input type="text" id="intelNlpInput" class="intel-nlp-input"
+                                        placeholder="Ask InfraVision about monitoring patterns (e.g. Which roads develop potholes after heavy rainfall?)..."
+                                        autocomplete="off">
+                                </div>
+                                <button type="submit" id="btnIntelNlpSubmit" class="btn-micro"
+                                    style="background: #0070d1; color: #ffffff; font-weight: 600; padding: 7px 16px; border-radius: 6px; border: none; cursor: pointer; display: inline-flex; align-items: center; gap: 4px; box-shadow: 0 2px 8px rgba(0, 112, 209, 0.25);">
+                                    <i class='bx bx-analyse'></i> Analyse
+                                </button>
+                            </form>
+                            <!-- Clickable Suggested Questions -->
+                            <div class="intel-suggestions-strip" id="intelNlpSuggestions"
+                                style="display: flex; flex-wrap: wrap; gap: 0.4rem; margin-top: 0.6rem; align-items: center;">
+                                <span style="font-size: 0.7rem; color: #64748b; font-weight: 600;">Suggested:</span>
+                                <button type="button" class="intel-chip-suggestion"
+                                    data-prompt="Which roads have recurring potholes?">Recurring potholes</button>
+                                <button type="button" class="intel-chip-suggestion"
+                                    data-prompt="Which roads develop potholes after heavy rainfall?">Rainfall
+                                    patterns</button>
+                                <button type="button" class="intel-chip-suggestion"
+                                    data-prompt="Where are Critical reports concentrated in Nairobi?">Critical in
+                                    Nairobi</button>
+                                <button type="button" class="intel-chip-suggestion"
+                                    data-prompt="What patterns occur during the Long Rains?">Long Rains season</button>
+                                <button type="button" class="intel-chip-suggestion"
+                                    data-prompt="How quickly are reports being resolved?">Resolution
+                                    performance</button>
+                            </div>
+                            <!-- Query Interpretation Banner (Section 20.8) -->
+                            <div id="intelQueryExplanation" class="hidden"
+                                style="margin-top: 0.65rem; padding: 6px 12px; background: #eff6ff; border: 1px solid #bfdbfe; border-radius: 6px; font-size: 0.78rem; color: #1e40af; display: flex; justify-content: space-between; align-items: center;">
+                                <span id="intelQueryExplanationText"><i class='bx bx-info-circle'></i> Interpreted
+                                    as...</span>
+                                <button type="button" id="btnClearQueryInterpretation"
+                                    style="background: none; border: none; color: #2563eb; font-size: 0.75rem; font-weight: 600; cursor: pointer;">Clear
+                                    ✕</button>
+                            </div>
+                        </div>
+
+                        <!-- Result Workspace: ONLY ONE primary intelligence result visible at a time (Section 6) -->
+                        <div class="intel-result-workspace" id="intelResultWorkspace" style="margin-top: 1.25rem;">
+                            <!-- Populated dynamically via Dashboard.renderIntelligenceResult -->
+                            <div style="padding: 2rem; text-align: center; color: #64748b; font-size: 0.85rem;">
+                                <i class='bx bx-loader-alt bx-spin'
+                                    style="font-size: 1.5rem; color: #0070d1; display: block; margin-bottom: 0.5rem;"></i>
+                                Loading intelligence analysis...
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -1114,7 +1420,8 @@
             <div class="view-header">
                 <div>
                     <h2 class="view-title">AI Defect Assessment & Professional Review</h2>
-                    <p class="view-desc">Engineer Inspection Terminal: Validate, calibrate or override automated AI defect assessment</p>
+                    <p class="view-desc">Engineer Inspection Terminal: Validate, calibrate or override automated AI
+                        defect assessment</p>
                 </div>
                 <div class="review-status-badge">
                     <span class="badge-dot warning" id="reviewBadgeDot"></span>
@@ -1124,10 +1431,14 @@
 
             <!-- Casework Search, Filter & Switcher Toolbar -->
             <div class="casework-toolbar" style="flex-wrap: wrap; gap: 0.75rem;">
-                <div class="casework-select-group" style="flex: 2; min-width: 260px; display: flex; gap: 0.5rem; align-items: center;">
+                <div class="casework-select-group"
+                    style="flex: 2; min-width: 260px; display: flex; gap: 0.5rem; align-items: center;">
                     <span class="map-filter-label" style="white-space:nowrap;">Search:</span>
-                    <input type="text" id="reviewSearchInput" class="field-input" placeholder="Search case ID, location, defect, status..." style="font-size:0.85rem; padding:0.4rem 0.75rem; flex:1;">
-                    <select id="reviewFilterStatus" class="field-input" style="font-size:0.85rem; padding:0.4rem 0.6rem; width:auto;">
+                    <input type="text" id="reviewSearchInput" class="field-input"
+                        placeholder="Search case ID, location, defect, status..."
+                        style="font-size:0.85rem; padding:0.4rem 0.75rem; flex:1;">
+                    <select id="reviewFilterStatus" class="field-input"
+                        style="font-size:0.85rem; padding:0.4rem 0.6rem; width:auto;">
                         <option value="">All Reports</option>
                         <option value="awaiting_review">Awaiting Review</option>
                         <option value="my_reviews">My Active Reviews</option>
@@ -1136,20 +1447,27 @@
                     </select>
                 </div>
 
-                <div class="casework-select-group" style="flex: 3; min-width: 300px; display: flex; gap: 0.5rem; align-items: center;">
-                    <label for="reviewReportSelect" class="map-filter-label" style="white-space:nowrap;">Select Case:</label>
-                    <select id="reviewReportSelect" class="field-input" style="font-size:0.85rem; padding:0.4rem 0.75rem; flex:1;">
+                <div class="casework-select-group"
+                    style="flex: 3; min-width: 300px; display: flex; gap: 0.5rem; align-items: center;">
+                    <label for="reviewReportSelect" class="map-filter-label" style="white-space:nowrap;">Select
+                        Case:</label>
+                    <select id="reviewReportSelect" class="field-input"
+                        style="font-size:0.85rem; padding:0.4rem 0.75rem; flex:1;">
                         <option value="">Loading defect casework...</option>
                     </select>
-                    <button type="button" class="btn-secondary btn-sm" id="btnRefreshCasework" title="Refresh Casework Queue">↻</button>
+                    <button type="button" class="btn-secondary btn-sm" id="btnRefreshCasework"
+                        title="Refresh Casework Queue">↻</button>
                 </div>
 
                 <!-- Top Lifecycle & Reviewer Status Display (Section 25 & 28) -->
-                <div class="review-status-display" style="margin-left:auto; display:flex; align-items:center; gap:0.6rem; font-size:0.85rem;">
+                <div class="review-status-display"
+                    style="margin-left:auto; display:flex; align-items:center; gap:0.6rem; font-size:0.85rem;">
                     <span style="color:#64748b; font-weight:600;">Status:</span>
-                    <span id="reviewTopStatusBadge" class="status-chip warning" style="font-size:0.75rem; padding:2px 10px; font-weight:700;">Received</span>
+                    <span id="reviewTopStatusBadge" class="status-chip warning"
+                        style="font-size:0.75rem; padding:2px 10px; font-weight:700;">Received</span>
                     <span style="color:#64748b; font-size:0.8rem; margin-left:4px;">Reviewer:</span>
-                    <span id="reviewTopOwnerBadge" style="font-weight:600; color:#0f172a; font-size:0.8rem;">Unassigned</span>
+                    <span id="reviewTopOwnerBadge"
+                        style="font-weight:600; color:#0f172a; font-size:0.8rem;">Unassigned</span>
                 </div>
             </div>
 
@@ -1164,18 +1482,22 @@
                     </div>
                     <div class="meta-item">
                         <span class="meta-label">CURRENT LIFECYCLE</span>
-                        <span class="meta-val" id="reviewLifecycleStatus"><span class="badge-dot warning"></span> Received</span>
+                        <span class="meta-val" id="reviewLifecycleStatus"><span class="badge-dot warning"></span>
+                            Received</span>
                     </div>
                     <div class="meta-item">
                         <span class="meta-label">ASSIGNED REVIEWER</span>
-                        <span class="meta-val" id="reviewAssignedEngineer" style="color:#0f172a; font-weight:600;">Unassigned</span>
+                        <span class="meta-val" id="reviewAssignedEngineer"
+                            style="color:#0f172a; font-weight:600;">Unassigned</span>
                     </div>
                     <div class="meta-item">
                         <span class="meta-label">INFRASTRUCTURE LOCATION</span>
                         <span class="meta-val" id="reviewGps">—</span>
                     </div>
                     <div class="meta-item" style="justify-content:center;">
-                        <button type="button" class="btn-secondary btn-sm" id="btnReviewShowOnMap" title="View defect location on Infrastructure Map" style="display:flex; align-items:center; gap:0.35rem; font-size:0.78rem; padding:4px 10px; border-radius:6px; border:1px solid #cbd5e1; background:#ffffff; color:#0f172a; cursor:pointer;">
+                        <button type="button" class="btn-secondary btn-sm" id="btnReviewShowOnMap"
+                            title="View defect location on Infrastructure Map"
+                            style="display:flex; align-items:center; gap:0.35rem; font-size:0.78rem; padding:4px 10px; border-radius:6px; border:1px solid #cbd5e1; background:#ffffff; color:#0f172a; cursor:pointer;">
                             <i class='bx bx-map-pin' style="color:#0284c7;"></i> Show on Map
                         </button>
                     </div>
@@ -1186,12 +1508,16 @@
                 </div>
 
                 <!-- Resolved Case Read-Only Notification Banner (Section 7) -->
-                <div id="reviewResolvedNotice" class="resolved-notice-banner hidden" style="background: #ecfdf5; border: 1px solid #a7f3d0; color: #065f46; border-radius: 6px; padding: 0.85rem 1.15rem; margin: 0.75rem 1rem 0.25rem 1rem; font-size: 0.85rem; display: flex; align-items: flex-start; gap: 0.75rem;">
+                <div id="reviewResolvedNotice" class="resolved-notice-banner hidden"
+                    style="background: #ecfdf5; border: 1px solid #a7f3d0; color: #065f46; border-radius: 6px; padding: 0.85rem 1.15rem; margin: 0.75rem 1rem 0.25rem 1rem; font-size: 0.85rem; display: flex; align-items: flex-start; gap: 0.75rem;">
                     <i class='bx bx-shield-check' style="font-size: 1.25rem; color: #059669; line-height: 1;"></i>
                     <div style="flex: 1;">
-                        <strong style="color: #047857; display: block; margin-bottom: 2px;">Resolved Infrastructure Defect Record (Read-Only Mode)</strong>
-                        <span>This defect report has already completed professional review and resolution. The record is displayed in read-only mode.</span>
-                        <div id="reviewResolvedDetails" style="margin-top: 6px; font-size: 0.8rem; color: #065f46; border-top: 1px solid #d1fae5; padding-top: 6px; display: flex; flex-wrap: wrap; gap: 1rem;">
+                        <strong style="color: #047857; display: block; margin-bottom: 2px;">Resolved Infrastructure
+                            Defect Record (Read-Only Mode)</strong>
+                        <span>This defect report has already completed professional review and resolution. The record is
+                            displayed in read-only mode.</span>
+                        <div id="reviewResolvedDetails"
+                            style="margin-top: 6px; font-size: 0.8rem; color: #065f46; border-top: 1px solid #d1fae5; padding-top: 6px; display: flex; flex-wrap: wrap; gap: 1rem;">
                             <span>Reviewer: <strong id="resolvedReviewerName">—</strong></span>
                             <span>Resolution Date: <strong id="resolvedDate">—</strong></span>
                             <span>Final Class: <strong id="resolvedFinalClass">—</strong></span>
@@ -1201,9 +1527,12 @@
                 </div>
 
                 <!-- Authorship vs Reviewer Audit Advisory -->
-                <div id="selfReviewBanner" class="self-review-banner hidden" style="background: #eff6ff; border: 1px solid #bfdbfe; color: #1e40af; border-radius: 6px; padding: 0.65rem 1rem; margin: 0.75rem 1rem 0.25rem 1rem; font-size: 0.8rem; display: flex; align-items: center; gap: 0.5rem;">
+                <div id="selfReviewBanner" class="self-review-banner hidden"
+                    style="background: #eff6ff; border: 1px solid #bfdbfe; color: #1e40af; border-radius: 6px; padding: 0.65rem 1rem; margin: 0.75rem 1rem 0.25rem 1rem; font-size: 0.8rem; display: flex; align-items: center; gap: 0.5rem;">
                     <i class='bx bx-info-circle' style="font-size: 1.1rem; color: #2563eb;"></i>
-                    <span><strong>Authorship Audit Record:</strong> You originally submitted this infrastructure defect report. As an accredited engineer, your verification will be preserved in the audit log distinctly recording both submitter authorship and reviewer validation.</span>
+                    <span><strong>Authorship Audit Record:</strong> You originally submitted this infrastructure defect
+                        report. As an accredited engineer, your verification will be preserved in the audit log
+                        distinctly recording both submitter authorship and reviewer validation.</span>
                 </div>
 
                 <!-- Inspection Split View -->
@@ -1213,20 +1542,32 @@
                         <div class="terminal-canvas-wrapper" style="position: relative;">
                             <canvas id="reviewCanvas" class="review-canvas"></canvas>
                             <!-- Polished Gallery Navigation Buttons Overlay -->
-                            <div id="reviewCarouselNav" class="review-carousel-nav hidden" style="position: absolute; top: 50%; transform: translateY(-50%); width: 100%; display: flex; justify-content: space-between; padding: 0 0.5rem; pointer-events: none; z-index: 10;">
-                                <button type="button" id="btnReviewPrev" class="carousel-nav-btn" title="Previous photo (ArrowLeft)" style="pointer-events: auto; background: rgba(15, 23, 42, 0.85); color: #f8fafc; border: 1px solid #475569; border-radius: 50%; width: 38px; height: 38px; font-size: 1.25rem; line-height: 1; cursor: pointer; display: flex; align-items: center; justify-content: center; box-shadow: 0 4px 6px rgba(0,0,0,0.3); transition: background 0.15s ease;">‹</button>
-                                <button type="button" id="btnReviewNext" class="carousel-nav-btn" title="Next photo (ArrowRight)" style="pointer-events: auto; background: rgba(15, 23, 42, 0.85); color: #f8fafc; border: 1px solid #475569; border-radius: 50%; width: 38px; height: 38px; font-size: 1.25rem; line-height: 1; cursor: pointer; display: flex; align-items: center; justify-content: center; box-shadow: 0 4px 6px rgba(0,0,0,0.3); transition: background 0.15s ease;">›</button>
+                            <div id="reviewCarouselNav" class="review-carousel-nav hidden"
+                                style="position: absolute; top: 50%; transform: translateY(-50%); width: 100%; display: flex; justify-content: space-between; padding: 0 0.5rem; pointer-events: none; z-index: 10;">
+                                <button type="button" id="btnReviewPrev" class="carousel-nav-btn"
+                                    title="Previous photo (ArrowLeft)"
+                                    style="pointer-events: auto; background: rgba(15, 23, 42, 0.85); color: #f8fafc; border: 1px solid #475569; border-radius: 50%; width: 38px; height: 38px; font-size: 1.25rem; line-height: 1; cursor: pointer; display: flex; align-items: center; justify-content: center; box-shadow: 0 4px 6px rgba(0,0,0,0.3); transition: background 0.15s ease;">‹</button>
+                                <button type="button" id="btnReviewNext" class="carousel-nav-btn"
+                                    title="Next photo (ArrowRight)"
+                                    style="pointer-events: auto; background: rgba(15, 23, 42, 0.85); color: #f8fafc; border: 1px solid #475569; border-radius: 50%; width: 38px; height: 38px; font-size: 1.25rem; line-height: 1; cursor: pointer; display: flex; align-items: center; justify-content: center; box-shadow: 0 4px 6px rgba(0,0,0,0.3); transition: background 0.15s ease;">›</button>
                             </div>
                         </div>
                         <!-- Multi-Image Review Angle Switcher & Carousel Controls -->
-                        <div id="reviewImageGallery" class="review-gallery-strip hidden" style="display:none; flex-direction:column; gap:0.5rem; margin-top:0.65rem; background:#0f172a; padding:0.65rem 0.75rem; border-radius:6px; border:1px solid #1e293b;">
-                            <div style="display: flex; align-items: center; justify-content: space-between; width: 100%;">
-                                <span style="font-size:0.75rem; color:#94a3b8; font-weight:600; text-transform:uppercase; letter-spacing:0.05em;" id="reviewGalleryTitle">Evidence Views:</span>
-                                <span style="font-size:0.75rem; color:#38bdf8; font-weight:600;" id="reviewGalleryCounter">Photo 1 of 1</span>
+                        <div id="reviewImageGallery" class="review-gallery-strip hidden"
+                            style="display:none; flex-direction:column; gap:0.5rem; margin-top:0.65rem; background:#0f172a; padding:0.65rem 0.75rem; border-radius:6px; border:1px solid #1e293b;">
+                            <div
+                                style="display: flex; align-items: center; justify-content: space-between; width: 100%;">
+                                <span
+                                    style="font-size:0.75rem; color:#94a3b8; font-weight:600; text-transform:uppercase; letter-spacing:0.05em;"
+                                    id="reviewGalleryTitle">Evidence Views:</span>
+                                <span style="font-size:0.75rem; color:#38bdf8; font-weight:600;"
+                                    id="reviewGalleryCounter">Photo 1 of 1</span>
                             </div>
-                            <div id="reviewThumbnailList" style="display:flex; gap:0.5rem; overflow-x:auto; padding: 2px 0;"></div>
+                            <div id="reviewThumbnailList"
+                                style="display:flex; gap:0.5rem; overflow-x:auto; padding: 2px 0;"></div>
                             <!-- Pagination Dots -->
-                            <div id="reviewPaginationDots" style="display: flex; justify-content: center; gap: 6px; margin-top: 2px;"></div>
+                            <div id="reviewPaginationDots"
+                                style="display: flex; justify-content: center; gap: 6px; margin-top: 2px;"></div>
                         </div>
                         <div class="telemetry-bar">
                             <div class="telemetry-box">
@@ -1247,12 +1588,18 @@
                         </div>
 
                         <!-- Combined Multi-View Assessment Block (For Same-Defect Multi-View Reports) -->
-                        <div id="reviewCombinedMultiViewBlock" class="combined-multiview-card hidden" style="margin-top: 0.75rem; background: #0f172a; border: 1px solid #1e293b; border-radius: 6px; padding: 0.75rem 1rem; color: #f1f5f9;">
-                            <div style="display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid #1e293b; padding-bottom: 0.4rem; margin-bottom: 0.5rem;">
-                                <span style="font-size: 0.8rem; font-weight: 700; color: #38bdf8; text-transform: uppercase; letter-spacing: 0.05em;"><i class='bx bx-layer'></i> Combined Multi-View Assessment</span>
-                                <span id="reviewCombinedSeverityPill" class="severity-pill critical" style="font-size: 0.72rem; padding: 2px 8px;">CRITICAL</span>
+                        <div id="reviewCombinedMultiViewBlock" class="combined-multiview-card hidden"
+                            style="margin-top: 0.75rem; background: #0f172a; border: 1px solid #1e293b; border-radius: 6px; padding: 0.75rem 1rem; color: #f1f5f9;">
+                            <div
+                                style="display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid #1e293b; padding-bottom: 0.4rem; margin-bottom: 0.5rem;">
+                                <span
+                                    style="font-size: 0.8rem; font-weight: 700; color: #38bdf8; text-transform: uppercase; letter-spacing: 0.05em;"><i
+                                        class='bx bx-layer'></i> Combined Multi-View Assessment</span>
+                                <span id="reviewCombinedSeverityPill" class="severity-pill critical"
+                                    style="font-size: 0.72rem; padding: 2px 8px;">CRITICAL</span>
                             </div>
-                            <div id="reviewCombinedClassRows" style="display: flex; flex-direction: column; gap: 0.4rem; font-size: 0.8rem;"></div>
+                            <div id="reviewCombinedClassRows"
+                                style="display: flex; flex-direction: column; gap: 0.4rem; font-size: 0.8rem;"></div>
                         </div>
                     </div>
 
@@ -1265,48 +1612,66 @@
                             </div>
                             <div class="spec-row">
                                 <span class="spec-label">CITIZEN NOTES:</span>
-                                <span class="spec-value" id="reviewCitizenNotes" style="font-weight:400; color:#475569;">—</span>
+                                <span class="spec-value" id="reviewCitizenNotes"
+                                    style="font-weight:400; color:#475569;">—</span>
                             </div>
 
                             <div class="action-matrix-card">
                                 <span class="matrix-tag">RELATIVE VISUAL SEVERITY</span>
                                 <p class="matrix-severity" id="reviewCalculatedSeverity">RELATIVE SEVERITY: —</p>
-                                <p class="matrix-sla">Subject to professional civil engineering validation & sign-off</p>
+                                <p class="matrix-sla">Subject to professional civil engineering validation & sign-off
+                                </p>
                             </div>
                         </div>
 
                         <!-- Contextual Lifecycle Actions Card (Sections 25, 26, 27) -->
-                        <div id="reviewContextualWorkflow" style="margin-bottom: 1rem; border-radius: 8px; border: 1px solid #e2e8f0; background: #ffffff; padding: 1rem; box-shadow: 0 1px 3px rgba(0,0,0,0.03);">
-                            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.6rem;">
-                                <span style="font-size: 0.75rem; font-weight: 700; color: #64748b; text-transform: uppercase; letter-spacing: 0.05em;"><i class='bx bx-git-branch'></i> Lifecycle Stage Action</span>
-                                <span id="reviewWorkflowStageBadge" class="status-chip warning" style="font-size: 0.72rem; padding: 2px 8px;">Received</span>
+                        <div id="reviewContextualWorkflow"
+                            style="margin-bottom: 1rem; border-radius: 8px; border: 1px solid #e2e8f0; background: #ffffff; padding: 1rem; box-shadow: 0 1px 3px rgba(0,0,0,0.03);">
+                            <div
+                                style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.6rem;">
+                                <span
+                                    style="font-size: 0.75rem; font-weight: 700; color: #64748b; text-transform: uppercase; letter-spacing: 0.05em;"><i
+                                        class='bx bx-git-branch'></i> Lifecycle Stage Action</span>
+                                <span id="reviewWorkflowStageBadge" class="status-chip warning"
+                                    style="font-size: 0.72rem; padding: 2px 8px;">Received</span>
                             </div>
 
                             <!-- Case A: Received State -> Begin Review Action -->
                             <div id="actionStageReceived" style="display: flex; flex-direction: column; gap: 0.5rem;">
-                                <p style="font-size: 0.8rem; color: #475569; margin: 0; line-height: 1.4;">Defect ticket registered in monitoring queue. Initiating review assigns your engineer accreditation to this case.</p>
-                                <button type="button" class="btn-primary" id="btnMoveUnderReview" style="width: 100%; display: flex; align-items: center; justify-content: center; gap: 0.5rem; padding: 0.7rem; font-size: 0.88rem; font-weight: 600; border-radius: 6px; cursor: pointer;">
-                                    <i class='bx bx-play-circle' style="font-size: 1.15rem;"></i> Begin Professional Review
+                                <p style="font-size: 0.8rem; color: #475569; margin: 0; line-height: 1.4;">Defect ticket
+                                    registered in monitoring queue. Initiating review assigns your engineer
+                                    accreditation to this case.</p>
+                                <button type="button" class="btn-primary" id="btnMoveUnderReview"
+                                    style="width: 100%; display: flex; align-items: center; justify-content: center; gap: 0.5rem; padding: 0.7rem; font-size: 0.88rem; font-weight: 600; border-radius: 6px; cursor: pointer;">
+                                    <i class='bx bx-play-circle' style="font-size: 1.15rem;"></i> Begin Professional
+                                    Review
                                 </button>
                             </div>
 
                             <!-- Case B: Under Review State -> Validation Active Notice -->
-                            <div id="actionStageUnderReview" class="hidden" style="display: none; flex-direction: column; gap: 0.4rem;">
+                            <div id="actionStageUnderReview" class="hidden"
+                                style="display: none; flex-direction: column; gap: 0.4rem;">
                                 <p style="font-size: 0.8rem; color: #0284c7; margin: 0; font-weight: 500;">
-                                    <i class='bx bx-time'></i> Inspection active. Review automated AI telemetry below and submit engineering validation.
+                                    <i class='bx bx-time'></i> Inspection active. Review automated AI telemetry below
+                                    and submit engineering validation.
                                 </p>
                             </div>
 
                             <!-- Case C: Verified State -> Resolution & Advisory Actions -->
-                            <div id="actionStageVerified" class="hidden" style="display: none; flex-direction: column; gap: 0.65rem;">
-                                <div style="font-size: 0.8rem; color: #059669; font-weight: 500; display: flex; align-items: center; gap: 0.4rem;">
-                                    <i class='bx bx-check-circle'></i> Defect verified by certified engineer. Proceed to remediation tracking.
+                            <div id="actionStageVerified" class="hidden"
+                                style="display: none; flex-direction: column; gap: 0.65rem;">
+                                <div
+                                    style="font-size: 0.8rem; color: #059669; font-weight: 500; display: flex; align-items: center; gap: 0.4rem;">
+                                    <i class='bx bx-check-circle'></i> Defect verified by certified engineer. Proceed to
+                                    remediation tracking.
                                 </div>
                                 <div style="display: flex; gap: 0.5rem; flex-wrap: wrap;">
-                                    <button type="button" class="btn-lifecycle action-resolve" id="btnMarkResolved" style="flex: 1; min-width: 160px; padding: 0.65rem 0.85rem; font-size: 0.82rem; font-weight: 600; background: #10b981; color: #ffffff; border: none; border-radius: 6px; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 0.4rem;">
+                                    <button type="button" class="btn-lifecycle action-resolve" id="btnMarkResolved"
+                                        style="flex: 1; min-width: 160px; padding: 0.65rem 0.85rem; font-size: 0.82rem; font-weight: 600; background: #10b981; color: #ffffff; border: none; border-radius: 6px; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 0.4rem;">
                                         <i class='bx bx-check-double'></i> Mark Resolved
                                     </button>
-                                    <button type="button" class="btn-secondary" id="btnOpenSafetyAdvisory" style="flex: 1; min-width: 160px; border: 1px solid #f59e0b; color: #b45309; background: #fffbeb; font-size: 0.82rem; padding: 0.65rem 0.85rem; border-radius: 6px; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 0.4rem;">
+                                    <button type="button" class="btn-secondary" id="btnOpenSafetyAdvisory"
+                                        style="flex: 1; min-width: 160px; border: 1px solid #f59e0b; color: #b45309; background: #fffbeb; font-size: 0.82rem; padding: 0.65rem 0.85rem; border-radius: 6px; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 0.4rem;">
                                         <i class='bx bx-error-circle'></i> Issue Safety Advisory
                                     </button>
                                 </div>
@@ -1350,7 +1715,8 @@
                                         </select>
                                     </div>
                                     <div class="form-group flex-1">
-                                        <label for="overrideSeveritySelect" class="field-label">CORRECTED SEVERITY</label>
+                                        <label for="overrideSeveritySelect" class="field-label">CORRECTED
+                                            SEVERITY</label>
                                         <select id="overrideSeveritySelect" class="field-input">
                                             <option value="Critical" selected>Critical</option>
                                             <option value="Medium">Medium</option>
@@ -1362,7 +1728,8 @@
 
                             <div class="form-group">
                                 <label for="engineerNotes" class="field-label">ENGINEER REVIEW NOTES *</label>
-                                <textarea id="engineerNotes" class="field-textarea" rows="3" placeholder="Enter professional engineering review findings, maintenance recommendations, or field observations..."></textarea>
+                                <textarea id="engineerNotes" class="field-textarea" rows="3"
+                                    placeholder="Enter professional engineering review findings, maintenance recommendations, or field observations..."></textarea>
                             </div>
 
                             <!-- Professional Next Action Recommendation -->
@@ -1370,14 +1737,18 @@
                                 <label for="reviewNextAction" class="field-label">NEXT ACTION RECOMMENDATION *</label>
                                 <select id="reviewNextAction" class="field-input">
                                     <option value="Continue monitoring" selected>Continue monitoring</option>
-                                    <option value="On-site inspection recommended">On-site inspection recommended</option>
-                                    <option value="Refer to maintenance / responsible asset team">Refer to maintenance / responsible asset team</option>
+                                    <option value="On-site inspection recommended">On-site inspection recommended
+                                    </option>
+                                    <option value="Refer to maintenance / responsible asset team">Refer to maintenance /
+                                        responsible asset team</option>
                                     <option value="Issue Safety Advisory">Issue Safety Advisory</option>
-                                    <option value="No further action required at this stage">No further action required at this stage</option>
+                                    <option value="No further action required at this stage">No further action required
+                                        at this stage</option>
                                 </select>
                             </div>
                             <div class="form-group hidden" id="followUpDateGroup" style="margin-top: 0.5rem;">
-                                <label for="reviewFollowUpDate" class="field-label">TARGET INSPECTION DATE (OPTIONAL)</label>
+                                <label for="reviewFollowUpDate" class="field-label">TARGET INSPECTION DATE
+                                    (OPTIONAL)</label>
                                 <input type="date" id="reviewFollowUpDate" class="field-input">
                             </div>
 
@@ -1387,98 +1758,142 @@
                         </form>
 
                         <!-- Inspection Notebook & Field Work Notes (Sections 30-33 & 43) -->
-                        <div id="reviewInspectionNotebookSection" style="margin-top: 1.5rem; border-top: 1px solid #e2e8f0; padding-top: 1rem;">
-                            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.85rem;">
+                        <div id="reviewInspectionNotebookSection"
+                            style="margin-top: 1.5rem; border-top: 1px solid #e2e8f0; padding-top: 1rem;">
+                            <div
+                                style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.85rem;">
                                 <div style="display: flex; align-items: center; gap: 0.4rem;">
                                     <i class='bx bx-notepad' style="color: #0284c7; font-size: 1.15rem;"></i>
-                                    <strong style="font-size: 0.88rem; color: #0f172a;">Inspection Notebook & Objectives</strong>
+                                    <strong style="font-size: 0.88rem; color: #0f172a;">Inspection Notebook &
+                                        Objectives</strong>
                                 </div>
-                                <button type="button" class="btn-secondary btn-sm" id="btnSaveInspectionNotebook" style="font-size: 0.75rem; padding: 3px 10px; display: flex; align-items: center; gap: 0.3rem;">
+                                <button type="button" class="btn-secondary btn-sm" id="btnSaveInspectionNotebook"
+                                    style="font-size: 0.75rem; padding: 3px 10px; display: flex; align-items: center; gap: 0.3rem;">
                                     <i class='bx bx-save'></i> Save Notebook
                                 </button>
                             </div>
 
                             <!-- Asset-Aware Inspection Checklist (Sections 31 & 32) -->
-                            <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 6px; padding: 0.85rem; margin-bottom: 1rem;">
-                                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem;">
-                                    <span style="font-size: 0.75rem; font-weight: 700; color: #475569; text-transform: uppercase; letter-spacing: 0.05em;" id="checklistTitle">Road / Pavement Inspection Objectives</span>
-                                    <span style="font-size: 0.72rem; color: #64748b;" id="checklistProgress">0 of 10 completed</span>
+                            <div
+                                style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 6px; padding: 0.85rem; margin-bottom: 1rem;">
+                                <div
+                                    style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem;">
+                                    <span
+                                        style="font-size: 0.75rem; font-weight: 700; color: #475569; text-transform: uppercase; letter-spacing: 0.05em;"
+                                        id="checklistTitle">Road / Pavement Inspection Objectives</span>
+                                    <span style="font-size: 0.72rem; color: #64748b;" id="checklistProgress">0 of 10
+                                        completed</span>
                                 </div>
-                                <div id="reviewChecklistItems" style="display: flex; flex-direction: column; gap: 0.45rem; font-size: 0.8rem; color: #1e293b;"></div>
-                                
+                                <div id="reviewChecklistItems"
+                                    style="display: flex; flex-direction: column; gap: 0.45rem; font-size: 0.8rem; color: #1e293b;">
+                                </div>
+
                                 <div style="margin-top: 0.65rem; display: flex; gap: 0.4rem;">
-                                    <input type="text" id="customObjectiveInput" class="field-input" placeholder="Add custom inspection objective..." style="font-size: 0.78rem; padding: 3px 8px; flex: 1;">
-                                    <button type="button" class="btn-secondary btn-sm" id="btnAddCustomObjective" style="font-size: 0.75rem; padding: 3px 8px; white-space: nowrap;">+ Add Item</button>
+                                    <input type="text" id="customObjectiveInput" class="field-input"
+                                        placeholder="Add custom inspection objective..."
+                                        style="font-size: 0.78rem; padding: 3px 8px; flex: 1;">
+                                    <button type="button" class="btn-secondary btn-sm" id="btnAddCustomObjective"
+                                        style="font-size: 0.75rem; padding: 3px 8px; white-space: nowrap;">+ Add
+                                        Item</button>
                                 </div>
                             </div>
 
                             <!-- Building / Structural Compliance Context (Section 43) -->
-                            <div id="reviewBuildingComplianceCard" class="hidden" style="display: none; background: #fdfbf7; border: 1px solid #fed7aa; border-radius: 6px; padding: 0.85rem; margin-bottom: 1rem;">
+                            <div id="reviewBuildingComplianceCard" class="hidden"
+                                style="display: none; background: #fdfbf7; border: 1px solid #fed7aa; border-radius: 6px; padding: 0.85rem; margin-bottom: 1rem;">
                                 <div style="display: flex; align-items: center; gap: 0.4rem; margin-bottom: 0.4rem;">
                                     <i class='bx bx-building-house' style="color: #c2410c;"></i>
-                                    <strong style="font-size: 0.82rem; color: #9a3412;">Structural Compliance Inquiry Prompts</strong>
+                                    <strong style="font-size: 0.82rem; color: #9a3412;">Structural Compliance Inquiry
+                                        Prompts</strong>
                                 </div>
-                                <p style="font-size: 0.73rem; color: #7c2d12; margin-bottom: 0.65rem; line-height: 1.35;">Professional follow-up inquiry prompts for structural engineering oversight. Not an automated legal or zoning determination.</p>
-                                
-                                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.5rem; font-size: 0.78rem;">
+                                <p
+                                    style="font-size: 0.73rem; color: #7c2d12; margin-bottom: 0.65rem; line-height: 1.35;">
+                                    Professional follow-up inquiry prompts for structural engineering oversight. Not an
+                                    automated legal or zoning determination.</p>
+
+                                <div
+                                    style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.5rem; font-size: 0.78rem;">
                                     <div>
-                                        <label class="field-label" style="font-size: 0.7rem;">Approval Info Available?</label>
-                                        <select id="compApprovalSelect" class="field-input" style="font-size: 0.78rem; padding: 3px 6px;">
+                                        <label class="field-label" style="font-size: 0.7rem;">Approval Info
+                                            Available?</label>
+                                        <select id="compApprovalSelect" class="field-input"
+                                            style="font-size: 0.78rem; padding: 3px 6px;">
                                             <option value="Unknown" selected>Unknown</option>
                                             <option value="Yes">Yes</option>
                                             <option value="No">No</option>
                                         </select>
                                     </div>
                                     <div>
-                                        <label class="field-label" style="font-size: 0.7rem;">Observed Apparent Alterations?</label>
-                                        <select id="compAlterationSelect" class="field-input" style="font-size: 0.78rem; padding: 3px 6px;">
+                                        <label class="field-label" style="font-size: 0.7rem;">Observed Apparent
+                                            Alterations?</label>
+                                        <select id="compAlterationSelect" class="field-input"
+                                            style="font-size: 0.78rem; padding: 3px 6px;">
                                             <option value="Unknown" selected>Unknown</option>
                                             <option value="Yes">Yes</option>
                                             <option value="No">No</option>
                                         </select>
                                     </div>
                                     <div>
-                                        <label class="field-label" style="font-size: 0.7rem;">Possible Additional Floors?</label>
-                                        <select id="compFloorsSelect" class="field-input" style="font-size: 0.78rem; padding: 3px 6px;">
+                                        <label class="field-label" style="font-size: 0.7rem;">Possible Additional
+                                            Floors?</label>
+                                        <select id="compFloorsSelect" class="field-input"
+                                            style="font-size: 0.78rem; padding: 3px 6px;">
                                             <option value="Unknown" selected>Unknown</option>
                                             <option value="Yes">Yes</option>
                                             <option value="No">No</option>
                                         </select>
                                     </div>
                                     <div>
-                                        <label class="field-label" style="font-size: 0.7rem;">NCA / County Verification Needed?</label>
-                                        <select id="compNcaSelect" class="field-input" style="font-size: 0.78rem; padding: 3px 6px;">
+                                        <label class="field-label" style="font-size: 0.7rem;">NCA / County Verification
+                                            Needed?</label>
+                                        <select id="compNcaSelect" class="field-input"
+                                            style="font-size: 0.78rem; padding: 3px 6px;">
                                             <option value="No" selected>No</option>
                                             <option value="Yes">Yes</option>
                                         </select>
                                     </div>
                                 </div>
                                 <div style="margin-top: 0.5rem;">
-                                    <label class="field-label" style="font-size: 0.7rem;">Compliance Inquiry Notes</label>
-                                    <input type="text" id="compNotesInput" class="field-input" placeholder="e.g. Planning record reference requested from county office..." style="font-size: 0.78rem; padding: 4px 8px;">
+                                    <label class="field-label" style="font-size: 0.7rem;">Compliance Inquiry
+                                        Notes</label>
+                                    <input type="text" id="compNotesInput" class="field-input"
+                                        placeholder="e.g. Planning record reference requested from county office..."
+                                        style="font-size: 0.78rem; padding: 4px 8px;">
                                 </div>
                             </div>
 
                             <!-- Visual Note Cards (Section 33) -->
-                            <div style="background: #ffffff; border: 1px solid #e2e8f0; border-radius: 6px; padding: 0.85rem;">
-                                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem;">
-                                    <span style="font-size: 0.75rem; font-weight: 700; color: #475569; text-transform: uppercase; letter-spacing: 0.05em;"><i class='bx bx-card'></i> Engineering Note Cards</span>
+                            <div
+                                style="background: #ffffff; border: 1px solid #e2e8f0; border-radius: 6px; padding: 0.85rem;">
+                                <div
+                                    style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem;">
+                                    <span
+                                        style="font-size: 0.75rem; font-weight: 700; color: #475569; text-transform: uppercase; letter-spacing: 0.05em;"><i
+                                            class='bx bx-card'></i> Engineering Note Cards</span>
                                     <span style="font-size: 0.72rem; color: #64748b;" id="noteCardsCount">0 cards</span>
                                 </div>
 
-                                <div id="reviewNoteCardsList" style="display: flex; flex-direction: column; gap: 0.5rem; max-height: 220px; overflow-y: auto; margin-bottom: 0.65rem;"></div>
+                                <div id="reviewNoteCardsList"
+                                    style="display: flex; flex-direction: column; gap: 0.5rem; max-height: 220px; overflow-y: auto; margin-bottom: 0.65rem;">
+                                </div>
 
                                 <!-- Add Note Card Form -->
-                                <div style="display: flex; flex-direction: column; gap: 0.4rem; border-top: 1px solid #f1f5f9; padding-top: 0.5rem;">
+                                <div
+                                    style="display: flex; flex-direction: column; gap: 0.4rem; border-top: 1px solid #f1f5f9; padding-top: 0.5rem;">
                                     <div style="display: flex; gap: 0.4rem;">
-                                        <select id="noteCategorySelect" class="field-input" style="font-size: 0.78rem; padding: 3px 6px; width: 130px;">
+                                        <select id="noteCategorySelect" class="field-input"
+                                            style="font-size: 0.78rem; padding: 3px 6px; width: 130px;">
                                             <option value="Observation" selected>Observation</option>
                                             <option value="Follow-Up">Follow-Up</option>
                                             <option value="Maintenance">Maintenance</option>
                                             <option value="Compliance Context">Compliance</option>
                                         </select>
-                                        <input type="text" id="noteCardTextInput" class="field-input" placeholder="Add field observation or maintenance note..." style="font-size: 0.78rem; padding: 3px 8px; flex: 1;">
-                                        <button type="button" class="btn-primary btn-sm" id="btnAddNoteCard" style="font-size: 0.75rem; padding: 3px 10px; white-space: nowrap;">Add Card</button>
+                                        <input type="text" id="noteCardTextInput" class="field-input"
+                                            placeholder="Add field observation or maintenance note..."
+                                            style="font-size: 0.78rem; padding: 3px 8px; flex: 1;">
+                                        <button type="button" class="btn-primary btn-sm" id="btnAddNoteCard"
+                                            style="font-size: 0.75rem; padding: 3px 10px; white-space: nowrap;">Add
+                                            Card</button>
                                     </div>
                                 </div>
                             </div>
@@ -1493,11 +1908,14 @@
             <div class="view-header">
                 <div>
                     <h2 class="view-title">System Administration & Oversight Dashboard</h2>
-                    <p class="view-desc">High-level governance analytics, verification queues, and infrastructure platform health</p>
+                    <p class="view-desc">High-level governance analytics, verification queues, and infrastructure
+                        platform health</p>
                 </div>
                 <div style="display: flex; gap: 0.5rem; align-items: center; flex-wrap: wrap;">
-                    <button class="btn-secondary btn-sm" id="btnOpenSystemNotice"><i class='bx bx-broadcast'></i> Send System Notice</button>
-                    <button class="btn-secondary btn-sm" id="btnRefreshAdminDashboard"><i class='bx bx-refresh'></i> Refresh Metrics</button>
+                    <button class="btn-secondary btn-sm" id="btnOpenSystemNotice"><i class='bx bx-broadcast'></i> Send
+                        System Notice</button>
+                    <button class="btn-secondary btn-sm" id="btnRefreshAdminDashboard"><i class='bx bx-refresh'></i>
+                        Refresh Metrics</button>
                 </div>
             </div>
 
@@ -1507,7 +1925,8 @@
                     <span class="admin-alert-icon"><i class='bx bx-error'></i></span>
                     <div>
                         <strong style="color: #1e3a8a;">Pending Engineer Accreditation Reviews:</strong>
-                        <span id="adminPendingAlertText" style="color: #3b82f6; margin-left: 4px;">0 engineers awaiting verification</span>
+                        <span id="adminPendingAlertText" style="color: #3b82f6; margin-left: 4px;">0 engineers awaiting
+                            verification</span>
                     </div>
                 </div>
                 <button type="button" class="btn-primary btn-sm" id="btnGoToVerification">
@@ -1664,15 +2083,19 @@
             <div class="glass-card table-card">
                 <div class="card-header-bar">
                     <span class="step-tag">PROFESSIONAL VERIFICATION & USER QUEUE</span>
-                    <div class="filter-controls" style="display: flex; gap: 0.5rem; align-items: center; flex-wrap: wrap;">
-                        <input type="text" id="adminUserSearch" class="filter-select" style="min-width: 200px; padding: 0.35rem 0.75rem;" placeholder="Search name, email, license...">
+                    <div class="filter-controls"
+                        style="display: flex; gap: 0.5rem; align-items: center; flex-wrap: wrap;">
+                        <input type="text" id="adminUserSearch" class="filter-select"
+                            style="min-width: 200px; padding: 0.35rem 0.75rem;"
+                            placeholder="Search name, email, license...">
                         <select id="adminRoleFilter" class="filter-select">
                             <option value="">All Roles</option>
                             <option value="engineer" selected>Engineers Only</option>
                             <option value="citizen">Citizens Only</option>
                             <option value="admin">Admins Only</option>
                         </select>
-                        <button type="button" class="btn-micro btn-accent" id="btnOpenAdminNotice" style="padding: 0.45rem 0.85rem; font-size: 0.78rem;">
+                        <button type="button" class="btn-micro btn-accent" id="btnOpenAdminNotice"
+                            style="padding: 0.45rem 0.85rem; font-size: 0.78rem;">
                             <i class='bx bx-broadcast'></i> Send Notice
                         </button>
                     </div>
@@ -1698,186 +2121,215 @@
             </div>
         </section>
 
-    <!-- Compact Report Location Picker Modal (Section 2) -->
-    <div class="modal-backdrop" id="locationPickerModal" role="dialog" aria-modal="true" aria-labelledby="pickerModalTitle">
-        <div class="modal-dialog">
-            <div class="modal-header">
-                <h3 class="modal-title" id="pickerModalTitle">
-                    <i class='bx bx-map-pin'></i> Pinpoint Defect Location
-                </h3>
-                <button type="button" class="modal-close-btn" id="btnCloseLocationPicker" aria-label="Close modal"><i class='bx bx-x'></i></button>
-            </div>
-            <div class="modal-body">
-                <div class="picker-toolbar">
-                    <button type="button" class="btn-micro btn-accent" id="btnPickerCurrentLocation">
-                        <i class='bx bx-current-location'></i> Use My Current Location
-                    </button>
-                    <div class="picker-coords-badge" id="pickerCoordsDisplay">
-                        Lat: -1.28639, Lng: 36.81722
+        <!-- Compact Report Location Picker Modal (Section 2) -->
+        <div class="modal-backdrop" id="locationPickerModal" role="dialog" aria-modal="true"
+            aria-labelledby="pickerModalTitle">
+            <div class="modal-dialog">
+                <div class="modal-header">
+                    <h3 class="modal-title" id="pickerModalTitle">
+                        <i class='bx bx-map-pin'></i> Pinpoint Defect Location
+                    </h3>
+                    <button type="button" class="modal-close-btn" id="btnCloseLocationPicker"
+                        aria-label="Close modal"><i class='bx bx-x'></i></button>
+                </div>
+                <div class="modal-body">
+                    <div class="picker-toolbar">
+                        <button type="button" class="btn-micro btn-accent" id="btnPickerCurrentLocation">
+                            <i class='bx bx-current-location'></i> Use My Current Location
+                        </button>
+                        <div class="picker-coords-badge" id="pickerCoordsDisplay">
+                            Lat: -1.28639, Lng: 36.81722
+                        </div>
                     </div>
-                </div>
 
-                <div class="picker-map-container" id="pickerMapContainer"></div>
+                    <div class="picker-map-container" id="pickerMapContainer"></div>
 
-                <div class="form-group" style="margin-bottom: 0;">
-                    <label for="pickerLocationSummary" class="field-label" style="font-size: 0.75rem;">LOCATION SUMMARY / LANDMARK</label>
-                    <input type="text" id="pickerLocationSummary" class="field-input" placeholder="e.g. Uhuru Highway near Nyayo Stadium (or click map to refine)">
+                    <div class="form-group" style="margin-bottom: 0;">
+                        <label for="pickerLocationSummary" class="field-label" style="font-size: 0.75rem;">LOCATION
+                            SUMMARY / LANDMARK</label>
+                        <input type="text" id="pickerLocationSummary" class="field-input"
+                            placeholder="e.g. Uhuru Highway near Nyayo Stadium (or click map to refine)">
+                    </div>
+                    <p class="picker-help-text">
+                        Click anywhere on the map or drag the pin to set the exact defect coordinates. Nairobi center is
+                        loaded as fallback.
+                    </p>
                 </div>
-                <p class="picker-help-text">
-                    Click anywhere on the map or drag the pin to set the exact defect coordinates. Nairobi center is loaded as fallback.
-                </p>
-            </div>
-            <div class="modal-footer">
-                <button type="button" class="btn-secondary" id="btnCancelLocationPicker">Cancel</button>
-                <button type="button" class="btn-primary" id="btnConfirmLocationPicker">Confirm Location</button>
+                <div class="modal-footer">
+                    <button type="button" class="btn-secondary" id="btnCancelLocationPicker">Cancel</button>
+                    <button type="button" class="btn-primary" id="btnConfirmLocationPicker">Confirm Location</button>
+                </div>
             </div>
         </div>
-    </div>
 
-    <!-- Engineer Application Rejection Modal (Sections I, J, K, L) -->
-    <div class="modal-backdrop" id="engineerRejectionModal" role="dialog" aria-modal="true" aria-labelledby="rejectionModalTitle">
-        <div class="modal-dialog" style="max-width: 480px;">
-            <div class="modal-header">
-                <h3 class="modal-title" id="rejectionModalTitle" style="color: #dc2626;">
-                    <i class='bx bx-user-x'></i> Reject Engineer Verification
-                </h3>
-                <button type="button" class="modal-close-btn" id="btnCloseRejectionModal" aria-label="Close modal"><i class='bx bx-x'></i></button>
-            </div>
-            <div class="modal-body">
-                <p style="font-size: 0.85rem; color: #475569; margin-bottom: 1rem;">
-                    You are declining professional engineer accreditation for <strong id="rejectionTargetName">Engineer</strong> (<span id="rejectionTargetEmail">email</span>). The applicant will receive an operational notification explaining the decision.
-                </p>
-                <div class="form-group">
-                    <label for="rejectionReasonSelect" class="field-label">REJECTION REASON *</label>
-                    <select id="rejectionReasonSelect" class="field-input">
-                        <option value="Unable to verify EBK registration" selected>Unable to verify EBK registration</option>
-                        <option value="EBK number appears incorrect">EBK number appears incorrect</option>
-                        <option value="Professional details do not match submitted registration">Professional details do not match submitted registration</option>
-                        <option value="Professional information is incomplete">Professional information is incomplete</option>
-                        <option value="Duplicate/conflicting Engineer registration">Duplicate/conflicting Engineer registration</option>
-                        <option value="Other">Other</option>
-                    </select>
+        <!-- Engineer Application Rejection Modal (Sections I, J, K, L) -->
+        <div class="modal-backdrop" id="engineerRejectionModal" role="dialog" aria-modal="true"
+            aria-labelledby="rejectionModalTitle">
+            <div class="modal-dialog" style="max-width: 480px;">
+                <div class="modal-header">
+                    <h3 class="modal-title" id="rejectionModalTitle" style="color: #dc2626;">
+                        <i class='bx bx-user-x'></i> Reject Engineer Verification
+                    </h3>
+                    <button type="button" class="modal-close-btn" id="btnCloseRejectionModal"
+                        aria-label="Close modal"><i class='bx bx-x'></i></button>
                 </div>
-                <div class="form-group" style="margin-bottom: 0;">
-                    <label for="rejectionNotesText" class="field-label">SUPPLEMENTARY NOTE / REASON DETAILS</label>
-                    <textarea id="rejectionNotesText" class="field-textarea" rows="3" placeholder="Optional brief guidance for the applicant (or required if 'Other' is selected)..."></textarea>
-                </div>
-            </div>
-            <div class="modal-footer">
-                <button type="button" class="btn-secondary" id="btnCancelRejection">Cancel</button>
-                <button type="button" class="btn-danger" id="btnConfirmRejection" style="background: #dc2626; color: #ffffff; border: none; padding: 0.6rem 1.25rem; border-radius: var(--radius-sm); font-weight: 600; cursor: pointer;">Confirm Rejection</button>
-            </div>
-        </div>
-    </div>
-
-    <!-- Engineer Safety Advisory Modal (Section S) -->
-    <div class="modal-backdrop" id="safetyAdvisoryModal" role="dialog" aria-modal="true" aria-labelledby="safetyAdvisoryTitle">
-        <div class="modal-dialog" style="max-width: 480px;">
-            <div class="modal-header">
-                <h3 class="modal-title" id="safetyAdvisoryTitle" style="color: #d97706;">
-                    <i class='bx bx-error-circle'></i> Issue Operational Safety Advisory
-                </h3>
-                <button type="button" class="modal-close-btn" id="btnCloseSafetyAdvisory" aria-label="Close modal"><i class='bx bx-x'></i></button>
-            </div>
-            <div class="modal-body">
-                <p style="font-size: 0.85rem; color: #475569; margin-bottom: 1rem;">
-                    Publish a report-linked safety advisory for <strong id="advisoryLocationName">Infrastructure Location</strong>. This advisory will be dispatched as an operational alert to citizens and engineers monitoring this corridor.
-                </p>
-                <div class="form-group">
-                    <label for="advisoryCategorySelect" class="field-label">ADVISORY CATEGORY *</label>
-                    <select id="advisoryCategorySelect" class="field-input">
-                        <option value="Exercise caution" selected>Exercise caution</option>
-                        <option value="Avoid this area">Avoid this area</option>
-                        <option value="Dangerous road defect">Dangerous road defect</option>
-                        <option value="Reduce speed / drive with caution">Reduce speed / drive with caution</option>
-                        <option value="Inspection underway">Inspection underway</option>
-                        <option value="Temporary access concern">Temporary access concern</option>
-                    </select>
-                </div>
-                <div class="form-group" style="margin-bottom: 0;">
-                    <label for="advisoryNoteText" class="field-label">PROFESSIONAL NOTE / GUIDANCE</label>
-                    <textarea id="advisoryNoteText" class="field-textarea" rows="3" placeholder="e.g. Severe pavement depression on westbound lane. Drive with caution pending site repairs."></textarea>
-                </div>
-            </div>
-            <div class="modal-footer">
-                <button type="button" class="btn-secondary" id="btnCancelSafetyAdvisory">Cancel</button>
-                <button type="button" class="btn-primary" id="btnConfirmSafetyAdvisory" style="background: #d97706; border-color: #d97706;">Publish Advisory</button>
-            </div>
-        </div>
-    </div>
-
-    <!-- Admin Operational Notice Modal (Section T) -->
-    <div class="modal-backdrop" id="adminNoticeModal" role="dialog" aria-modal="true" aria-labelledby="adminNoticeTitle">
-        <div class="modal-dialog" style="max-width: 500px;">
-            <div class="modal-header">
-                <h3 class="modal-title" id="adminNoticeTitle">
-                    <i class='bx bx-broadcast'></i> Send Administrative Notice
-                </h3>
-                <button type="button" class="modal-close-btn" id="btnCloseAdminNotice" aria-label="Close modal"><i class='bx bx-x'></i></button>
-            </div>
-            <div class="modal-body">
-                <div class="form-row">
-                    <div class="form-group flex-1">
-                        <label for="adminNoticeMode" class="field-label">NOTICE TYPE</label>
-                        <select id="adminNoticeMode" class="field-input">
-                            <option value="targeted" selected>Targeted User Notice</option>
-                            <option value="broadcast">System Announcement (Broadcast)</option>
+                <div class="modal-body">
+                    <p style="font-size: 0.85rem; color: #475569; margin-bottom: 1rem;">
+                        You are declining professional engineer accreditation for <strong
+                            id="rejectionTargetName">Engineer</strong> (<span id="rejectionTargetEmail">email</span>).
+                        The applicant will receive an operational notification explaining the decision.
+                    </p>
+                    <div class="form-group">
+                        <label for="rejectionReasonSelect" class="field-label">REJECTION REASON *</label>
+                        <select id="rejectionReasonSelect" class="field-input">
+                            <option value="Unable to verify EBK registration" selected>Unable to verify EBK registration
+                            </option>
+                            <option value="EBK number appears incorrect">EBK number appears incorrect</option>
+                            <option value="Professional details do not match submitted registration">Professional
+                                details do not match submitted registration</option>
+                            <option value="Professional information is incomplete">Professional information is
+                                incomplete</option>
+                            <option value="Duplicate/conflicting Engineer registration">Duplicate/conflicting Engineer
+                                registration</option>
+                            <option value="Other">Other</option>
                         </select>
                     </div>
-                    <div class="form-group flex-1" id="adminNoticeTargetGroup">
-                        <label for="adminNoticeTargetUser" class="field-label">RECIPIENT USER</label>
-                        <select id="adminNoticeTargetUser" class="field-input">
-                            <option value="">Select recipient...</option>
-                        </select>
-                    </div>
-                    <div class="form-group flex-1 hidden" id="adminNoticeAudienceGroup">
-                        <label for="adminNoticeAudience" class="field-label">TARGET AUDIENCE</label>
-                        <select id="adminNoticeAudience" class="field-input">
-                            <option value="all" selected>All users</option>
-                            <option value="citizen">Citizens</option>
-                            <option value="engineer">Engineers</option>
-                            <option value="admin">Admins</option>
-                        </select>
+                    <div class="form-group" style="margin-bottom: 0;">
+                        <label for="rejectionNotesText" class="field-label">SUPPLEMENTARY NOTE / REASON DETAILS</label>
+                        <textarea id="rejectionNotesText" class="field-textarea" rows="3"
+                            placeholder="Optional brief guidance for the applicant (or required if 'Other' is selected)..."></textarea>
                     </div>
                 </div>
-                <div class="form-group">
-                    <label for="adminNoticeCategory" class="field-label">CATEGORY / TEMPLATE</label>
-                    <select id="adminNoticeCategory" class="field-input">
-                        <option value="Credential correction request" selected>Credential correction request</option>
-                        <option value="Verification information">Verification information</option>
-                        <option value="Account / security notice">Account / security notice</option>
-                        <option value="Administrative account message">Administrative account message</option>
-                    </select>
+                <div class="modal-footer">
+                    <button type="button" class="btn-secondary" id="btnCancelRejection">Cancel</button>
+                    <button type="button" class="btn-danger" id="btnConfirmRejection"
+                        style="background: #dc2626; color: #ffffff; border: none; padding: 0.6rem 1.25rem; border-radius: var(--radius-sm); font-weight: 600; cursor: pointer;">Confirm
+                        Rejection</button>
                 </div>
-                <div class="form-group">
-                    <label for="adminNoticeTitleInput" class="field-label">NOTICE TITLE *</label>
-                    <input type="text" id="adminNoticeTitleInput" class="field-input" placeholder="e.g. Professional Registration Clarification Required">
-                </div>
-                <div class="form-group" style="margin-bottom: 0;">
-                    <label for="adminNoticeMessage" class="field-label">MESSAGE CONTENT *</label>
-                    <textarea id="adminNoticeMessage" class="field-textarea" rows="3" placeholder="Enter concise operational notification message..."></textarea>
-                </div>
-            </div>
-            <div class="modal-footer">
-                <button type="button" class="btn-secondary" id="btnCancelAdminNotice">Cancel</button>
-                <button type="button" class="btn-primary" id="btnConfirmAdminNotice">Dispatch Notice</button>
             </div>
         </div>
-    </div>
 
-    <!-- Toast Notification Banner -->
-    <div class="toast-container" id="toastContainer"></div>
+        <!-- Engineer Safety Advisory Modal (Section S) -->
+        <div class="modal-backdrop" id="safetyAdvisoryModal" role="dialog" aria-modal="true"
+            aria-labelledby="safetyAdvisoryTitle">
+            <div class="modal-dialog" style="max-width: 480px;">
+                <div class="modal-header">
+                    <h3 class="modal-title" id="safetyAdvisoryTitle" style="color: #d97706;">
+                        <i class='bx bx-error-circle'></i> Issue Operational Safety Advisory
+                    </h3>
+                    <button type="button" class="modal-close-btn" id="btnCloseSafetyAdvisory"
+                        aria-label="Close modal"><i class='bx bx-x'></i></button>
+                </div>
+                <div class="modal-body">
+                    <p style="font-size: 0.85rem; color: #475569; margin-bottom: 1rem;">
+                        Publish a report-linked safety advisory for <strong id="advisoryLocationName">Infrastructure
+                            Location</strong>. This advisory will be dispatched as an operational alert to citizens and
+                        engineers monitoring this corridor.
+                    </p>
+                    <div class="form-group">
+                        <label for="advisoryCategorySelect" class="field-label">ADVISORY CATEGORY *</label>
+                        <select id="advisoryCategorySelect" class="field-input">
+                            <option value="Exercise caution" selected>Exercise caution</option>
+                            <option value="Avoid this area">Avoid this area</option>
+                            <option value="Dangerous road defect">Dangerous road defect</option>
+                            <option value="Reduce speed / drive with caution">Reduce speed / drive with caution</option>
+                            <option value="Inspection underway">Inspection underway</option>
+                            <option value="Temporary access concern">Temporary access concern</option>
+                        </select>
+                    </div>
+                    <div class="form-group" style="margin-bottom: 0;">
+                        <label for="advisoryNoteText" class="field-label">PROFESSIONAL NOTE / GUIDANCE</label>
+                        <textarea id="advisoryNoteText" class="field-textarea" rows="3"
+                            placeholder="e.g. Severe pavement depression on westbound lane. Drive with caution pending site repairs."></textarea>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn-secondary" id="btnCancelSafetyAdvisory">Cancel</button>
+                    <button type="button" class="btn-primary" id="btnConfirmSafetyAdvisory"
+                        style="background: #d97706; border-color: #d97706;">Publish Advisory</button>
+                </div>
+            </div>
+        </div>
 
-    <!-- Leaflet & Leaflet.markercluster JS -->
-    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
-    <script src="https://unpkg.com/leaflet.markercluster@1.5.3/dist/leaflet.markercluster.js"></script>
-    <script src="js/leaflet-heat.js"></script>
-    <script src="js/chart.umd.min.js"></script>
-    <script src="js/api.js"></script>
-    <script src="js/map.js"></script>
-    <script src="js/submission.js"></script>
-    <script src="js/dashboard.js"></script>
-    <script src="js/review.js"></script>
-    <script src="js/app.js"></script>
+        <!-- Admin Operational Notice Modal (Section T) -->
+        <div class="modal-backdrop" id="adminNoticeModal" role="dialog" aria-modal="true"
+            aria-labelledby="adminNoticeTitle">
+            <div class="modal-dialog" style="max-width: 500px;">
+                <div class="modal-header">
+                    <h3 class="modal-title" id="adminNoticeTitle">
+                        <i class='bx bx-broadcast'></i> Send Administrative Notice
+                    </h3>
+                    <button type="button" class="modal-close-btn" id="btnCloseAdminNotice" aria-label="Close modal"><i
+                            class='bx bx-x'></i></button>
+                </div>
+                <div class="modal-body">
+                    <div class="form-row">
+                        <div class="form-group flex-1">
+                            <label for="adminNoticeMode" class="field-label">NOTICE TYPE</label>
+                            <select id="adminNoticeMode" class="field-input">
+                                <option value="targeted" selected>Targeted User Notice</option>
+                                <option value="broadcast">System Announcement (Broadcast)</option>
+                            </select>
+                        </div>
+                        <div class="form-group flex-1" id="adminNoticeTargetGroup">
+                            <label for="adminNoticeTargetUser" class="field-label">RECIPIENT USER</label>
+                            <select id="adminNoticeTargetUser" class="field-input">
+                                <option value="">Select recipient...</option>
+                            </select>
+                        </div>
+                        <div class="form-group flex-1 hidden" id="adminNoticeAudienceGroup">
+                            <label for="adminNoticeAudience" class="field-label">TARGET AUDIENCE</label>
+                            <select id="adminNoticeAudience" class="field-input">
+                                <option value="all" selected>All users</option>
+                                <option value="citizen">Citizens</option>
+                                <option value="engineer">Engineers</option>
+                                <option value="admin">Admins</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div class="form-group">
+                        <label for="adminNoticeCategory" class="field-label">CATEGORY / TEMPLATE</label>
+                        <select id="adminNoticeCategory" class="field-input">
+                            <option value="Credential correction request" selected>Credential correction request
+                            </option>
+                            <option value="Verification information">Verification information</option>
+                            <option value="Account / security notice">Account / security notice</option>
+                            <option value="Administrative account message">Administrative account message</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label for="adminNoticeTitleInput" class="field-label">NOTICE TITLE *</label>
+                        <input type="text" id="adminNoticeTitleInput" class="field-input"
+                            placeholder="e.g. Professional Registration Clarification Required">
+                    </div>
+                    <div class="form-group" style="margin-bottom: 0;">
+                        <label for="adminNoticeMessage" class="field-label">MESSAGE CONTENT *</label>
+                        <textarea id="adminNoticeMessage" class="field-textarea" rows="3"
+                            placeholder="Enter concise operational notification message..."></textarea>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn-secondary" id="btnCancelAdminNotice">Cancel</button>
+                    <button type="button" class="btn-primary" id="btnConfirmAdminNotice">Dispatch Notice</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Toast Notification Banner -->
+        <div class="toast-container" id="toastContainer"></div>
+
+        <!-- Leaflet & Leaflet.markercluster JS -->
+        <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
+            integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+        <script src="https://unpkg.com/leaflet.markercluster@1.5.3/dist/leaflet.markercluster.js"></script>
+        <script src="js/leaflet-heat.js"></script>
+        <script src="js/chart.umd.min.js"></script>
+        <script src="js/api.js"></script>
+        <script src="js/map.js"></script>
+        <script src="js/submission.js"></script>
+        <script src="js/dashboard.js"></script>
+        <script src="js/review.js"></script>
+        <script src="js/app.js"></script>
 </body>
+
 </html>

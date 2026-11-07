@@ -10,9 +10,12 @@ const Dashboard = {
     activeMonthIndex: null,
     isVerifiedFilterActive: false,
     previousFilterSeverityValue: '',
+    activeIntelligenceMode: 'rainfall_defect_pattern',
+    activeIntelligenceQuery: '',
 
     init() {
         this.bindEvents();
+        this.initMonitoringIntelligence();
     },
 
     bindEvents() {
@@ -97,6 +100,7 @@ const Dashboard = {
             this.loadDegradationChart();
             this.loadCriticalCalendar();
             this.loadReportsList();
+            this.loadFocusedIntelligence(this.activeIntelligenceMode, this.activeIntelligenceQuery);
         });
 
         if (wardSelect) wardSelect.addEventListener('change', () => {
@@ -106,10 +110,12 @@ const Dashboard = {
             this.loadDegradationChart();
             this.loadCriticalCalendar();
             this.loadReportsList();
+            this.loadFocusedIntelligence(this.activeIntelligenceMode, this.activeIntelligenceQuery);
         });
 
         if (calRangeSelect) calRangeSelect.addEventListener('change', () => {
             this.loadCriticalCalendar();
+            this.loadFocusedIntelligence(this.activeIntelligenceMode, this.activeIntelligenceQuery);
         });
 
         // Month-Centric Carousel Navigation Controls
@@ -156,7 +162,8 @@ const Dashboard = {
             this.loadKpis(),
             this.loadDegradationChart(),
             this.loadCriticalCalendar(),
-            this.loadReportsList()
+            this.loadReportsList(),
+            this.loadFocusedIntelligence(this.activeIntelligenceMode)
         ]);
     },
 
@@ -541,7 +548,7 @@ const Dashboard = {
                     const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
                     return `${parseInt(parts[2], 10)} ${months[parseInt(parts[1], 10) - 1]} ${parts[0]}`;
                 }
-            } catch (e) {}
+            } catch (e) { }
             return dateStr;
         };
 
@@ -622,7 +629,7 @@ const Dashboard = {
                 const cnt = parseInt(cell.getAttribute('data-count') || '0', 10);
                 const rainfall = cell.getAttribute('data-rainfall');
                 let breakdown = {};
-                try { breakdown = JSON.parse(cell.getAttribute('data-breakdown') || '{}'); } catch (e) {}
+                try { breakdown = JSON.parse(cell.getAttribute('data-breakdown') || '{}'); } catch (e) { }
                 const corridor = cell.getAttribute('data-corridor') || '';
 
                 const showTooltip = () => {
@@ -756,69 +763,375 @@ const Dashboard = {
         `).join('');
     },
 
-    renderMonitoringInsights(insights) {
-        const container = document.getElementById('monitoringInsightsContent');
+    initMonitoringIntelligence() {
+        const selectorGrid = document.getElementById('intelModeSelector');
+        if (selectorGrid) {
+            selectorGrid.querySelectorAll('.intel-mode-btn').forEach(btn => {
+                btn.addEventListener('click', () => {
+                    const mode = btn.getAttribute('data-mode');
+                    if (!mode) return;
+                    this.activeIntelligenceMode = mode;
+                    this.activeIntelligenceQuery = '';
+
+                    // PlayStation hub active state toggle
+                    selectorGrid.querySelectorAll('.intel-mode-btn').forEach(b => b.classList.remove('is-active'));
+                    btn.classList.add('is-active');
+
+                    // Clear query interpretation banner
+                    const interpBanner = document.getElementById('intelQueryExplanation');
+                    if (interpBanner) interpBanner.classList.add('hidden');
+                    const nlpInput = document.getElementById('intelNlpInput');
+                    if (nlpInput) nlpInput.value = '';
+
+                    this.loadFocusedIntelligence(this.activeIntelligenceMode, '');
+                });
+            });
+        }
+
+        const nlpForm = document.getElementById('intelNlpForm');
+        if (nlpForm) {
+            nlpForm.addEventListener('submit', (e) => {
+                e.preventDefault();
+                const nlpInput = document.getElementById('intelNlpInput');
+                const query = (nlpInput?.value || '').trim();
+                if (!query) return;
+
+                this.activeIntelligenceQuery = query;
+                this.loadFocusedIntelligence(null, query);
+            });
+        }
+
+        const suggestionsStrip = document.getElementById('intelNlpSuggestions');
+        if (suggestionsStrip) {
+            suggestionsStrip.querySelectorAll('.intel-chip-suggestion').forEach(chip => {
+                chip.addEventListener('click', () => {
+                    const prompt = chip.getAttribute('data-prompt');
+                    if (!prompt) return;
+                    const nlpInput = document.getElementById('intelNlpInput');
+                    if (nlpInput) nlpInput.value = prompt;
+                    this.activeIntelligenceQuery = prompt;
+                    this.loadFocusedIntelligence(null, prompt);
+                });
+            });
+        }
+
+        const clearBtn = document.getElementById('btnClearQueryInterpretation');
+        if (clearBtn) {
+            clearBtn.addEventListener('click', () => {
+                this.activeIntelligenceQuery = '';
+                const nlpInput = document.getElementById('intelNlpInput');
+                if (nlpInput) nlpInput.value = '';
+                const interpBanner = document.getElementById('intelQueryExplanation');
+                if (interpBanner) interpBanner.classList.add('hidden');
+                this.loadFocusedIntelligence(this.activeIntelligenceMode, '');
+            });
+        }
+    },
+
+    async loadFocusedIntelligence(mode = null, query = null) {
+        const container = document.getElementById('intelResultWorkspace');
         if (!container) return;
 
-        const patternCards = Array.isArray(insights?.pattern_intelligence) ? insights.pattern_intelligence : [];
+        // Render sleek PlayStation loading state
+        container.innerHTML = `
+            <div style="padding: 2.5rem 1rem; text-align: center; color: #64748b; font-size: 0.85rem;">
+                <i class='bx bx-loader-alt bx-spin' style="font-size: 1.8rem; color: #0070d1; display: block; margin: 0 auto 0.65rem auto;"></i>
+                <span style="font-weight: 600; color: #1e293b;">Computing Civil Infrastructure Intelligence</span>
+                <p style="font-size: 0.76rem; color: #64748b; margin-top: 4px;">Evaluating verified records & telemetry correlations...</p>
+            </div>
+        `;
 
-        if (!insights || (!insights.has_sufficient_data && patternCards.length === 0)) {
+        try {
+            const params = {};
+            if (query && query.trim()) {
+                params.query = query.trim();
+            } else if (mode) {
+                params.mode = mode;
+            } else {
+                params.mode = this.activeIntelligenceMode || 'rainfall_defect_pattern';
+            }
+
+            const county = document.getElementById('trendCountySelect')?.value || 'all';
+            const ward = document.getElementById('trendWardSelect')?.value || 'all';
+            const range = document.getElementById('calRangeSelect')?.value || '6m';
+
+            if (county && county !== 'all') params.county = county;
+            if (ward && ward !== 'all' && ward !== 'all areas') params.ward = ward;
+            if (range) params.time_range = range;
+
+            const res = await window.Api.getMonitoringIntelligence(params);
+
+            // Synchronize active mode selector button
+            if (res && res.active_mode) {
+                this.activeIntelligenceMode = res.active_mode;
+                const selectorGrid = document.getElementById('intelModeSelector');
+                if (selectorGrid) {
+                    selectorGrid.querySelectorAll('.intel-mode-btn').forEach(b => {
+                        if (b.getAttribute('data-mode') === res.active_mode) {
+                            b.classList.add('is-active');
+                        } else {
+                            b.classList.remove('is-active');
+                        }
+                    });
+                }
+            }
+
+            // Handle Query Interpretation Banner
+            const interpBanner = document.getElementById('intelQueryExplanation');
+            const interpText = document.getElementById('intelQueryExplanationText');
+            if (interpBanner && interpText) {
+                if (res && res.interpreted_query) {
+                    interpText.innerHTML = `<i class='bx bx-info-circle'></i> <strong>Interpreted:</strong> ${res.interpreted_query.explanation}`;
+                    interpBanner.classList.remove('hidden');
+                } else {
+                    interpBanner.classList.add('hidden');
+                }
+            }
+
+            this.renderIntelligenceWorkspace(res);
+        } catch (err) {
+            console.error('Failed to load monitoring intelligence:', err);
             container.innerHTML = `
-                <div class="playstation-intel-card" style="border-left-color: #64748b;">
-                    <div class="intel-top-bar">
-                        <span class="intel-category-tag" style="background: rgba(100, 116, 139, 0.2); color: #94a3b8; border-color: rgba(100, 116, 139, 0.3);">
-                            DATA ACCUMULATION
+                <div class="intel-result-card" style="border-top-color: #ef4444;">
+                    <div class="intel-result-badge" style="background: rgba(239, 68, 68, 0.1); color: #ef4444; border-color: rgba(239, 68, 68, 0.25);">
+                        <i class='bx bx-error'></i> Error Loading Intelligence
+                    </div>
+                    <div class="intel-result-finding" style="font-size: 0.92rem; color: #475569;">
+                        An error occurred while compiling analytical intelligence from historical records. Please try selecting a different analysis or reloading the view.
+                    </div>
+                </div>
+            `;
+        }
+    },
+
+    renderIntelligenceWorkspace(data) {
+        const container = document.getElementById('intelResultWorkspace');
+        if (!container) return;
+
+        if (!data) {
+            container.innerHTML = `
+                <div class="intel-result-card">
+                    <p style="margin: 0; color: #64748b; font-size: 0.85rem;">No monitoring intelligence currently available.</p>
+                </div>
+            `;
+            return;
+        }
+
+        // 1. Unsupported Query State
+        if (data.status === 'unsupported') {
+            const suggestionsHtml = (data.suggestions || []).map(s => `
+                <button type="button" class="intel-chip-suggestion dynamic-suggestion" data-prompt="${s.replace(/"/g, '&quot;')}">
+                    ${s}
+                </button>
+            `).join('');
+
+            const topicsHtml = (data.supported_topics || []).map(t => `
+                <li style="margin-bottom: 4px; display: flex; align-items: center; gap: 6px;">
+                    <i class='bx bx-check' style="color: #0070d1; font-size: 1rem;"></i> <span>${t}</span>
+                </li>
+            `).join('');
+
+            container.innerHTML = `
+                <div class="intel-result-card" style="border-top-color: #f59e0b;">
+                    <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 0.5rem;">
+                        <span class="intel-result-badge" style="background: rgba(245, 158, 11, 0.1); color: #d97706; border-color: rgba(245, 158, 11, 0.25);">
+                            <i class='bx bx-help-circle'></i> Unsupported Query
                         </span>
-                        <span class="intel-stat-badge">Sparsity Notice</span>
+                        <span style="font-size: 0.72rem; color: #64748b;">${data.query ? `Query: "${data.query}"` : ''}</span>
                     </div>
-                    <div class="intel-title-row">
-                        <i class='bx bx-radar' style="color: #64748b;"></i>
-                        <span>Weather Context & Pattern Intelligence</span>
+                    <div class="intel-result-finding" style="font-size: 0.95rem; color: #1e293b;">
+                        InfraVision could not map this question to a supported monitoring analysis.
                     </div>
-                    <div class="intel-statement">
-                        ${insights?.message || 'Weather Context Available • Empirical multi-factor correlation requires additional historical reports in this geographic area. Continue logging verified defects to unlock predictive pattern intelligence.'}
+                    <div style="font-size: 0.78rem; color: #475569; background: #fffbeb; border: 1px solid #fef3c7; border-radius: 6px; padding: 0.75rem 1rem;">
+                        <p style="margin: 0 0 0.5rem 0; font-weight: 600; color: #92400e;">InfraVision provides controlled, evidence-grounded civil engineering analytics for:</p>
+                        <ul style="margin: 0; padding-left: 0.5rem; color: #78350f; list-style-type: none;">
+                            ${topicsHtml}
+                        </ul>
                     </div>
-                    <div class="intel-evidence-strip">
-                        <span class="intel-evidence">Evidence: Observation history awaiting statistical volume</span>
+                    <div style="margin-top: 0.25rem;">
+                        <span style="font-size: 0.72rem; font-weight: 700; color: #64748b; display: block; margin-bottom: 0.4rem;">TRY ASKING:</span>
+                        <div style="display: flex; flex-wrap: wrap; gap: 0.4rem;">
+                            ${suggestionsHtml}
+                        </div>
+                    </div>
+                </div>
+            `;
+
+            container.querySelectorAll('.dynamic-suggestion').forEach(chip => {
+                chip.addEventListener('click', () => {
+                    const prompt = chip.getAttribute('data-prompt');
+                    const nlpInput = document.getElementById('intelNlpInput');
+                    if (nlpInput) nlpInput.value = prompt;
+                    this.activeIntelligenceQuery = prompt;
+                    this.loadFocusedIntelligence(null, prompt);
+                });
+            });
+            return;
+        }
+
+        // 2. Insufficient Data State
+        if (data.status === 'insufficient_data') {
+            container.innerHTML = `
+                <div class="intel-result-card" style="border-top-color: #64748b;">
+                    <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 0.5rem;">
+                        <span class="intel-result-badge" style="background: rgba(100, 116, 139, 0.1); color: #475569; border-color: rgba(100, 116, 139, 0.25);">
+                            <i class='bx bx-radar'></i> Data Accumulation • Sparsity Notice
+                        </span>
+                        <span style="font-size: 0.72rem; color: #64748b; font-weight: 600;">${data.location || 'Selected Location'}</span>
+                    </div>
+                    <div class="intel-result-finding" style="font-size: 0.95rem; color: #334155;">
+                        ${data.message || 'Empirical civil engineering analysis requires additional recorded defect reports in this geographic area.'}
+                    </div>
+                    <div class="intel-evidence-panel" style="border-left-color: #94a3b8;">
+                        <div style="font-weight: 700; color: #1e293b; margin-bottom: 2px;">Evidence & Threshold Status:</div>
+                        <div>Threshold Requirement: <strong>${data.evidence_threshold || 'Minimum statistical volume required'}</strong></div>
+                        <div>Current Empirical Records: <strong>${data.current_count ?? 0} defect report(s)</strong></div>
+                        <div style="font-size: 0.72rem; color: #64748b; margin-top: 4px;">As field engineers log verified inspection casework in this jurisdiction, automated multi-factor correlation models will populate.</div>
                     </div>
                 </div>
             `;
             return;
         }
 
-        const cardsHtml = patternCards.map(c => `
-            <div class="playstation-intel-card" id="intel-${c.card_id || 'card'}">
-                <div class="intel-top-bar">
-                    <span class="intel-category-tag">${c.category_tag || 'PATTERN INTELLIGENCE'}</span>
-                    ${c.key_stat ? `<span class="intel-stat-badge">${c.key_stat}</span>` : ''}
-                </div>
-                <div class="intel-title-row">
-                    <i class='bx ${c.icon || 'bx-bulb'}'></i>
-                    <span>${c.title}</span>
-                </div>
-                <div class="intel-statement">${c.statement}</div>
-                ${c.recommendation ? `<div class="intel-recommendation">${c.recommendation}</div>` : ''}
-                <div class="intel-evidence-strip">
-                    <span class="intel-evidence">Evidence: ${c.evidence || 'Recorded empirical reports'}</span>
-                    <div class="intel-actions">
-                        ${(c.actions || []).map(act => `
-                            <button type="button" class="btn-intel-action"
-                                    data-action-id="${act.id}"
-                                    data-corridor="${(act.corridor || '').replace(/"/g, '&quot;')}"
-                                    data-severity="${act.severity || ''}"
-                                    data-defect="${act.defect || ''}">
-                                <i class='bx ${act.icon || 'bx-chevron-right'}'></i> ${act.label}
-                            </button>
-                        `).join('')}
-                    </div>
-                </div>
+        // 3. Success State
+        const stats = data.supporting_stats || data.supporting_statistics || [];
+        const statsHtml = stats.map(s => `
+            <div class="intel-stat-box">
+                <span class="intel-stat-label">${s.label}</span>
+                <span class="intel-stat-val">${s.value}</span>
             </div>
         `).join('');
 
-        container.innerHTML = cardsHtml;
+        // Build comparison breakdown view
+        let comparisonHtml = '';
+        if (data.comparison && Array.isArray(data.comparison.data) && data.comparison.data.length > 0) {
+            const comp = data.comparison;
+            comparisonHtml = `
+                <div class="intel-comparison-box">
+                    <div style="font-weight: 700; color: #1e293b; margin-bottom: 0.6rem; font-size: 0.82rem; display: flex; align-items: center; justify-content: space-between;">
+                        <span>${comp.title || 'Distribution Breakdown'}</span>
+                        <span style="font-size: 0.7rem; color: #64748b; font-weight: 500;">Empirical Breakdown</span>
+                    </div>
+            `;
 
-        // Wire action buttons
-        container.querySelectorAll('.btn-intel-action').forEach(btn => {
+            if (comp.type === 'rainfall_thresholds' || comp.type === 'season_breakdown' || comp.type === 'severity_breakdown') {
+                comparisonHtml += `<div style="display: flex; flex-direction: column; gap: 0.5rem;">`;
+                comp.data.forEach(item => {
+                    const label = item.bucket || item.season || item.severity || 'Category';
+                    const count = item.count ?? 0;
+                    const pct = item.percentage ?? 0;
+                    const isHighlight = item.is_dominant || item.is_highest;
+                    comparisonHtml += `
+                        <div>
+                            <div style="display: flex; justify-content: space-between; font-size: 0.74rem; margin-bottom: 2px;">
+                                <span style="font-weight: ${isHighlight ? '700' : '500'}; color: ${isHighlight ? '#0070d1' : '#334155'};">
+                                    ${label} ${isHighlight ? '★' : ''}
+                                </span>
+                                <span style="font-weight: 600; color: #1e293b;">${count} report${count === 1 ? '' : 's'} (${pct}%)</span>
+                            </div>
+                            <div style="height: 6px; background: #e2e8f0; border-radius: 3px; overflow: hidden;">
+                                <div style="height: 100%; width: ${Math.min(100, Math.max(0, pct))}%; background: ${isHighlight ? '#0070d1' : '#94a3b8'}; border-radius: 3px; transition: width 0.3s ease;"></div>
+                            </div>
+                        </div>
+                    `;
+                });
+                comparisonHtml += `</div>`;
+            } else if (comp.type === 'corridor_breakdown') {
+                comparisonHtml += `
+                    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 0.5rem;">
+                `;
+                comp.data.forEach(c => {
+                    comparisonHtml += `
+                        <div style="background: #ffffff; border: 1px solid #e2e8f0; border-radius: 6px; padding: 0.55rem 0.75rem;">
+                            <div style="font-weight: 700; color: #1e293b; font-size: 0.78rem;">${c.corridor}</div>
+                            <div style="font-size: 0.72rem; color: #64748b; margin-top: 3px;">
+                                <span style="color: #0070d1; font-weight: 600;">${c.count} report${c.count === 1 ? '' : 's'}</span> • Median interval: <strong>${c.median_interval_days ? c.median_interval_days + 'd' : 'N/A'}</strong>
+                            </div>
+                        </div>
+                    `;
+                });
+                comparisonHtml += `</div>`;
+            } else if (comp.type === 'lifecycle_funnel') {
+                comparisonHtml += `
+                    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 0.5rem;">
+                `;
+                comp.data.forEach(step => {
+                    comparisonHtml += `
+                        <div style="background: #ffffff; border: 1px solid #e2e8f0; border-radius: 6px; padding: 0.55rem 0.75rem; text-align: center;">
+                            <div style="font-size: 0.68rem; color: #64748b; font-weight: 600; text-transform: uppercase;">${step.stage}</div>
+                            <div style="font-size: 1.15rem; font-weight: 700; color: #0070d1; margin-top: 2px;">${step.count}</div>
+                        </div>
+                    `;
+                });
+                comparisonHtml += `</div>`;
+            }
+
+            comparisonHtml += `</div>`;
+        }
+
+        // Evidence strip
+        const ev = data.evidence || {};
+        const sourceLabel = ev.weather_source || ev.geospatial_source || ev.climate_source || ev.telemetry_source || ev.lifecycle_source || 'MongoDB verified records';
+
+        // Actions
+        const actionsHtml = (data.actions || []).map(act => `
+            <button type="button" class="btn-workspace-action"
+                    data-action-id="${act.id}"
+                    data-corridor="${(act.corridor || '').replace(/"/g, '&quot;')}"
+                    data-severity="${act.severity || ''}"
+                    data-defect="${act.defect || ''}">
+                <i class='bx ${act.icon || 'bx-right-arrow-alt'}'></i> ${act.label}
+            </button>
+        `).join('');
+
+        container.innerHTML = `
+            <div class="intel-result-card">
+                <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 0.5rem;">
+                    <span class="intel-result-badge">
+                        <i class='bx ${data.mode_icon || 'bx-bulb'}'></i> ${data.title}
+                    </span>
+                    <span style="font-size: 0.72rem; color: #64748b; font-weight: 600;">
+                        ${ev.reports_analyzed ?? 0} Reports Analyzed • ${ev.location || 'All Monitored Locations'}
+                    </span>
+                </div>
+
+                <div class="intel-result-finding">
+                    ${data.primary_finding}
+                </div>
+
+                <div class="intel-stats-grid">
+                    ${statsHtml}
+                </div>
+
+                ${comparisonHtml}
+
+                <div class="intel-evidence-panel">
+                    <div style="font-weight: 700; color: #1e293b; margin-bottom: 2px;">Evidence Basis & Observation Window:</div>
+                    <div>Period: <strong>${ev.period || 'Selected Time Range'}</strong> • Geographical Scope: <strong>${ev.location || 'All Monitored Locations'}</strong></div>
+                    <div style="font-size: 0.72rem; color: #64748b; margin-top: 3px;">Data Grounding: ${sourceLabel}</div>
+                </div>
+
+                ${data.recommendation ? `
+                    <div class="intel-recommendation-box">
+                        <i class='bx bx-check-shield' style="font-size: 1.05rem; vertical-align: -2px; margin-right: 4px;"></i>
+                        <strong>Engineering Advisory:</strong> ${data.recommendation}
+                    </div>
+                ` : ''}
+
+                ${actionsHtml ? `
+                    <div class="intel-actions-row">
+                        ${actionsHtml}
+                    </div>
+                ` : ''}
+            </div>
+        `;
+
+        this.wireWorkspaceActions(container);
+    },
+
+    wireWorkspaceActions(container) {
+        if (!container) return;
+        container.querySelectorAll('.btn-workspace-action').forEach(btn => {
             btn.addEventListener('click', (e) => {
                 e.stopPropagation();
                 const actionId = btn.getAttribute('data-action-id');
@@ -827,24 +1140,36 @@ const Dashboard = {
                 const defect = btn.getAttribute('data-defect');
 
                 if (actionId === 'show_corridor' && corridor) {
-                    if (window.DefectMap && typeof window.DefectMap.focusCorridor === 'function') {
-                        window.DefectMap.focusCorridor(corridor);
-                    } else if (window.Navigation) {
-                        window.Navigation.navigateTo('map');
+                    if (window.App && typeof window.App.navigateTo === 'function') {
+                        window.App.navigateTo('view-map');
                     }
+                    setTimeout(() => {
+                        if (window.DefectMap && typeof window.DefectMap.focusCorridor === 'function') {
+                            window.DefectMap.focusCorridor(corridor);
+                        }
+                    }, 150);
                 } else if (actionId === 'show_map') {
-                    if (window.Navigation) {
-                        window.Navigation.navigateTo('map');
+                    if (window.App && typeof window.App.navigateTo === 'function') {
+                        window.App.navigateTo('view-map');
                     }
-                } else if (actionId === 'review_queue') {
+                } else if (actionId === 'filter_queue') {
                     const select = document.getElementById('filterSeveritySelect');
                     if (select) {
                         if (severity) {
                             select.value = severity;
-                        } else if (defect) {
+                        } else {
                             select.value = '';
                         }
                         this.loadReportsList();
+                        const queueCard = document.querySelector('.queue-card');
+                        if (queueCard && typeof queueCard.scrollIntoView === 'function') {
+                            queueCard.scrollIntoView({ behavior: 'smooth' });
+                        }
+                    }
+                } else if (actionId === 'toggle_verified_kpi') {
+                    const kpiCard = document.getElementById('kpiCardVerified');
+                    if (kpiCard) {
+                        kpiCard.click();
                         const queueCard = document.querySelector('.queue-card');
                         if (queueCard && typeof queueCard.scrollIntoView === 'function') {
                             queueCard.scrollIntoView({ behavior: 'smooth' });
@@ -855,6 +1180,10 @@ const Dashboard = {
         });
     },
 
+    renderMonitoringInsights(insights) {
+        // Preserved for backwards compatibility with existing callers
+        this.loadFocusedIntelligence(this.activeIntelligenceMode, this.activeIntelligenceQuery);
+    },
     drawDegradationChart(trendData, threshold = 68) {
         // Backwards compatibility alias
         this.loadDegradationChart();

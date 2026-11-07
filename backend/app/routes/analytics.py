@@ -4,6 +4,7 @@ from collections import defaultdict
 from flask import Blueprint, jsonify, request, make_response
 from ..services.database import db_service
 from ..services.weather_service import weather_service
+from ..services.monitoring_intelligence import monitoring_intelligence_service
 from ..utils.auth_helpers import role_required
 
 KENYA_47_COUNTIES = [
@@ -696,5 +697,56 @@ def get_critical_calendar(current_user):
     }), 200)
     resp.headers['Cache-Control'] = 'no-cache, no-store, must-revalidate'
     return resp
+
+
+@analytics_bp.route('/intelligence', methods=['GET', 'POST'])
+@role_required('engineer', 'admin')
+def get_monitoring_intelligence_endpoint(current_user):
+    """
+    Focused Monitoring Intelligence & Natural-Language Analytics Interface.
+    Replaces cognitive wall of insights with user-selected focused analysis:
+    1. Rainfall & Defect Patterns
+    2. Road / Corridor Recurrence
+    3. Seasonal Defect Patterns
+    4. Critical Defect Concentration
+    5. Resolution & Response Trends
+    """
+    if request.method == 'POST':
+        body = request.get_json(silent=True) or {}
+        mode = body.get('mode')
+        query = body.get('query')
+        county = body.get('county', 'all')
+        ward = body.get('ward', 'all')
+        time_range = body.get('range', '6m')
+        defect_class = body.get('defect_class')
+        severity = body.get('severity')
+        road = body.get('road')
+    else:
+        mode = request.args.get('mode')
+        query = request.args.get('query')
+        county = request.args.get('county', 'all')
+        ward = request.args.get('ward', 'all')
+        time_range = request.args.get('range', '6m')
+        defect_class = request.args.get('defect_class')
+        severity = request.args.get('severity')
+        road = request.args.get('road')
+
+    all_reports = db_service.find('infrastructure_reports')
+    result = monitoring_intelligence_service.get_monitoring_intelligence(
+        all_reports=all_reports,
+        mode=mode,
+        query=query,
+        county=county,
+        ward=ward,
+        time_range=time_range,
+        defect_class=defect_class,
+        severity=severity,
+        road=road
+    )
+
+    resp = make_response(jsonify(result), 200)
+    resp.headers['Cache-Control'] = 'no-cache, no-store, must-revalidate'
+    return resp
+
 
 
