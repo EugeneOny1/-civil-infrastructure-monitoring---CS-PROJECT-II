@@ -120,7 +120,36 @@ const Review = {
             });
         }
 
-        // Sections 30-33 & 43: Inspection Notebook & Objective Handlers
+        // Sections 30-33 & 43: Inspection Notebook Drawer & Objective Handlers
+        const btnOpenDrawer = document.getElementById('btnOpenNotebookDrawer');
+        const btnCloseDrawer = document.getElementById('btnCloseNotebookDrawer');
+        const drawerOverlay = document.getElementById('inspectionNotebookDrawerOverlay');
+        const drawerBackdrop = document.getElementById('notebookDrawerBackdrop');
+
+        const openDrawer = () => {
+            if (drawerOverlay) {
+                drawerOverlay.classList.remove('hidden');
+                drawerOverlay.style.display = 'flex';
+            }
+        };
+
+        const closeDrawer = () => {
+            if (drawerOverlay) {
+                drawerOverlay.classList.add('hidden');
+                drawerOverlay.style.display = 'none';
+            }
+        };
+
+        if (btnOpenDrawer) btnOpenDrawer.addEventListener('click', openDrawer);
+        if (btnCloseDrawer) btnCloseDrawer.addEventListener('click', closeDrawer);
+        if (drawerBackdrop) drawerBackdrop.addEventListener('click', closeDrawer);
+
+        window.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape' && drawerOverlay && !drawerOverlay.classList.contains('hidden') && drawerOverlay.style.display !== 'none') {
+                closeDrawer();
+            }
+        });
+
         const btnSaveNb = document.getElementById('btnSaveInspectionNotebook');
         if (btnSaveNb) {
             btnSaveNb.addEventListener('click', () => this.saveInspectionNotebook());
@@ -418,21 +447,28 @@ const Review = {
             const stageUnderReview = document.getElementById('actionStageUnderReview');
             const stageVerified = document.getElementById('actionStageVerified');
 
-            if (stageReceived) stageReceived.style.display = (status === 'Received') ? 'flex' : 'none';
-            if (stageUnderReview) stageUnderReview.style.display = (status === 'Under Review') ? 'flex' : 'none';
-            if (stageVerified) stageVerified.style.display = (status === 'Verified') ? 'flex' : 'none';
-
             // Render inspection notebook & objectives (Sections 30-33 & 43)
             this.renderInspectionNotebook(data.report, assetType);
 
+            // Clean Location: Display clean name without raw coordinates in primary view
             const locName = data.asset?.location || data.report.metadata?.location_name || 'Corridor Asset';
-            const lat = data.report.latitude || data.report.metadata?.latitude;
-            const lng = data.report.longitude || data.report.metadata?.longitude;
-            const coordsStr = (lat !== null && lng !== null && lat !== undefined && lng !== undefined)
-                ? ` [${Number(lat).toFixed(5)}°, ${Number(lng).toFixed(5)}°]`
-                : '';
             const locEl = document.getElementById('reviewGps');
-            if (locEl) locEl.textContent = `${locName}${coordsStr}`;
+            if (locEl) locEl.textContent = locName;
+
+            const drawerRef = document.getElementById('drawerReportReference');
+            if (drawerRef) {
+                drawerRef.textContent = `Report #${reportId.length > 8 ? reportId.slice(-8) : reportId} • ${locName}`;
+            }
+
+            const isResolved = (status === 'Resolved');
+            const isVerified = (status === 'Verified');
+            const isReceived = (status === 'Received');
+            const hasReview = Boolean(data.review || (data.report.metadata?.engineer_assessment && data.report.metadata?.engineer_assessment?.decision));
+
+            // Stage visibility
+            if (stageReceived) stageReceived.style.display = isReceived ? 'flex' : 'none';
+            if (stageUnderReview) stageUnderReview.style.display = (status === 'Under Review' && !hasReview) ? 'flex' : 'none';
+            if (stageVerified) stageVerified.style.display = (isVerified || (status === 'Under Review' && hasReview)) ? 'flex' : 'none';
 
             // Submitter & Authorship distinction
             const submitter = data.submitter || {};
@@ -459,7 +495,6 @@ const Review = {
             }
 
             // Section 7: Enforce Read-Only Mode for Resolved Defect Reports
-            const isResolved = (status === 'Resolved');
             const resolvedNotice = document.getElementById('reviewResolvedNotice');
             if (resolvedNotice) {
                 resolvedNotice.classList.toggle('hidden', !isResolved);
@@ -480,6 +515,49 @@ const Review = {
                     const sevEl = document.getElementById('resolvedFinalSeverity');
                     if (sevEl) sevEl.textContent = finalSev;
                 }
+            }
+
+            // Stage-aware Professional Review Form vs Verified Assessment Summary
+            const reviewForm = document.getElementById('professionalReviewForm');
+            const verifiedSummary = document.getElementById('verifiedAssessmentSummary');
+
+            if (isReceived) {
+                // In Received state, form is hidden until engineer clicks 'Begin Professional Review'
+                if (reviewForm) reviewForm.classList.add('hidden');
+                if (verifiedSummary) verifiedSummary.classList.add('hidden');
+            } else if (hasReview || isVerified || isResolved) {
+                // If professional validation already exists, do NOT show validation controls again
+                if (reviewForm) reviewForm.classList.add('hidden');
+                if (verifiedSummary) {
+                    verifiedSummary.classList.remove('hidden');
+                    const vClass = document.getElementById('verifiedSummaryClass');
+                    const vSev = document.getElementById('verifiedSummarySeverity');
+                    const vRev = document.getElementById('verifiedSummaryReviewer');
+                    const vDec = document.getElementById('verifiedSummaryDecision');
+                    const vAct = document.getElementById('verifiedSummaryNextAction');
+                    const vNotes = document.getElementById('verifiedSummaryNotes');
+
+                    const effClass = data.review?.override_details?.override_class || data.assessment?.defect_class || data.report.metadata?.defect_class || 'Pothole';
+                    const effSev = data.review?.override_details?.override_severity || data.assessment?.relative_severity || data.report.metadata?.relative_severity || 'Critical';
+                    const effRev = data.review?.reviewer_name || data.report.metadata?.reviewed_by || 'Accredited Civil Engineer';
+                    const effDec = data.review?.decision || (data.report.metadata?.engineer_assessment?.decision) || 'Confirmed';
+                    const effAct = data.report.metadata?.next_action || (data.report.metadata?.engineer_assessment?.next_action) || 'Continue monitoring';
+                    const effNotes = data.review?.comments || data.report.metadata?.engineer_notes || 'Defect verification confirmed.';
+
+                    if (vClass) vClass.textContent = effClass;
+                    if (vSev) vSev.textContent = effSev;
+                    if (vRev) vRev.textContent = effRev;
+                    if (vDec) {
+                        vDec.textContent = effDec;
+                        vDec.className = `status-chip ${effDec === 'Overridden' ? 'warning' : 'success'}`;
+                    }
+                    if (vAct) vAct.textContent = effAct;
+                    if (vNotes) vNotes.textContent = effNotes;
+                }
+            } else {
+                // Under Review without existing validation: show review form
+                if (reviewForm) reviewForm.classList.remove('hidden');
+                if (verifiedSummary) verifiedSummary.classList.add('hidden');
             }
 
             // Lock or unlock review controls based on resolution state
@@ -1190,9 +1268,12 @@ const Review = {
         const total = items.length;
         const checkedCount = items.filter(i => i.checked).length;
 
-        if (progressEl) {
-            progressEl.textContent = `${checkedCount} of ${total} completed`;
-        }
+        const countText = `${checkedCount} of ${total} completed`;
+        if (progressEl) progressEl.textContent = countText;
+        const drawerProgress = document.getElementById('drawerChecklistProgress');
+        if (drawerProgress) drawerProgress.textContent = countText;
+        const pillProgress = document.getElementById('notebookProgressCount');
+        if (pillProgress) pillProgress.textContent = countText;
 
         container.innerHTML = items.map((item, idx) => {
             return `

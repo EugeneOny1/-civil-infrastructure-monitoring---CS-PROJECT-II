@@ -1237,11 +1237,8 @@
                             </div>
                         </div>
 
-                        <!-- Recurrence Insights Strip (Section 31) -->
-                        <div class="recurrence-insights-container" id="dashboardRecurrenceInsights"
-                            style="margin-top: 0.75rem; display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 0.6rem;">
-                            <!-- Dynamically populated from actual data -->
-                        </div>
+                        <!-- Recurrence Insights container retained for backwards compatibility (hidden to eliminate duplicate card slab) -->
+                        <div id="dashboardRecurrenceInsights" class="hidden" style="display: none;"></div>
                     </div>
                 </div>
 
@@ -1281,133 +1278,77 @@
 
                     <!-- Monitoring Intelligence Workspace (Sections 1-20) -->
                     <div class="glass-card monitoring-intelligence-workspace" id="monitoringInsightsPanel"
-                        style="padding: 1.5rem; background: #ffffff; border: 1px solid #e2e8f0; border-radius: 12px; box-shadow: 0 4px 20px rgba(15, 23, 42, 0.06);">
+                        style="padding: 1.25rem; background: #ffffff; border: 1px solid #e2e8f0; border-radius: 12px; box-shadow: 0 4px 20px rgba(15, 23, 42, 0.06);">
                         <!-- Workspace Header -->
                         <div class="card-header-bar"
-                            style="margin-bottom: 0.5rem; border-bottom: 1px solid #f1f5f9; padding-bottom: 0.75rem;">
+                            style="margin-bottom: 0.5rem; border-bottom: 1px solid #f1f5f9; padding-bottom: 0.6rem;">
                             <div>
                                 <div style="display: flex; align-items: center; gap: 0.5rem;">
                                     <span class="step-tag"
-                                        style="background: rgba(0, 112, 209, 0.1); color: #0070d1; border: 1px solid rgba(0, 112, 209, 0.25);">MONITORING
-                                        INTELLIGENCE</span>
+                                        style="background: rgba(0, 112, 209, 0.1); color: #0070d1; border: 1px solid rgba(0, 112, 209, 0.25);">MONITORING INTELLIGENCE</span>
                                     <span class="mode-tag"
-                                        style="background: #f8fafc; color: #475569; border: 1px solid #e2e8f0;">Pattern
-                                        Analysis Workspace</span>
+                                        style="background: #f8fafc; color: #475569; border: 1px solid #e2e8f0;">Pattern Analysis Workspace</span>
                                 </div>
-                                <p style="margin: 0.4rem 0 0 0; font-size: 0.85rem; color: #475569; line-height: 1.4;">
-                                    Choose an analysis to explore patterns in infrastructure reports and historical
-                                    monitoring data.
+                                <p style="margin: 0.35rem 0 0 0; font-size: 0.82rem; color: #64748b; line-height: 1.4;">
+                                    Ask a question or select a focus below to analyze verified defect patterns.
                                 </p>
                             </div>
                         </div>
 
-                        <!-- Hub Selector: "What would you like to monitor?" -->
-                        <div class="intel-hub-section" style="margin-top: 1rem;">
-                            <label class="field-label"
-                                style="font-size: 0.78rem; font-weight: 700; color: #1e293b; letter-spacing: 0.04em; margin-bottom: 0.65rem; display: block;">
-                                WHAT WOULD YOU LIKE TO MONITOR?
-                            </label>
-                            <div class="intel-mode-selector-grid" id="intelModeSelector">
-                                <button type="button" class="intel-mode-btn is-active"
-                                    data-mode="rainfall_defect_pattern">
-                                    <div class="mode-btn-icon"><i class='bx bx-cloud-rain'></i></div>
-                                    <div class="mode-btn-content">
-                                        <span class="mode-btn-title">Rainfall Patterns</span>
-                                        <span class="mode-btn-sub">Preceding precipitation & defect correlation</span>
-                                    </div>
-                                </button>
-                                <button type="button" class="intel-mode-btn" data-mode="corridor_recurrence">
-                                    <div class="mode-btn-icon"><i class='bx bx-map-pin'></i></div>
-                                    <div class="mode-btn-content">
-                                        <span class="mode-btn-title">Road Recurrence</span>
-                                        <span class="mode-btn-sub">Spatial clusters & repeat report intervals</span>
-                                    </div>
-                                </button>
-                                <button type="button" class="intel-mode-btn" data-mode="seasonal_defect_pattern">
-                                    <div class="mode-btn-icon"><i class='bx bx-calendar-alt'></i></div>
-                                    <div class="mode-btn-content">
-                                        <span class="mode-btn-title">Seasonal Patterns</span>
-                                        <span class="mode-btn-sub">Long Rains (MAM) vs Short Rains (OND)</span>
-                                    </div>
-                                </button>
-                                <button type="button" class="intel-mode-btn" data-mode="critical_defect_concentration">
-                                    <div class="mode-btn-icon"><i class='bx bx-error-circle'></i></div>
-                                    <div class="mode-btn-content">
-                                        <span class="mode-btn-title">Critical Reports</span>
-                                        <span class="mode-btn-sub">Severe hazard concentration & status</span>
-                                    </div>
-                                </button>
-                                <button type="button" class="intel-mode-btn" data-mode="resolution_response_trend">
-                                    <div class="mode-btn-icon"><i class='bx bx-check-double'></i></div>
-                                    <div class="mode-btn-content">
-                                        <span class="mode-btn-title">Response Trends</span>
-                                        <span class="mode-btn-sub">Verification velocity & resolution rate</span>
-                                    </div>
-                                </button>
-                            </div>
-                        </div>
-
-                        <!-- Lightweight Natural-Language Analytics Interface ("Ask InfraVision") (Section 20) -->
-                        <div class="intel-nlp-section"
-                            style="margin-top: 1rem; padding: 0.85rem 1rem; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px;">
-                            <div
-                                style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem;">
-                                <span
-                                    style="font-size: 0.72rem; font-weight: 700; color: #475569; letter-spacing: 0.05em; text-transform: uppercase;">
-                                    <i class='bx bx-search-alt-2' style="color: #0070d1; margin-right: 4px;"></i> Or Ask
-                                    InfraVision
-                                </span>
-                                <span style="font-size: 0.68rem; color: #64748b; font-style: italic;">Natural-Language
-                                    Analytics Interface</span>
-                            </div>
-                            <form id="intelNlpForm" class="intel-nlp-form"
-                                style="display: flex; gap: 0.5rem; align-items: center;">
+                        <!-- Compact Prompt Input -->
+                        <div class="intel-nlp-section" style="margin-top: 0.65rem;">
+                            <form id="intelNlpForm" class="intel-nlp-form" style="display: flex; gap: 0.5rem; align-items: center;">
                                 <div style="position: relative; flex: 1;">
                                     <input type="text" id="intelNlpInput" class="intel-nlp-input"
-                                        placeholder="Ask InfraVision about monitoring patterns (e.g. Which roads develop potholes after heavy rainfall?)..."
-                                        autocomplete="off">
+                                        placeholder="Ask InfraVision (e.g. Which roads develop potholes after heavy rain?)..."
+                                        autocomplete="off" style="width: 100%; font-size: 0.85rem; padding: 0.55rem 0.85rem; border: 1px solid #cbd5e1; border-radius: 8px; background: #f8fafc; color: #0f172a;">
                                 </div>
                                 <button type="submit" id="btnIntelNlpSubmit" class="btn-micro"
-                                    style="background: #0070d1; color: #ffffff; font-weight: 600; padding: 7px 16px; border-radius: 6px; border: none; cursor: pointer; display: inline-flex; align-items: center; gap: 4px; box-shadow: 0 2px 8px rgba(0, 112, 209, 0.25);">
+                                    style="background: #0070d1; color: #ffffff; font-weight: 600; padding: 0.55rem 1.15rem; border-radius: 8px; border: none; cursor: pointer; display: inline-flex; align-items: center; gap: 4px; box-shadow: 0 2px 8px rgba(0, 112, 209, 0.25);">
                                     <i class='bx bx-analyse'></i> Analyse
                                 </button>
                             </form>
-                            <!-- Clickable Suggested Questions -->
+
+                            <!-- 5 Compact Suggestion Chips -->
                             <div class="intel-suggestions-strip" id="intelNlpSuggestions"
-                                style="display: flex; flex-wrap: wrap; gap: 0.4rem; margin-top: 0.6rem; align-items: center;">
-                                <span style="font-size: 0.7rem; color: #64748b; font-weight: 600;">Suggested:</span>
+                                style="display: flex; flex-wrap: wrap; gap: 0.35rem; margin-top: 0.55rem; align-items: center;">
+                                <span style="font-size: 0.72rem; color: #64748b; font-weight: 600;">Suggested:</span>
                                 <button type="button" class="intel-chip-suggestion"
                                     data-prompt="Which roads have recurring potholes?">Recurring potholes</button>
                                 <button type="button" class="intel-chip-suggestion"
-                                    data-prompt="Which roads develop potholes after heavy rainfall?">Rainfall
-                                    patterns</button>
+                                    data-prompt="Which roads develop potholes after heavy rainfall?">Rainfall patterns</button>
                                 <button type="button" class="intel-chip-suggestion"
-                                    data-prompt="Where are Critical reports concentrated in Nairobi?">Critical in
-                                    Nairobi</button>
+                                    data-prompt="Where are Critical reports concentrated in Nairobi?">Critical in Nairobi</button>
                                 <button type="button" class="intel-chip-suggestion"
                                     data-prompt="What patterns occur during the Long Rains?">Long Rains season</button>
                                 <button type="button" class="intel-chip-suggestion"
-                                    data-prompt="How quickly are reports being resolved?">Resolution
-                                    performance</button>
+                                    data-prompt="How quickly are reports being resolved?">Resolution performance</button>
                             </div>
-                            <!-- Query Interpretation Banner (Section 20.8) -->
+
+                            <!-- Hidden Mode Selector Grid for backwards-compatibility -->
+                            <div class="intel-mode-selector-grid hidden" id="intelModeSelector" style="display: none;">
+                                <button type="button" class="intel-mode-btn is-active" data-mode="rainfall_defect_pattern"><span class="mode-btn-title">Rainfall Patterns</span></button>
+                                <button type="button" class="intel-mode-btn" data-mode="corridor_recurrence"><span class="mode-btn-title">Road Recurrence</span></button>
+                                <button type="button" class="intel-mode-btn" data-mode="seasonal_defect_pattern"><span class="mode-btn-title">Seasonal Patterns</span></button>
+                                <button type="button" class="intel-mode-btn" data-mode="critical_defect_concentration"><span class="mode-btn-title">Critical Reports</span></button>
+                                <button type="button" class="intel-mode-btn" data-mode="resolution_response_trend"><span class="mode-btn-title">Response Trends</span></button>
+                            </div>
+
+                            <!-- Query Interpretation Banner -->
                             <div id="intelQueryExplanation" class="hidden"
-                                style="margin-top: 0.65rem; padding: 6px 12px; background: #eff6ff; border: 1px solid #bfdbfe; border-radius: 6px; font-size: 0.78rem; color: #1e40af; display: flex; justify-content: space-between; align-items: center;">
-                                <span id="intelQueryExplanationText"><i class='bx bx-info-circle'></i> Interpreted
-                                    as...</span>
+                                style="margin-top: 0.55rem; padding: 6px 12px; background: #eff6ff; border: 1px solid #bfdbfe; border-radius: 6px; font-size: 0.78rem; color: #1e40af; display: flex; justify-content: space-between; align-items: center;">
+                                <span id="intelQueryExplanationText"><i class='bx bx-info-circle'></i> Interpreted as...</span>
                                 <button type="button" id="btnClearQueryInterpretation"
-                                    style="background: none; border: none; color: #2563eb; font-size: 0.75rem; font-weight: 600; cursor: pointer;">Clear
-                                    ✕</button>
+                                    style="background: none; border: none; color: #2563eb; font-size: 0.75rem; font-weight: 600; cursor: pointer;">Clear ✕</button>
                             </div>
                         </div>
 
                         <!-- Result Workspace: ONLY ONE primary intelligence result visible at a time (Section 6) -->
-                        <div class="intel-result-workspace" id="intelResultWorkspace" style="margin-top: 1.25rem;">
-                            <!-- Populated dynamically via Dashboard.renderIntelligenceResult -->
-                            <div style="padding: 2rem; text-align: center; color: #64748b; font-size: 0.85rem;">
-                                <i class='bx bx-loader-alt bx-spin'
-                                    style="font-size: 1.5rem; color: #0070d1; display: block; margin-bottom: 0.5rem;"></i>
-                                Loading intelligence analysis...
+                        <div class="intel-result-workspace" id="intelResultWorkspace" style="margin-top: 0.9rem;">
+                            <div class="intel-empty-state" style="padding: 2.25rem 1rem; text-align: center; color: #64748b; background: #f8fafc; border: 1px dashed #e2e8f0; border-radius: 8px;">
+                                <i class='bx bx-brain' style="font-size: 1.8rem; color: #94a3b8; display: block; margin-bottom: 0.35rem;"></i>
+                                <span style="font-size: 0.88rem; font-weight: 600; color: #334155;">Ready for Analysis</span>
+                                <p style="font-size: 0.78rem; color: #64748b; margin: 0.25rem 0 0 0;">Ask a question or click a suggestion chip to analyze verified defect patterns.</p>
                             </div>
                         </div>
                     </div>
@@ -1420,8 +1361,7 @@
             <div class="view-header">
                 <div>
                     <h2 class="view-title">AI Defect Assessment & Professional Review</h2>
-                    <p class="view-desc">Engineer Inspection Terminal: Validate, calibrate or override automated AI
-                        defect assessment</p>
+                    <p class="view-desc">Engineer Inspection Terminal: Validate, calibrate or override automated AI defect assessment</p>
                 </div>
                 <div class="review-status-badge">
                     <span class="badge-dot warning" id="reviewBadgeDot"></span>
@@ -1449,8 +1389,7 @@
 
                 <div class="casework-select-group"
                     style="flex: 3; min-width: 300px; display: flex; gap: 0.5rem; align-items: center;">
-                    <label for="reviewReportSelect" class="map-filter-label" style="white-space:nowrap;">Select
-                        Case:</label>
+                    <label for="reviewReportSelect" class="map-filter-label" style="white-space:nowrap;">Select Case:</label>
                     <select id="reviewReportSelect" class="field-input"
                         style="font-size:0.85rem; padding:0.4rem 0.75rem; flex:1;">
                         <option value="">Loading defect casework...</option>
@@ -1459,7 +1398,7 @@
                         title="Refresh Casework Queue">↻</button>
                 </div>
 
-                <!-- Top Lifecycle & Reviewer Status Display (Section 25 & 28) -->
+                <!-- Top Lifecycle & Reviewer Status Display -->
                 <div class="review-status-display"
                     style="margin-left:auto; display:flex; align-items:center; gap:0.6rem; font-size:0.85rem;">
                     <span style="color:#64748b; font-weight:600;">Status:</span>
@@ -1472,7 +1411,7 @@
             </div>
 
             <div class="terminal-container glass-card">
-                <!-- Top Meta Header -->
+                <!-- Top Meta Header: Location without raw coordinates string in primary view -->
                 <div class="terminal-meta-bar">
                     <div class="meta-item">
                         <span class="meta-label">INFRASTRUCTURE TYPE</span>
@@ -1482,13 +1421,11 @@
                     </div>
                     <div class="meta-item">
                         <span class="meta-label">CURRENT LIFECYCLE</span>
-                        <span class="meta-val" id="reviewLifecycleStatus"><span class="badge-dot warning"></span>
-                            Received</span>
+                        <span class="meta-val" id="reviewLifecycleStatus"><span class="badge-dot warning"></span> Received</span>
                     </div>
                     <div class="meta-item">
                         <span class="meta-label">ASSIGNED REVIEWER</span>
-                        <span class="meta-val" id="reviewAssignedEngineer"
-                            style="color:#0f172a; font-weight:600;">Unassigned</span>
+                        <span class="meta-val" id="reviewAssignedEngineer" style="color:#0f172a; font-weight:600;">Unassigned</span>
                     </div>
                     <div class="meta-item">
                         <span class="meta-label">INFRASTRUCTURE LOCATION</span>
@@ -1507,15 +1444,13 @@
                     </div>
                 </div>
 
-                <!-- Resolved Case Read-Only Notification Banner (Section 7) -->
+                <!-- Resolved Case Read-Only Notification Banner -->
                 <div id="reviewResolvedNotice" class="resolved-notice-banner hidden"
                     style="background: #ecfdf5; border: 1px solid #a7f3d0; color: #065f46; border-radius: 6px; padding: 0.85rem 1.15rem; margin: 0.75rem 1rem 0.25rem 1rem; font-size: 0.85rem; display: flex; align-items: flex-start; gap: 0.75rem;">
                     <i class='bx bx-shield-check' style="font-size: 1.25rem; color: #059669; line-height: 1;"></i>
                     <div style="flex: 1;">
-                        <strong style="color: #047857; display: block; margin-bottom: 2px;">Resolved Infrastructure
-                            Defect Record (Read-Only Mode)</strong>
-                        <span>This defect report has already completed professional review and resolution. The record is
-                            displayed in read-only mode.</span>
+                        <strong style="color: #047857; display: block; margin-bottom: 2px;">Resolved Infrastructure Defect Record (Read-Only Mode)</strong>
+                        <span>This defect report has already completed professional review and resolution. The record is displayed in read-only mode.</span>
                         <div id="reviewResolvedDetails"
                             style="margin-top: 6px; font-size: 0.8rem; color: #065f46; border-top: 1px solid #d1fae5; padding-top: 6px; display: flex; flex-wrap: wrap; gap: 1rem;">
                             <span>Reviewer: <strong id="resolvedReviewerName">—</strong></span>
@@ -1530,14 +1465,12 @@
                 <div id="selfReviewBanner" class="self-review-banner hidden"
                     style="background: #eff6ff; border: 1px solid #bfdbfe; color: #1e40af; border-radius: 6px; padding: 0.65rem 1rem; margin: 0.75rem 1rem 0.25rem 1rem; font-size: 0.8rem; display: flex; align-items: center; gap: 0.5rem;">
                     <i class='bx bx-info-circle' style="font-size: 1.1rem; color: #2563eb;"></i>
-                    <span><strong>Authorship Audit Record:</strong> You originally submitted this infrastructure defect
-                        report. As an accredited engineer, your verification will be preserved in the audit log
-                        distinctly recording both submitter authorship and reviewer validation.</span>
+                    <span><strong>Authorship Audit Record:</strong> You originally submitted this infrastructure defect report. As an accredited engineer, your verification will be preserved in the audit log distinctly recording both submitter authorship and reviewer validation.</span>
                 </div>
 
-                <!-- Inspection Split View -->
+                <!-- Inspection Split View: Left ~52%, Right ~48% on desktop -->
                 <div class="terminal-split-view">
-                    <!-- Left: Visual Image & Bounding Box Viewer -->
+                    <!-- Left: Visual Image, Telemetry, and Citizen Notes -->
                     <div class="terminal-left-pane">
                         <div class="terminal-canvas-wrapper" style="position: relative;">
                             <canvas id="reviewCanvas" class="review-canvas"></canvas>
@@ -1552,23 +1485,20 @@
                                     style="pointer-events: auto; background: rgba(15, 23, 42, 0.85); color: #f8fafc; border: 1px solid #475569; border-radius: 50%; width: 38px; height: 38px; font-size: 1.25rem; line-height: 1; cursor: pointer; display: flex; align-items: center; justify-content: center; box-shadow: 0 4px 6px rgba(0,0,0,0.3); transition: background 0.15s ease;">›</button>
                             </div>
                         </div>
+
                         <!-- Multi-Image Review Angle Switcher & Carousel Controls -->
                         <div id="reviewImageGallery" class="review-gallery-strip hidden"
                             style="display:none; flex-direction:column; gap:0.5rem; margin-top:0.65rem; background:#0f172a; padding:0.65rem 0.75rem; border-radius:6px; border:1px solid #1e293b;">
-                            <div
-                                style="display: flex; align-items: center; justify-content: space-between; width: 100%;">
-                                <span
-                                    style="font-size:0.75rem; color:#94a3b8; font-weight:600; text-transform:uppercase; letter-spacing:0.05em;"
+                            <div style="display: flex; align-items: center; justify-content: space-between; width: 100%;">
+                                <span style="font-size:0.75rem; color:#94a3b8; font-weight:600; text-transform:uppercase; letter-spacing:0.05em;"
                                     id="reviewGalleryTitle">Evidence Views:</span>
                                 <span style="font-size:0.75rem; color:#38bdf8; font-weight:600;"
                                     id="reviewGalleryCounter">Photo 1 of 1</span>
                             </div>
-                            <div id="reviewThumbnailList"
-                                style="display:flex; gap:0.5rem; overflow-x:auto; padding: 2px 0;"></div>
-                            <!-- Pagination Dots -->
-                            <div id="reviewPaginationDots"
-                                style="display: flex; justify-content: center; gap: 6px; margin-top: 2px;"></div>
+                            <div id="reviewThumbnailList" style="display:flex; gap:0.5rem; overflow-x:auto; padding: 2px 0;"></div>
+                            <div id="reviewPaginationDots" style="display: flex; justify-content: center; gap: 6px; margin-top: 2px;"></div>
                         </div>
+
                         <div class="telemetry-bar">
                             <div class="telemetry-box">
                                 <span class="telem-label">MODEL CONFIDENCE</span>
@@ -1587,64 +1517,60 @@
                             </div>
                         </div>
 
-                        <!-- Combined Multi-View Assessment Block (For Same-Defect Multi-View Reports) -->
+                        <!-- Combined Multi-View Assessment Block -->
                         <div id="reviewCombinedMultiViewBlock" class="combined-multiview-card hidden"
                             style="margin-top: 0.75rem; background: #0f172a; border: 1px solid #1e293b; border-radius: 6px; padding: 0.75rem 1rem; color: #f1f5f9;">
-                            <div
-                                style="display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid #1e293b; padding-bottom: 0.4rem; margin-bottom: 0.5rem;">
-                                <span
-                                    style="font-size: 0.8rem; font-weight: 700; color: #38bdf8; text-transform: uppercase; letter-spacing: 0.05em;"><i
-                                        class='bx bx-layer'></i> Combined Multi-View Assessment</span>
+                            <div style="display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid #1e293b; padding-bottom: 0.4rem; margin-bottom: 0.5rem;">
+                                <span style="font-size: 0.8rem; font-weight: 700; color: #38bdf8; text-transform: uppercase; letter-spacing: 0.05em;">
+                                    <i class='bx bx-layer'></i> Combined Multi-View Assessment
+                                </span>
                                 <span id="reviewCombinedSeverityPill" class="severity-pill critical"
                                     style="font-size: 0.72rem; padding: 2px 8px;">CRITICAL</span>
                             </div>
-                            <div id="reviewCombinedClassRows"
-                                style="display: flex; flex-direction: column; gap: 0.4rem; font-size: 0.8rem;"></div>
+                            <div id="reviewCombinedClassRows" style="display: flex; flex-direction: column; gap: 0.4rem; font-size: 0.8rem;"></div>
+                        </div>
+
+                        <!-- Citizen Notes Card moved to Left Pane below Telemetry -->
+                        <div class="review-citizen-notes-card" style="margin-top: 0.75rem; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 0.75rem 0.9rem;">
+                            <div style="font-size: 0.72rem; font-weight: 700; color: #64748b; text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 0.35rem; display: flex; align-items: center; gap: 4px;">
+                                <i class='bx bx-user-voice' style="color: #0070d1; font-size: 0.95rem;"></i> Citizen Field Observations
+                            </div>
+                            <p id="reviewCitizenNotes" style="font-size: 0.84rem; color: #1e293b; line-height: 1.45; margin: 0;">—</p>
                         </div>
                     </div>
 
-                    <!-- Right: AI Output & Professional Review Form -->
+                    <!-- Right: AI Output, Lifecycle Workflow & Professional Decision -->
                     <div class="terminal-right-pane">
                         <div class="output-block">
                             <div class="spec-row">
                                 <span class="spec-label">PREDICTED CLASS:</span>
                                 <span class="spec-value defect-bold" id="reviewPredictedClass">—</span>
                             </div>
-                            <div class="spec-row">
-                                <span class="spec-label">CITIZEN NOTES:</span>
-                                <span class="spec-value" id="reviewCitizenNotes"
-                                    style="font-weight:400; color:#475569;">—</span>
-                            </div>
 
                             <div class="action-matrix-card">
                                 <span class="matrix-tag">RELATIVE VISUAL SEVERITY</span>
                                 <p class="matrix-severity" id="reviewCalculatedSeverity">RELATIVE SEVERITY: —</p>
-                                <p class="matrix-sla">Subject to professional civil engineering validation & sign-off
-                                </p>
+                                <p class="matrix-sla">Subject to professional civil engineering validation & sign-off</p>
                             </div>
                         </div>
 
-                        <!-- Contextual Lifecycle Actions Card (Sections 25, 26, 27) -->
+                        <!-- Contextual Lifecycle Actions Card -->
                         <div id="reviewContextualWorkflow"
-                            style="margin-bottom: 1rem; border-radius: 8px; border: 1px solid #e2e8f0; background: #ffffff; padding: 1rem; box-shadow: 0 1px 3px rgba(0,0,0,0.03);">
-                            <div
-                                style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.6rem;">
-                                <span
-                                    style="font-size: 0.75rem; font-weight: 700; color: #64748b; text-transform: uppercase; letter-spacing: 0.05em;"><i
-                                        class='bx bx-git-branch'></i> Lifecycle Stage Action</span>
+                            style="margin-bottom: 1rem; border-radius: 8px; border: 1px solid #e2e8f0; background: #ffffff; padding: 0.85rem 1rem; box-shadow: 0 1px 3px rgba(0,0,0,0.03);">
+                            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem;">
+                                <span style="font-size: 0.74rem; font-weight: 700; color: #64748b; text-transform: uppercase; letter-spacing: 0.05em;">
+                                    <i class='bx bx-git-branch'></i> Lifecycle Stage Action
+                                </span>
                                 <span id="reviewWorkflowStageBadge" class="status-chip warning"
                                     style="font-size: 0.72rem; padding: 2px 8px;">Received</span>
                             </div>
 
                             <!-- Case A: Received State -> Begin Review Action -->
                             <div id="actionStageReceived" style="display: flex; flex-direction: column; gap: 0.5rem;">
-                                <p style="font-size: 0.8rem; color: #475569; margin: 0; line-height: 1.4;">Defect ticket
-                                    registered in monitoring queue. Initiating review assigns your engineer
-                                    accreditation to this case.</p>
+                                <p style="font-size: 0.8rem; color: #475569; margin: 0; line-height: 1.4;">Defect ticket registered in monitoring queue. Initiating review assigns your engineer accreditation to this case.</p>
                                 <button type="button" class="btn-primary" id="btnMoveUnderReview"
-                                    style="width: 100%; display: flex; align-items: center; justify-content: center; gap: 0.5rem; padding: 0.7rem; font-size: 0.88rem; font-weight: 600; border-radius: 6px; cursor: pointer;">
-                                    <i class='bx bx-play-circle' style="font-size: 1.15rem;"></i> Begin Professional
-                                    Review
+                                    style="width: 100%; display: flex; align-items: center; justify-content: center; gap: 0.5rem; padding: 0.65rem; font-size: 0.86rem; font-weight: 600; border-radius: 6px; cursor: pointer;">
+                                    <i class='bx bx-play-circle' style="font-size: 1.15rem;"></i> Begin Professional Review
                                 </button>
                             </div>
 
@@ -1652,26 +1578,23 @@
                             <div id="actionStageUnderReview" class="hidden"
                                 style="display: none; flex-direction: column; gap: 0.4rem;">
                                 <p style="font-size: 0.8rem; color: #0284c7; margin: 0; font-weight: 500;">
-                                    <i class='bx bx-time'></i> Inspection active. Review automated AI telemetry below
-                                    and submit engineering validation.
+                                    <i class='bx bx-time'></i> Inspection active. Review automated AI telemetry and complete engineering validation below.
                                 </p>
                             </div>
 
                             <!-- Case C: Verified State -> Resolution & Advisory Actions -->
                             <div id="actionStageVerified" class="hidden"
-                                style="display: none; flex-direction: column; gap: 0.65rem;">
-                                <div
-                                    style="font-size: 0.8rem; color: #059669; font-weight: 500; display: flex; align-items: center; gap: 0.4rem;">
-                                    <i class='bx bx-check-circle'></i> Defect verified by certified engineer. Proceed to
-                                    remediation tracking.
+                                style="display: none; flex-direction: column; gap: 0.55rem;">
+                                <div style="font-size: 0.8rem; color: #059669; font-weight: 500; display: flex; align-items: center; gap: 0.4rem;">
+                                    <i class='bx bx-check-circle'></i> Defect verified by certified engineer. Proceed to remediation tracking.
                                 </div>
                                 <div style="display: flex; gap: 0.5rem; flex-wrap: wrap;">
                                     <button type="button" class="btn-lifecycle action-resolve" id="btnMarkResolved"
-                                        style="flex: 1; min-width: 160px; padding: 0.65rem 0.85rem; font-size: 0.82rem; font-weight: 600; background: #10b981; color: #ffffff; border: none; border-radius: 6px; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 0.4rem;">
+                                        style="flex: 1; min-width: 150px; padding: 0.6rem 0.85rem; font-size: 0.82rem; font-weight: 600; background: #10b981; color: #ffffff; border: none; border-radius: 6px; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 0.4rem;">
                                         <i class='bx bx-check-double'></i> Mark Resolved
                                     </button>
                                     <button type="button" class="btn-secondary" id="btnOpenSafetyAdvisory"
-                                        style="flex: 1; min-width: 160px; border: 1px solid #f59e0b; color: #b45309; background: #fffbeb; font-size: 0.82rem; padding: 0.65rem 0.85rem; border-radius: 6px; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 0.4rem;">
+                                        style="flex: 1; min-width: 150px; border: 1px solid #f59e0b; color: #b45309; background: #fffbeb; font-size: 0.82rem; padding: 0.6rem 0.85rem; border-radius: 6px; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 0.4rem;">
                                         <i class='bx bx-error-circle'></i> Issue Safety Advisory
                                     </button>
                                 </div>
@@ -1681,7 +1604,27 @@
                             <button type="button" id="btnMarkVerified" style="display: none;"></button>
                         </div>
 
-                        <!-- Professional Review Decision Form -->
+                        <!-- Verified Assessment Summary Card (Shown when validation exists) -->
+                        <div id="verifiedAssessmentSummary" class="verified-summary-card hidden"
+                            style="background: #f0fdf4; border: 1px solid #bbf7d0; border-radius: 8px; padding: 0.85rem 1rem; margin-bottom: 1rem;">
+                            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem;">
+                                <span style="font-size: 0.74rem; font-weight: 700; color: #166534; text-transform: uppercase; letter-spacing: 0.05em;">
+                                    <i class='bx bx-check-shield' style="font-size: 1rem; vertical-align: -1px;"></i> Validated Assessment
+                                </span>
+                                <span id="verifiedSummaryDecision" class="status-chip success" style="font-size: 0.7rem; padding: 2px 8px;">Confirmed</span>
+                            </div>
+                            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.5rem; font-size: 0.8rem; margin-bottom: 0.5rem;">
+                                <div><span style="color: #64748b; font-size: 0.7rem; display: block;">VERIFIED CLASS:</span><strong id="verifiedSummaryClass" style="color: #0f172a;">—</strong></div>
+                                <div><span style="color: #64748b; font-size: 0.7rem; display: block;">VERIFIED SEVERITY:</span><strong id="verifiedSummarySeverity" style="color: #0f172a;">—</strong></div>
+                                <div><span style="color: #64748b; font-size: 0.7rem; display: block;">VALIDATED BY:</span><span id="verifiedSummaryReviewer" style="color: #0f172a; font-weight: 600;">—</span></div>
+                                <div><span style="color: #64748b; font-size: 0.7rem; display: block;">RECOMMENDED ACTION:</span><span id="verifiedSummaryNextAction" style="color: #0f172a; font-weight: 500;">—</span></div>
+                            </div>
+                            <div id="verifiedSummaryNotesBlock" style="border-top: 1px solid #dcfce7; padding-top: 0.4rem; font-size: 0.78rem; color: #14532d;">
+                                <strong>Engineer Notes:</strong> <span id="verifiedSummaryNotes">—</span>
+                            </div>
+                        </div>
+
+                        <!-- Professional Review Decision Form (Active when Under Review & not yet validated) -->
                         <form id="professionalReviewForm" class="review-form" onsubmit="return false;">
                             <label class="field-label">ENGINEER REVIEW DECISION *</label>
                             <div class="radio-decision-group">
@@ -1715,8 +1658,7 @@
                                         </select>
                                     </div>
                                     <div class="form-group flex-1">
-                                        <label for="overrideSeveritySelect" class="field-label">CORRECTED
-                                            SEVERITY</label>
+                                        <label for="overrideSeveritySelect" class="field-label">CORRECTED SEVERITY</label>
                                         <select id="overrideSeveritySelect" class="field-input">
                                             <option value="Critical" selected>Critical</option>
                                             <option value="Medium">Medium</option>
@@ -1733,22 +1675,18 @@
                             </div>
 
                             <!-- Professional Next Action Recommendation -->
-                            <div class="form-group" style="margin-top: 0.75rem;">
+                            <div class="form-group" style="margin-top: 0.65rem;">
                                 <label for="reviewNextAction" class="field-label">NEXT ACTION RECOMMENDATION *</label>
                                 <select id="reviewNextAction" class="field-input">
                                     <option value="Continue monitoring" selected>Continue monitoring</option>
-                                    <option value="On-site inspection recommended">On-site inspection recommended
-                                    </option>
-                                    <option value="Refer to maintenance / responsible asset team">Refer to maintenance /
-                                        responsible asset team</option>
+                                    <option value="On-site inspection recommended">On-site inspection recommended</option>
+                                    <option value="Refer to maintenance / responsible asset team">Refer to maintenance / responsible asset team</option>
                                     <option value="Issue Safety Advisory">Issue Safety Advisory</option>
-                                    <option value="No further action required at this stage">No further action required
-                                        at this stage</option>
+                                    <option value="No further action required at this stage">No further action required at this stage</option>
                                 </select>
                             </div>
                             <div class="form-group hidden" id="followUpDateGroup" style="margin-top: 0.5rem;">
-                                <label for="reviewFollowUpDate" class="field-label">TARGET INSPECTION DATE
-                                    (OPTIONAL)</label>
+                                <label for="reviewFollowUpDate" class="field-label">TARGET INSPECTION DATE (OPTIONAL)</label>
                                 <input type="date" id="reviewFollowUpDate" class="field-input">
                             </div>
 
@@ -1757,149 +1695,150 @@
                             </button>
                         </form>
 
-                        <!-- Inspection Notebook & Field Work Notes (Sections 30-33 & 43) -->
-                        <div id="reviewInspectionNotebookSection"
-                            style="margin-top: 1.5rem; border-top: 1px solid #e2e8f0; padding-top: 1rem;">
-                            <div
-                                style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.85rem;">
-                                <div style="display: flex; align-items: center; gap: 0.4rem;">
-                                    <i class='bx bx-notepad' style="color: #0284c7; font-size: 1.15rem;"></i>
-                                    <strong style="font-size: 0.88rem; color: #0f172a;">Inspection Notebook &
-                                        Objectives</strong>
+                        <!-- Compact Inspection Notebook Summary Pill -->
+                        <div id="notebookSummaryPill" class="notebook-summary-pill" style="margin-top: 1rem; display: flex; align-items: center; justify-content: space-between; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 0.65rem 0.9rem;">
+                            <div style="display: flex; align-items: center; gap: 0.6rem;">
+                                <div style="width: 32px; height: 32px; border-radius: 6px; background: rgba(0, 112, 209, 0.1); color: #0070d1; display: flex; align-items: center; justify-content: center; font-size: 1.15rem;">
+                                    <i class='bx bx-notepad'></i>
                                 </div>
-                                <button type="button" class="btn-secondary btn-sm" id="btnSaveInspectionNotebook"
-                                    style="font-size: 0.75rem; padding: 3px 10px; display: flex; align-items: center; gap: 0.3rem;">
-                                    <i class='bx bx-save'></i> Save Notebook
-                                </button>
+                                <div>
+                                    <span style="font-size: 0.82rem; font-weight: 700; color: #0f172a; display: block;">Inspection Notebook</span>
+                                    <span style="font-size: 0.72rem; color: #64748b;" id="notebookProgressCount">0 of 10 completed</span>
+                                </div>
+                            </div>
+                            <button type="button" class="btn-secondary btn-sm" id="btnOpenNotebookDrawer"
+                                style="font-size: 0.78rem; padding: 5px 12px; display: inline-flex; align-items: center; gap: 4px; border: 1px solid #cbd5e1; background: #ffffff; color: #0070d1; font-weight: 600; border-radius: 6px; cursor: pointer;">
+                                <i class='bx bx-dock-right'></i> Open Notebook
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Slide-Over Inspection Notebook Drawer Overlay -->
+            <div id="inspectionNotebookDrawerOverlay" class="notebook-drawer-overlay hidden" style="display: none;">
+                <div class="notebook-drawer-backdrop" id="notebookDrawerBackdrop"></div>
+                <aside class="notebook-drawer" id="inspectionNotebookDrawer" role="dialog" aria-modal="true" aria-label="Inspection Notebook">
+                    <div class="notebook-drawer-header">
+                        <div>
+                            <span class="step-tag" style="background: rgba(0, 112, 209, 0.1); color: #0070d1; font-size: 0.68rem;">INSPECTION NOTEBOOK</span>
+                            <h3 style="margin: 0.25rem 0 0.1rem 0; font-size: 1rem; color: #0f172a; font-weight: 700;">Field Objectives &amp; Compliance</h3>
+                            <span style="font-size: 0.74rem; color: #64748b;" id="drawerReportReference">Case Inspection Record</span>
+                        </div>
+                        <button type="button" class="btn-close-drawer" id="btnCloseNotebookDrawer" aria-label="Close Notebook">✕</button>
+                    </div>
+
+                    <div class="notebook-drawer-body">
+                        <!-- Asset-Aware Inspection Checklist -->
+                        <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 6px; padding: 0.85rem; margin-bottom: 1rem;">
+                            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem;">
+                                <span style="font-size: 0.75rem; font-weight: 700; color: #475569; text-transform: uppercase; letter-spacing: 0.05em;"
+                                    id="checklistTitle">Road / Pavement Inspection Objectives</span>
+                                <span style="font-size: 0.72rem; color: #64748b;" id="checklistProgress">0 of 10 completed</span>
+                            </div>
+                            <div id="reviewChecklistItems" style="display: flex; flex-direction: column; gap: 0.45rem; font-size: 0.8rem; color: #1e293b;"></div>
+
+                            <div style="margin-top: 0.65rem; display: flex; gap: 0.4rem;">
+                                <input type="text" id="customObjectiveInput" class="field-input"
+                                    placeholder="Add custom inspection objective..."
+                                    style="font-size: 0.78rem; padding: 4px 8px; flex: 1;">
+                                <button type="button" class="btn-secondary btn-sm" id="btnAddCustomObjective"
+                                    style="font-size: 0.75rem; padding: 4px 10px; white-space: nowrap;">+ Add Item</button>
+                            </div>
+                        </div>
+
+                        <!-- Building / Structural Compliance Context -->
+                        <div id="reviewBuildingComplianceCard" class="hidden"
+                            style="display: none; background: #fdfbf7; border: 1px solid #fed7aa; border-radius: 6px; padding: 0.85rem; margin-bottom: 1rem;">
+                            <div style="display: flex; align-items: center; gap: 0.4rem; margin-bottom: 0.4rem;">
+                                <i class='bx bx-building-house' style="color: #c2410c;"></i>
+                                <strong style="font-size: 0.82rem; color: #9a3412;">Structural Compliance Inquiry Prompts</strong>
+                            </div>
+                            <p style="font-size: 0.73rem; color: #7c2d12; margin-bottom: 0.65rem; line-height: 1.35;">
+                                Professional follow-up inquiry prompts for structural engineering oversight. Not an automated legal or zoning determination.
+                            </p>
+
+                            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.5rem; font-size: 0.78rem;">
+                                <div>
+                                    <label class="field-label" style="font-size: 0.7rem;">Approval Info Available?</label>
+                                    <select id="compApprovalSelect" class="field-input" style="font-size: 0.78rem; padding: 3px 6px;">
+                                        <option value="Unknown" selected>Unknown</option>
+                                        <option value="Yes">Yes</option>
+                                        <option value="No">No</option>
+                                    </select>
+                                </div>
+                                <div>
+                                    <label class="field-label" style="font-size: 0.7rem;">Observed Apparent Alterations?</label>
+                                    <select id="compAlterationSelect" class="field-input" style="font-size: 0.78rem; padding: 3px 6px;">
+                                        <option value="Unknown" selected>Unknown</option>
+                                        <option value="Yes">Yes</option>
+                                        <option value="No">No</option>
+                                    </select>
+                                </div>
+                                <div>
+                                    <label class="field-label" style="font-size: 0.7rem;">Possible Additional Floors?</label>
+                                    <select id="compFloorsSelect" class="field-input" style="font-size: 0.78rem; padding: 3px 6px;">
+                                        <option value="Unknown" selected>Unknown</option>
+                                        <option value="Yes">Yes</option>
+                                        <option value="No">No</option>
+                                    </select>
+                                </div>
+                                <div>
+                                    <label class="field-label" style="font-size: 0.7rem;">NCA / County Verification Needed?</label>
+                                    <select id="compNcaSelect" class="field-input" style="font-size: 0.78rem; padding: 3px 6px;">
+                                        <option value="No" selected>No</option>
+                                        <option value="Yes">Yes</option>
+                                    </select>
+                                </div>
+                            </div>
+                            <div style="margin-top: 0.5rem;">
+                                <label class="field-label" style="font-size: 0.7rem;">Compliance Inquiry Notes</label>
+                                <input type="text" id="compNotesInput" class="field-input"
+                                    placeholder="e.g. Planning record reference requested from county office..."
+                                    style="font-size: 0.78rem; padding: 4px 8px;">
+                            </div>
+                        </div>
+
+                        <!-- Visual Note Cards -->
+                        <div style="background: #ffffff; border: 1px solid #e2e8f0; border-radius: 6px; padding: 0.85rem;">
+                            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem;">
+                                <span style="font-size: 0.75rem; font-weight: 700; color: #475569; text-transform: uppercase; letter-spacing: 0.05em;">
+                                    <i class='bx bx-card'></i> Engineering Note Cards
+                                </span>
+                                <span style="font-size: 0.72rem; color: #64748b;" id="noteCardsCount">0 cards</span>
                             </div>
 
-                            <!-- Asset-Aware Inspection Checklist (Sections 31 & 32) -->
-                            <div
-                                style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 6px; padding: 0.85rem; margin-bottom: 1rem;">
-                                <div
-                                    style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem;">
-                                    <span
-                                        style="font-size: 0.75rem; font-weight: 700; color: #475569; text-transform: uppercase; letter-spacing: 0.05em;"
-                                        id="checklistTitle">Road / Pavement Inspection Objectives</span>
-                                    <span style="font-size: 0.72rem; color: #64748b;" id="checklistProgress">0 of 10
-                                        completed</span>
-                                </div>
-                                <div id="reviewChecklistItems"
-                                    style="display: flex; flex-direction: column; gap: 0.45rem; font-size: 0.8rem; color: #1e293b;">
-                                </div>
+                            <div id="reviewNoteCardsList"
+                                style="display: flex; flex-direction: column; gap: 0.5rem; max-height: 240px; overflow-y: auto; margin-bottom: 0.65rem;"></div>
 
-                                <div style="margin-top: 0.65rem; display: flex; gap: 0.4rem;">
-                                    <input type="text" id="customObjectiveInput" class="field-input"
-                                        placeholder="Add custom inspection objective..."
+                            <!-- Add Note Card Form -->
+                            <div style="display: flex; flex-direction: column; gap: 0.4rem; border-top: 1px solid #f1f5f9; padding-top: 0.5rem;">
+                                <div style="display: flex; gap: 0.4rem;">
+                                    <select id="noteCategorySelect" class="field-input"
+                                        style="font-size: 0.78rem; padding: 3px 6px; width: 130px;">
+                                        <option value="Observation" selected>Observation</option>
+                                        <option value="Follow-Up">Follow-Up</option>
+                                        <option value="Maintenance">Maintenance</option>
+                                        <option value="Compliance Context">Compliance</option>
+                                    </select>
+                                    <input type="text" id="noteCardTextInput" class="field-input"
+                                        placeholder="Add field observation or maintenance note..."
                                         style="font-size: 0.78rem; padding: 3px 8px; flex: 1;">
-                                    <button type="button" class="btn-secondary btn-sm" id="btnAddCustomObjective"
-                                        style="font-size: 0.75rem; padding: 3px 8px; white-space: nowrap;">+ Add
-                                        Item</button>
-                                </div>
-                            </div>
-
-                            <!-- Building / Structural Compliance Context (Section 43) -->
-                            <div id="reviewBuildingComplianceCard" class="hidden"
-                                style="display: none; background: #fdfbf7; border: 1px solid #fed7aa; border-radius: 6px; padding: 0.85rem; margin-bottom: 1rem;">
-                                <div style="display: flex; align-items: center; gap: 0.4rem; margin-bottom: 0.4rem;">
-                                    <i class='bx bx-building-house' style="color: #c2410c;"></i>
-                                    <strong style="font-size: 0.82rem; color: #9a3412;">Structural Compliance Inquiry
-                                        Prompts</strong>
-                                </div>
-                                <p
-                                    style="font-size: 0.73rem; color: #7c2d12; margin-bottom: 0.65rem; line-height: 1.35;">
-                                    Professional follow-up inquiry prompts for structural engineering oversight. Not an
-                                    automated legal or zoning determination.</p>
-
-                                <div
-                                    style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.5rem; font-size: 0.78rem;">
-                                    <div>
-                                        <label class="field-label" style="font-size: 0.7rem;">Approval Info
-                                            Available?</label>
-                                        <select id="compApprovalSelect" class="field-input"
-                                            style="font-size: 0.78rem; padding: 3px 6px;">
-                                            <option value="Unknown" selected>Unknown</option>
-                                            <option value="Yes">Yes</option>
-                                            <option value="No">No</option>
-                                        </select>
-                                    </div>
-                                    <div>
-                                        <label class="field-label" style="font-size: 0.7rem;">Observed Apparent
-                                            Alterations?</label>
-                                        <select id="compAlterationSelect" class="field-input"
-                                            style="font-size: 0.78rem; padding: 3px 6px;">
-                                            <option value="Unknown" selected>Unknown</option>
-                                            <option value="Yes">Yes</option>
-                                            <option value="No">No</option>
-                                        </select>
-                                    </div>
-                                    <div>
-                                        <label class="field-label" style="font-size: 0.7rem;">Possible Additional
-                                            Floors?</label>
-                                        <select id="compFloorsSelect" class="field-input"
-                                            style="font-size: 0.78rem; padding: 3px 6px;">
-                                            <option value="Unknown" selected>Unknown</option>
-                                            <option value="Yes">Yes</option>
-                                            <option value="No">No</option>
-                                        </select>
-                                    </div>
-                                    <div>
-                                        <label class="field-label" style="font-size: 0.7rem;">NCA / County Verification
-                                            Needed?</label>
-                                        <select id="compNcaSelect" class="field-input"
-                                            style="font-size: 0.78rem; padding: 3px 6px;">
-                                            <option value="No" selected>No</option>
-                                            <option value="Yes">Yes</option>
-                                        </select>
-                                    </div>
-                                </div>
-                                <div style="margin-top: 0.5rem;">
-                                    <label class="field-label" style="font-size: 0.7rem;">Compliance Inquiry
-                                        Notes</label>
-                                    <input type="text" id="compNotesInput" class="field-input"
-                                        placeholder="e.g. Planning record reference requested from county office..."
-                                        style="font-size: 0.78rem; padding: 4px 8px;">
-                                </div>
-                            </div>
-
-                            <!-- Visual Note Cards (Section 33) -->
-                            <div
-                                style="background: #ffffff; border: 1px solid #e2e8f0; border-radius: 6px; padding: 0.85rem;">
-                                <div
-                                    style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem;">
-                                    <span
-                                        style="font-size: 0.75rem; font-weight: 700; color: #475569; text-transform: uppercase; letter-spacing: 0.05em;"><i
-                                            class='bx bx-card'></i> Engineering Note Cards</span>
-                                    <span style="font-size: 0.72rem; color: #64748b;" id="noteCardsCount">0 cards</span>
-                                </div>
-
-                                <div id="reviewNoteCardsList"
-                                    style="display: flex; flex-direction: column; gap: 0.5rem; max-height: 220px; overflow-y: auto; margin-bottom: 0.65rem;">
-                                </div>
-
-                                <!-- Add Note Card Form -->
-                                <div
-                                    style="display: flex; flex-direction: column; gap: 0.4rem; border-top: 1px solid #f1f5f9; padding-top: 0.5rem;">
-                                    <div style="display: flex; gap: 0.4rem;">
-                                        <select id="noteCategorySelect" class="field-input"
-                                            style="font-size: 0.78rem; padding: 3px 6px; width: 130px;">
-                                            <option value="Observation" selected>Observation</option>
-                                            <option value="Follow-Up">Follow-Up</option>
-                                            <option value="Maintenance">Maintenance</option>
-                                            <option value="Compliance Context">Compliance</option>
-                                        </select>
-                                        <input type="text" id="noteCardTextInput" class="field-input"
-                                            placeholder="Add field observation or maintenance note..."
-                                            style="font-size: 0.78rem; padding: 3px 8px; flex: 1;">
-                                        <button type="button" class="btn-primary btn-sm" id="btnAddNoteCard"
-                                            style="font-size: 0.75rem; padding: 3px 10px; white-space: nowrap;">Add
-                                            Card</button>
-                                    </div>
+                                    <button type="button" class="btn-primary btn-sm" id="btnAddNoteCard"
+                                        style="font-size: 0.75rem; padding: 3px 10px; white-space: nowrap;">Add Card</button>
                                 </div>
                             </div>
                         </div>
                     </div>
-                </div>
+
+                    <div class="notebook-drawer-footer" style="padding: 0.85rem 1.25rem; border-top: 1px solid #e2e8f0; background: #f8fafc; display: flex; justify-content: space-between; align-items: center;">
+                        <span style="font-size: 0.75rem; color: #64748b;" id="drawerChecklistProgress">0 of 10 completed</span>
+                        <button type="button" class="btn-secondary btn-sm" id="btnSaveInspectionNotebook"
+                            style="font-size: 0.78rem; padding: 5px 14px; display: flex; align-items: center; gap: 0.35rem; font-weight: 600; border-radius: 6px; cursor: pointer;">
+                            <i class='bx bx-save'></i> Save Notebook
+                        </button>
+                    </div>
+                </aside>
             </div>
         </section>
 

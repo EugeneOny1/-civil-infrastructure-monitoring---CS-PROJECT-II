@@ -1791,23 +1791,28 @@ body, body.light-theme {
 }
 
 .cal-intensity-0 {
-    background-color: #1e293b;
-    border: 1px solid rgba(255, 255, 255, 0.05);
+    background-color: #f8fafc;
+    border: 1px solid #e2e8f0;
+    color: #334155;
 }
 
 .cal-intensity-1 {
-    background-color: #7f1d1d;
-    border: 1px solid #991b1b;
+    background-color: #fee2e2;
+    border: 1px solid #fca5a5;
+    color: #991b1b;
 }
 
 .cal-intensity-2 {
-    background-color: #dc2626;
-    box-shadow: 0 0 3px rgba(220, 38, 38, 0.4);
+    background-color: #f87171;
+    border: 1px solid #ef4444;
+    color: #ffffff;
 }
 
 .cal-intensity-3 {
     background-color: #ef4444;
-    box-shadow: 0 0 6px rgba(239, 68, 68, 0.6);
+    border: 1px solid #dc2626;
+    color: #ffffff;
+    box-shadow: 0 0 6px rgba(239, 68, 68, 0.4);
 }
 
 .cal-legend-box {
@@ -1819,55 +1824,18 @@ body, body.light-theme {
     border-radius: 3px;
     font-size: 0.68rem;
     font-weight: 700;
-    color: #ffffff;
 }
 
-.recurrence-insight-card {
-    background: rgba(15, 23, 42, 0.04);
-    border: 1px solid var(--border-color);
-    border-radius: var(--radius-sm);
-    padding: 0.65rem 0.85rem;
-    display: flex;
-    flex-direction: column;
-    gap: 0.2rem;
-    transition: var(--transition-fast);
-}
-
-.recurrence-insight-card:hover {
-    border-color: #93c5fd;
-    background: rgba(2, 132, 199, 0.03);
-}
-
-.recurrence-insight-card .insight-header {
-    display: flex;
-    align-items: center;
-    gap: 0.35rem;
-    font-size: 0.72rem;
-    font-weight: 600;
-    color: #475569;
-    text-transform: uppercase;
-    letter-spacing: 0.04em;
-}
-
-.recurrence-insight-card .insight-value {
-    font-size: 0.88rem;
-    font-weight: 700;
-    color: var(--text-primary);
-}
-
-.recurrence-insight-card .insight-basis {
-    font-size: 0.68rem;
+.cal-legend-box.cal-intensity-0 {
     color: #64748b;
-    font-style: italic;
+    background-color: #f8fafc;
+    border: 1px solid #e2e8f0;
 }
 
-/* ==========================================================================
-   Critical Reports Calendar - Month-Centric Carousel & Day Grid
-   ========================================================================== */
 .btn-cal-carousel-nav {
-    background: rgba(15, 23, 42, 0.6);
-    border: 1px solid rgba(255, 255, 255, 0.15);
-    color: #f8fafc;
+    background: #ffffff;
+    border: 1px solid #cbd5e1;
+    color: #334155;
     border-radius: 6px;
     width: 28px;
     height: 28px;
@@ -1883,15 +1851,15 @@ body, body.light-theme {
     background: #0070d1;
     border-color: #0070d1;
     color: #ffffff;
-    box-shadow: 0 0 8px rgba(0, 112, 209, 0.5);
+    box-shadow: 0 0 8px rgba(0, 112, 209, 0.25);
 }
 
 .cal-active-month-pill {
     font-size: 0.78rem;
     font-weight: 700;
-    color: #f8fafc;
-    background: rgba(0, 112, 209, 0.2);
-    border: 1px solid rgba(0, 112, 209, 0.4);
+    color: #0070d1;
+    background: #f0f7ff;
+    border: 1px solid #bae6fd;
     padding: 3px 10px;
     border-radius: 12px;
     letter-spacing: 0.04em;
@@ -1905,7 +1873,7 @@ body, body.light-theme {
     gap: 12px;
     position: relative;
     width: 100%;
-    min-height: 250px;
+    min-height: 240px;
     overflow: hidden;
     padding: 6px 2px;
     outline: none;
@@ -1917,8 +1885,8 @@ body, body.light-theme {
 }
 
 .cal-month-card {
-    background: #0f172a;
-    border: 1px solid #334155;
+    background: #ffffff;
+    border: 1px solid #e2e8f0;
     border-radius: 8px;
     padding: 0.75rem;
     display: flex;
@@ -1930,43 +1898,46 @@ body, body.light-theme {
 }
 
 .cal-month-card.is-prev {
-    flex: 0 0 26%;
-    max-width: 26%;
-    opacity: 0.54;
+    flex: 0 0 25%;
+    max-width: 25%;
+    opacity: 0.55;
     transform: scale(0.92);
     cursor: pointer;
-    filter: brightness(0.85);
+    background: #f8fafc;
+    border-color: #e2e8f0;
 }
 
 .cal-month-card.is-prev:hover {
     opacity: 0.75;
     transform: scale(0.94);
-    border-color: #64748b;
+    border-color: #94a3b8;
 }
 
 .cal-month-card.is-active {
-    flex: 1 1 48%;
-    max-width: 48%;
+    flex: 1 1 50%;
+    max-width: 50%;
     opacity: 1;
     transform: scale(1);
     z-index: 2;
-    border: 1px solid #0070d1;
-    box-shadow: 0 4px 20px rgba(0, 112, 209, 0.2);
+    background: #ffffff !important;
+    border: 1.5px solid #0070d1 !important;
+    box-shadow: 0 4px 18px rgba(0, 112, 209, 0.12), 0 1px 3px rgba(15, 23, 42, 0.06) !important;
 }
 
 .cal-month-card.is-next {
-    flex: 0 0 26%;
-    max-width: 26%;
-    opacity: 0.54;
+    flex: 0 0 25%;
+    max-width: 25%;
+    opacity: 0.55;
     transform: scale(0.92);
     cursor: pointer;
-    filter: brightness(0.85);
+    background: #f8fafc;
+    border-color: #e2e8f0;
 }
 
 .cal-month-card.is-next:hover {
     opacity: 0.75;
     transform: scale(0.94);
-    border-color: #64748b;
+    border-color: #94a3b8;
 }
 
 .cal-month-card.is-hidden {
@@ -1977,24 +1948,29 @@ body, body.light-theme {
     display: flex;
     justify-content: space-between;
     align-items: center;
-    border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+    border-bottom: 1px solid #f1f5f9;
     padding-bottom: 0.35rem;
 }
 
 .cal-month-title {
     font-size: 0.78rem;
     font-weight: 700;
-    color: #f8fafc;
+    color: #0f172a;
     letter-spacing: 0.05em;
     text-transform: uppercase;
+}
+
+.cal-month-card.is-prev .cal-month-title,
+.cal-month-card.is-next .cal-month-title {
+    color: #64748b;
 }
 
 .cal-month-crit-badge {
     font-size: 0.7rem;
     font-weight: 700;
-    color: #f87171;
-    background: rgba(239, 68, 68, 0.15);
-    border: 1px solid rgba(239, 68, 68, 0.3);
+    color: #ef4444;
+    background: #fee2e2;
+    border: 1px solid #fca5a5;
     padding: 1px 6px;
     border-radius: 4px;
 }
@@ -2026,7 +2002,7 @@ body, body.light-theme {
     justify-content: center;
     font-size: 0.72rem;
     font-weight: 600;
-    color: #cbd5e1;
+    color: #1e293b;
     cursor: pointer;
     transition: transform 0.15s ease, outline 0.15s ease, box-shadow 0.15s ease;
     position: relative;
@@ -2036,14 +2012,14 @@ body, body.light-theme {
 .cal-day-cell-square:hover {
     transform: scale(1.15);
     z-index: 5;
-    outline: 1.5px solid #38bdf8;
-    box-shadow: 0 0 8px rgba(56, 189, 248, 0.5);
+    outline: 1.5px solid #0070d1;
+    box-shadow: 0 0 8px rgba(0, 112, 209, 0.4);
 }
 
 .cal-day-cell-square.is-selected {
-    outline: 2px solid #38bdf8 !important;
+    outline: 2px solid #0070d1 !important;
     outline-offset: 1px;
-    box-shadow: 0 0 10px rgba(56, 189, 248, 0.7);
+    box-shadow: 0 0 10px rgba(0, 112, 209, 0.5);
 }
 
 .cal-day-cell-square.is-empty {
@@ -2057,11 +2033,11 @@ body, body.light-theme {
 .cal-month-summary-strip {
     display: grid;
     grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
-    gap: 0.5rem;
+    gap: 0.75rem;
     margin-top: 0.75rem;
-    padding: 0.65rem 0.85rem;
-    background: rgba(15, 23, 42, 0.65);
-    border: 1px solid rgba(255, 255, 255, 0.08);
+    padding: 0.75rem 1rem;
+    background: #f8fafc;
+    border: 1px solid #e2e8f0;
     border-radius: 6px;
 }
 
@@ -2072,17 +2048,17 @@ body, body.light-theme {
 }
 
 .summary-pill-label {
-    font-size: 0.66rem;
+    font-size: 0.68rem;
     text-transform: uppercase;
-    color: #94a3b8;
-    font-weight: 600;
+    color: #64748b;
+    font-weight: 700;
     letter-spacing: 0.04em;
 }
 
 .summary-pill-value {
-    font-size: 0.86rem;
+    font-size: 1.05rem;
     font-weight: 700;
-    color: #f8fafc;
+    color: #0f172a;
 }
 
 /* ==========================================================================
@@ -2235,101 +2211,28 @@ body, body.light-theme {
 }
 
 /* ==========================================================================
-   Monitoring Intelligence Workspace - Focused Hub & Natural-Language Interface
-   PlayStation-inspired focused interaction & light-surface high contrast
+   Monitoring Intelligence Workspace - Single Compact Workspace (ChatGPT/Gemini Style)
    ========================================================================== */
 .monitoring-intelligence-workspace {
     background: #ffffff !important;
     border: 1px solid #e2e8f0 !important;
     border-radius: 12px !important;
-    box-shadow: 0 4px 20px rgba(15, 23, 42, 0.06) !important;
-}
-
-.intel-mode-selector-grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
-    gap: 0.65rem;
-    margin-bottom: 0.5rem;
-}
-
-.intel-mode-btn {
-    background: #ffffff;
-    border: 1.5px solid #e2e8f0;
-    border-radius: 8px;
-    padding: 0.75rem 0.85rem;
+    box-shadow: 0 4px 20px rgba(15, 23, 42, 0.05) !important;
+    max-height: 520px;
     display: flex;
-    align-items: flex-start;
-    gap: 0.65rem;
-    cursor: pointer;
-    text-align: left;
-    transition: all 0.22s cubic-bezier(0.16, 1, 0.3, 1);
-    user-select: none;
+    flex-direction: column;
     box-sizing: border-box;
-}
-
-.intel-mode-btn:hover {
-    border-color: #38bdf8;
-    transform: translateY(-1px);
-    box-shadow: 0 4px 14px rgba(56, 189, 248, 0.15);
-}
-
-.intel-mode-btn.is-active {
-    border: 2px solid #0070d1 !important;
-    background: #f0f7ff !important;
-    transform: translateY(-2px);
-    box-shadow: 0 6px 18px rgba(0, 112, 209, 0.18) !important;
-    z-index: 2;
-}
-
-.mode-btn-icon {
-    width: 34px;
-    height: 34px;
-    border-radius: 6px;
-    background: #f1f5f9;
-    color: #475569;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    font-size: 1.25rem;
-    flex-shrink: 0;
-    transition: all 0.2s ease;
-}
-
-.intel-mode-btn.is-active .mode-btn-icon {
-    background: #0070d1;
-    color: #ffffff;
-    box-shadow: 0 2px 6px rgba(0, 112, 209, 0.4);
-}
-
-.mode-btn-title {
-    font-size: 0.82rem;
-    font-weight: 700;
-    color: #1e293b;
-    display: block;
-    line-height: 1.25;
-}
-
-.intel-mode-btn.is-active .mode-btn-title {
-    color: #0070d1;
-}
-
-.mode-btn-sub {
-    font-size: 0.68rem;
-    color: #64748b;
-    display: block;
-    margin-top: 3px;
-    line-height: 1.3;
 }
 
 .intel-nlp-input {
     width: 100%;
     font-size: 0.82rem;
-    padding: 7px 12px;
-    border: 1px solid #cbd5e1;
-    border-radius: 6px;
+    padding: 8px 12px;
+    border: 1.5px solid #cbd5e1;
+    border-radius: 8px;
     outline: none;
     background: #ffffff;
-    color: #1e293b;
+    color: #0f172a;
     box-sizing: border-box;
     transition: all 0.18s ease;
 }
@@ -2339,13 +2242,36 @@ body, body.light-theme {
     box-shadow: 0 0 0 3px rgba(0, 112, 209, 0.15);
 }
 
+.btn-intel-submit {
+    width: 34px;
+    height: 34px;
+    border-radius: 8px;
+    background: #0070d1;
+    color: #ffffff;
+    border: none;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1.25rem;
+    cursor: pointer;
+    flex-shrink: 0;
+    transition: all 0.18s ease;
+    box-shadow: 0 2px 6px rgba(0, 112, 209, 0.25);
+}
+
+.btn-intel-submit:hover {
+    background: #005bb5;
+    transform: scale(1.04);
+}
+
 .intel-chip-suggestion {
     background: #ffffff;
     border: 1px solid #cbd5e1;
     color: #334155;
     font-size: 0.72rem;
+    font-weight: 500;
     padding: 3px 10px;
-    border-radius: 12px;
+    border-radius: 14px;
     cursor: pointer;
     transition: all 0.15s ease;
 }
@@ -2356,106 +2282,20 @@ body, body.light-theme {
     background: #f0f7ff;
 }
 
-.intel-result-card {
+.intel-result-workspace {
+    flex: 1;
+    overflow-y: auto;
+    padding-right: 4px;
+}
+
+.intel-focused-card {
     background: #ffffff;
     border: 1px solid #e2e8f0;
-    border-top: 3px solid #0070d1;
     border-radius: 8px;
-    padding: 1.25rem 1.4rem;
+    padding: 1rem 1.15rem;
     display: flex;
     flex-direction: column;
-    gap: 0.85rem;
-    box-shadow: 0 2px 12px rgba(15, 23, 42, 0.04);
-}
-
-.intel-result-badge {
-    font-size: 0.68rem;
-    font-weight: 700;
-    text-transform: uppercase;
-    letter-spacing: 0.05em;
-    padding: 2px 8px;
-    border-radius: 4px;
-    background: rgba(0, 112, 209, 0.1);
-    color: #0070d1;
-    border: 1px solid rgba(0, 112, 209, 0.25);
-    display: inline-flex;
-    align-items: center;
-    gap: 4px;
-}
-
-.intel-result-finding {
-    font-size: 1.02rem;
-    font-weight: 700;
-    color: #0f172a;
-    line-height: 1.45;
-    margin: 0;
-}
-
-.intel-stats-grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
-    gap: 0.6rem;
-}
-
-.intel-stat-box {
-    background: #f8fafc;
-    border: 1px solid #e2e8f0;
-    border-radius: 6px;
-    padding: 0.6rem 0.8rem;
-    display: flex;
-    flex-direction: column;
-    gap: 2px;
-}
-
-.intel-stat-label {
-    font-size: 0.66rem;
-    text-transform: uppercase;
-    color: #64748b;
-    font-weight: 700;
-    letter-spacing: 0.03em;
-}
-
-.intel-stat-val {
-    font-size: 0.95rem;
-    font-weight: 700;
-    color: #0070d1;
-}
-
-.intel-evidence-panel {
-    background: #f8fafc;
-    border: 1px solid #e2e8f0;
-    border-left: 3px solid #64748b;
-    border-radius: 6px;
-    padding: 0.65rem 0.9rem;
-    font-size: 0.76rem;
-    color: #334155;
-    line-height: 1.45;
-}
-
-.intel-comparison-box {
-    background: #f8fafc;
-    border: 1px solid #e2e8f0;
-    border-radius: 6px;
-    padding: 0.75rem 0.9rem;
-    font-size: 0.78rem;
-}
-
-.intel-recommendation-box {
-    background: #f0fdf4;
-    border: 1px solid #bbf7d0;
-    border-left: 3px solid #16a34a;
-    border-radius: 6px;
-    padding: 0.75rem 0.9rem;
-    font-size: 0.8rem;
-    color: #166534;
-    line-height: 1.45;
-}
-
-.intel-actions-row {
-    display: flex;
-    gap: 0.5rem;
-    flex-wrap: wrap;
-    margin-top: 0.25rem;
+    gap: 0.65rem;
 }
 
 .btn-workspace-action {
@@ -2471,12 +2311,11 @@ body, body.light-theme {
     display: inline-flex;
     align-items: center;
     gap: 5px;
-    box-shadow: 0 2px 6px rgba(0, 112, 209, 0.3);
+    box-shadow: 0 2px 6px rgba(0, 112, 209, 0.25);
 }
 
 .btn-workspace-action:hover {
     background: #005bb5;
-    box-shadow: 0 4px 10px rgba(0, 112, 209, 0.45);
     transform: translateY(-1px);
 }
 
@@ -2492,6 +2331,127 @@ body, body.light-theme {
     color: #0f172a;
 }
 
+.btn-text-subtle {
+    background: none;
+    border: none;
+    color: #0284c7;
+    font-size: 0.76rem;
+    font-weight: 600;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    gap: 3px;
+    padding: 4px 6px;
+    border-radius: 4px;
+    transition: all 0.15s ease;
+}
+
+.btn-text-subtle:hover {
+    background: #f0f7ff;
+    color: #0369a1;
+}
+
+/* ==========================================================================
+   Inspection Notebook Slide-Over Drawer & Progress Summary
+   ========================================================================== */
+.notebook-drawer-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(15, 23, 42, 0.45);
+    backdrop-filter: blur(2px);
+    z-index: 2000;
+    display: flex;
+    justify-content: flex-end;
+    transition: opacity 0.22s ease;
+}
+
+.notebook-drawer-overlay.hidden {
+    display: none !important;
+}
+
+.notebook-drawer {
+    width: 480px;
+    max-width: 92vw;
+    height: 100%;
+    background: #ffffff;
+    box-shadow: -6px 0 24px rgba(15, 23, 42, 0.15);
+    display: flex;
+    flex-direction: column;
+    box-sizing: border-box;
+    animation: drawerSlideIn 0.22s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+@keyframes drawerSlideIn {
+    from { transform: translateX(100%); }
+    to { transform: translateX(0); }
+}
+
+.notebook-drawer-header {
+    padding: 1rem 1.25rem;
+    border-bottom: 1px solid #e2e8f0;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    background: #f8fafc;
+}
+
+.notebook-drawer-body {
+    flex: 1;
+    overflow-y: auto;
+    padding: 1.25rem;
+    display: flex;
+    flex-direction: column;
+    gap: 1.25rem;
+}
+
+.notebook-drawer-footer {
+    padding: 1rem 1.25rem;
+    border-top: 1px solid #e2e8f0;
+    background: #f8fafc;
+    display: flex;
+    justify-content: flex-end;
+}
+
+.btn-close-drawer {
+    background: none;
+    border: 1px solid #cbd5e1;
+    border-radius: 50%;
+    width: 30px;
+    height: 30px;
+    font-size: 1rem;
+    color: #64748b;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.15s ease;
+}
+
+.btn-close-drawer:hover {
+    background: #fee2e2;
+    border-color: #fca5a5;
+    color: #ef4444;
+}
+
+.notebook-summary-pill {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    background: #f8fafc;
+    border: 1px solid #e2e8f0;
+    border-radius: 8px;
+    padding: 0.75rem 1rem;
+    transition: all 0.18s ease;
+}
+
+.notebook-summary-pill:hover {
+    border-color: #0070d1;
+    background: #f0f7ff;
+}
+
+/* ==========================================================================
+   Responsive Viewports & Motion
+   ========================================================================== */
 @media (max-width: 768px) {
     .cal-month-card.is-prev,
     .cal-month-card.is-next {

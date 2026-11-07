@@ -12,6 +12,7 @@ const Dashboard = {
     previousFilterSeverityValue: '',
     activeIntelligenceMode: 'rainfall_defect_pattern',
     activeIntelligenceQuery: '',
+    hasUserQueriedIntelligence: false,
 
     init() {
         this.bindEvents();
@@ -100,7 +101,9 @@ const Dashboard = {
             this.loadDegradationChart();
             this.loadCriticalCalendar();
             this.loadReportsList();
-            this.loadFocusedIntelligence(this.activeIntelligenceMode, this.activeIntelligenceQuery);
+            if (this.hasUserQueriedIntelligence) {
+                this.loadFocusedIntelligence(this.activeIntelligenceMode, this.activeIntelligenceQuery);
+            }
         });
 
         if (wardSelect) wardSelect.addEventListener('change', () => {
@@ -110,12 +113,16 @@ const Dashboard = {
             this.loadDegradationChart();
             this.loadCriticalCalendar();
             this.loadReportsList();
-            this.loadFocusedIntelligence(this.activeIntelligenceMode, this.activeIntelligenceQuery);
+            if (this.hasUserQueriedIntelligence) {
+                this.loadFocusedIntelligence(this.activeIntelligenceMode, this.activeIntelligenceQuery);
+            }
         });
 
         if (calRangeSelect) calRangeSelect.addEventListener('change', () => {
             this.loadCriticalCalendar();
-            this.loadFocusedIntelligence(this.activeIntelligenceMode, this.activeIntelligenceQuery);
+            if (this.hasUserQueriedIntelligence) {
+                this.loadFocusedIntelligence(this.activeIntelligenceMode, this.activeIntelligenceQuery);
+            }
         });
 
         // Month-Centric Carousel Navigation Controls
@@ -162,9 +169,11 @@ const Dashboard = {
             this.loadKpis(),
             this.loadDegradationChart(),
             this.loadCriticalCalendar(),
-            this.loadReportsList(),
-            this.loadFocusedIntelligence(this.activeIntelligenceMode)
+            this.loadReportsList()
         ]);
+        if (this.hasUserQueriedIntelligence) {
+            await this.loadFocusedIntelligence(this.activeIntelligenceMode, this.activeIntelligenceQuery);
+        }
     },
 
     async loadKpis(countyParam, wardParam) {
@@ -403,6 +412,7 @@ const Dashboard = {
         }
 
         // Section 3: Direct point-to-point line chart (tension: 0, no cubic interpolation)
+        // Architectural specification note: cubicInterpolationMode: 'monotone' and tension: 0.35 superseded for sharp point-to-point empirical rendering
         if (typeof Chart !== 'undefined') {
             if (this.trendChart) {
                 this.trendChart.destroy();
@@ -738,29 +748,8 @@ const Dashboard = {
     renderRecurrenceInsights(insights) {
         const container = document.getElementById('dashboardRecurrenceInsights');
         if (!container) return;
-
-        if (!insights || !Array.isArray(insights) || insights.length === 0) {
-            container.innerHTML = '';
-            return;
-        }
-
-        const icons = [
-            'bx-trending-up',
-            'bx-map-pin',
-            'bx-calendar-exclamation',
-            'bx-sync'
-        ];
-
-        container.innerHTML = insights.map((item, idx) => `
-            <div class="recurrence-insight-card">
-                <div class="insight-header">
-                    <i class='bx ${icons[idx % icons.length]}' style="color: #0284c7; font-size: 1rem;"></i>
-                    <span>${item.title}</span>
-                </div>
-                <div class="insight-value">${item.value}</div>
-                <div class="insight-basis">${item.basis}</div>
-            </div>
-        `).join('');
+        // Keep container clean to eliminate duplicate card slab under calendar
+        container.innerHTML = '';
     },
 
     initMonitoringIntelligence() {
@@ -770,10 +759,11 @@ const Dashboard = {
                 btn.addEventListener('click', () => {
                     const mode = btn.getAttribute('data-mode');
                     if (!mode) return;
+                    this.hasUserQueriedIntelligence = true;
                     this.activeIntelligenceMode = mode;
                     this.activeIntelligenceQuery = '';
 
-                    // PlayStation hub active state toggle
+                    // Mode selector active state toggle
                     selectorGrid.querySelectorAll('.intel-mode-btn').forEach(b => b.classList.remove('is-active'));
                     btn.classList.add('is-active');
 
@@ -796,6 +786,7 @@ const Dashboard = {
                 const query = (nlpInput?.value || '').trim();
                 if (!query) return;
 
+                this.hasUserQueriedIntelligence = true;
                 this.activeIntelligenceQuery = query;
                 this.loadFocusedIntelligence(null, query);
             });
@@ -807,6 +798,7 @@ const Dashboard = {
                 chip.addEventListener('click', () => {
                     const prompt = chip.getAttribute('data-prompt');
                     if (!prompt) return;
+                    this.hasUserQueriedIntelligence = true;
                     const nlpInput = document.getElementById('intelNlpInput');
                     if (nlpInput) nlpInput.value = prompt;
                     this.activeIntelligenceQuery = prompt;
@@ -823,7 +815,9 @@ const Dashboard = {
                 if (nlpInput) nlpInput.value = '';
                 const interpBanner = document.getElementById('intelQueryExplanation');
                 if (interpBanner) interpBanner.classList.add('hidden');
-                this.loadFocusedIntelligence(this.activeIntelligenceMode, '');
+                if (this.hasUserQueriedIntelligence) {
+                    this.loadFocusedIntelligence(this.activeIntelligenceMode, '');
+                }
             });
         }
     },
@@ -993,7 +987,7 @@ const Dashboard = {
             return;
         }
 
-        // 3. Success State
+        // 3. Success State - SHORT FIRST with progressive disclosure
         const stats = data.supporting_stats || data.supporting_statistics || [];
         const statsHtml = stats.map(s => `
             <div class="intel-stat-box">
@@ -1002,7 +996,7 @@ const Dashboard = {
             </div>
         `).join('');
 
-        // Build comparison breakdown view
+        // Build comparison breakdown view (housed in collapsible drawer)
         let comparisonHtml = '';
         if (data.comparison && Array.isArray(data.comparison.data) && data.comparison.data.length > 0) {
             const comp = data.comparison;
@@ -1069,12 +1063,13 @@ const Dashboard = {
             comparisonHtml += `</div>`;
         }
 
-        // Evidence strip
+        // Evidence strip details
         const ev = data.evidence || {};
         const sourceLabel = ev.weather_source || ev.geospatial_source || ev.climate_source || ev.telemetry_source || ev.lifecycle_source || 'MongoDB verified records';
 
-        // Actions
-        const actionsHtml = (data.actions || []).map(act => `
+        // Limit to at most 2 primary actions (View Reports, Show on Map)
+        const primaryActions = (data.actions || []).slice(0, 2);
+        const actionsHtml = primaryActions.map(act => `
             <button type="button" class="btn-workspace-action"
                     data-action-id="${act.id}"
                     data-corridor="${(act.corridor || '').replace(/"/g, '&quot;')}"
@@ -1103,28 +1098,54 @@ const Dashboard = {
                     ${statsHtml}
                 </div>
 
-                ${comparisonHtml}
-
-                <div class="intel-evidence-panel">
-                    <div style="font-weight: 700; color: #1e293b; margin-bottom: 2px;">Evidence Basis & Observation Window:</div>
-                    <div>Period: <strong>${ev.period || 'Selected Time Range'}</strong> • Geographical Scope: <strong>${ev.location || 'All Monitored Locations'}</strong></div>
-                    <div style="font-size: 0.72rem; color: #64748b; margin-top: 3px;">Data Grounding: ${sourceLabel}</div>
+                <!-- Progressive Disclosure: View Evidence Toggle -->
+                <div style="margin-top: 0.65rem;">
+                    <button type="button" class="btn-text-subtle" id="btnToggleIntelEvidence"
+                        style="font-size: 0.78rem; color: #0070d1; background: none; border: none; cursor: pointer; padding: 2px 0; display: inline-flex; align-items: center; gap: 4px; font-weight: 600;">
+                        <i class='bx bx-chevron-down' id="intelEvidenceChevron"></i>
+                        <span id="intelEvidenceToggleText">View evidence &amp; breakdown</span>
+                    </button>
                 </div>
 
-                ${data.recommendation ? `
-                    <div class="intel-recommendation-box">
-                        <i class='bx bx-check-shield' style="font-size: 1.05rem; vertical-align: -2px; margin-right: 4px;"></i>
-                        <strong>Engineering Advisory:</strong> ${data.recommendation}
+                <!-- Collapsible Evidence & Breakdown Drawer -->
+                <div id="intelCollapsibleEvidence" class="hidden" style="display: none; margin-top: 0.5rem;">
+                    ${comparisonHtml}
+
+                    <div class="intel-evidence-panel">
+                        <div style="font-weight: 700; color: #1e293b; margin-bottom: 2px;">Evidence Basis & Observation Window:</div>
+                        <div>Period: <strong>${ev.period || 'Selected Time Range'}</strong> • Geographical Scope: <strong>${ev.location || 'All Monitored Locations'}</strong></div>
+                        <div style="font-size: 0.72rem; color: #64748b; margin-top: 3px;">Data Grounding: ${sourceLabel}</div>
                     </div>
-                ` : ''}
+
+                    ${data.recommendation ? `
+                        <div class="intel-recommendation-box" style="margin-top: 0.5rem;">
+                            <i class='bx bx-check-shield' style="font-size: 1.05rem; vertical-align: -2px; margin-right: 4px;"></i>
+                            <strong>Engineering Advisory:</strong> ${data.recommendation}
+                        </div>
+                    ` : ''}
+                </div>
 
                 ${actionsHtml ? `
-                    <div class="intel-actions-row">
+                    <div class="intel-actions-row" style="margin-top: 0.75rem;">
                         ${actionsHtml}
                     </div>
                 ` : ''}
             </div>
         `;
+
+        // Wire progressive disclosure toggle
+        const btnToggle = container.querySelector('#btnToggleIntelEvidence');
+        const collPanel = container.querySelector('#intelCollapsibleEvidence');
+        const chevron = container.querySelector('#intelEvidenceChevron');
+        const toggleText = container.querySelector('#intelEvidenceToggleText');
+        if (btnToggle && collPanel) {
+            btnToggle.addEventListener('click', () => {
+                const isHidden = collPanel.style.display === 'none';
+                collPanel.style.display = isHidden ? 'block' : 'none';
+                if (chevron) chevron.className = isHidden ? 'bx bx-chevron-up' : 'bx bx-chevron-down';
+                if (toggleText) toggleText.textContent = isHidden ? 'Hide evidence & breakdown' : 'View evidence & breakdown';
+            });
+        }
 
         this.wireWorkspaceActions(container);
     },
