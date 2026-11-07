@@ -113,10 +113,12 @@ def get_historical_defect_trends(current_user):
 
         meta = rep.get('metadata') or {}
         loc_name = str(meta.get('location_name') or rep.get('location_name') or rep.get('description') or '')
+        rep_county = str(meta.get('county') or rep.get('county') or '')
 
         # County filter
         if county_filter and county_filter.lower() != 'all':
-            if county_filter.lower() not in loc_name.lower():
+            c_low = county_filter.lower()
+            if c_low not in loc_name.lower() and c_low not in rep_county.lower():
                 continue
 
         # Ward / sub-county filter
@@ -348,7 +350,10 @@ def get_historical_defect_trends(current_user):
     received_to_verified_durations = []
     verified_to_resolved_durations = []
 
-    for rep in all_reports:
+    is_geo_filtered = (county_filter.lower() != 'all') or (ward_filter and ward_filter.lower() != 'all' and ward_filter.lower() != 'all areas')
+    scoped_reports = [r for _, r, _, _ in parsed_reports] if is_geo_filtered else all_reports
+
+    for rep in scoped_reports:
         meta = rep.get('metadata') or {}
         dt_str = rep.get('date_submitted') or rep.get('created_at')
         if not dt_str:
@@ -405,12 +410,12 @@ def get_historical_defect_trends(current_user):
         if ver_time and res_time and res_time >= ver_time:
             verified_to_resolved_durations.append((res_time - ver_time).total_seconds())
 
-    avg_rec_to_ver_str = "Not enough historical data yet"
+    avg_rec_to_ver_str = "Not enough historical data for this selection"
     if received_to_verified_durations:
         avg_hrs = sum(received_to_verified_durations) / (len(received_to_verified_durations) * 3600)
         avg_rec_to_ver_str = f"{round(avg_hrs / 24, 1)} days" if avg_hrs >= 48 else f"{round(avg_hrs, 1)} hours"
 
-    avg_ver_to_res_str = "Not enough historical data yet"
+    avg_ver_to_res_str = "Not enough historical data for this selection"
     if verified_to_resolved_durations:
         avg_hrs = sum(verified_to_resolved_durations) / (len(verified_to_resolved_durations) * 3600)
         avg_ver_to_res_str = f"{round(avg_hrs / 24, 1)} days" if avg_hrs >= 48 else f"{round(avg_hrs, 1)} hours"
@@ -425,20 +430,23 @@ def get_historical_defect_trends(current_user):
     top_repeat_corridor = max(corridor_total_counts.items(), key=lambda x: x[1]) if corridor_total_counts else None
 
     # Weather Association Analysis (Sections 36-38)
-    weather_insight = weather_service.analyze_weather_associations(all_reports)
+    weather_insight = weather_service.analyze_weather_associations(scoped_reports)
 
+    has_scoped_data = len(scoped_reports) >= 3
     monitoring_insights = {
-        'has_sufficient_data': len(all_reports) >= 3,
-        'critical_last_30d': crit_30d,
-        'critical_change': crit_change_str,
-        'top_asset_type': top_asset,
-        'top_corridor_repeat': f"{top_repeat_corridor[0]} ({top_repeat_corridor[1]} reports)" if top_repeat_corridor else "Not enough historical data yet",
-        'avg_received_to_verified': avg_rec_to_ver_str,
-        'avg_verified_to_resolved': avg_ver_to_res_str,
+        'has_sufficient_data': has_scoped_data,
+        'message': None if has_scoped_data else 'Not enough historical data for this selection.',
+        'critical_last_30d': crit_30d if has_scoped_data else 0,
+        'critical_change': crit_change_str if has_scoped_data else 'No prior period comparison',
+        'top_asset_type': top_asset if has_scoped_data else 'None',
+        'top_corridor_repeat': f"{top_repeat_corridor[0]} ({top_repeat_corridor[1]} reports)" if (has_scoped_data and top_repeat_corridor) else "Not enough historical data for this selection",
+        'avg_received_to_verified': avg_rec_to_ver_str if has_scoped_data else "Not enough historical data for this selection",
+        'avg_verified_to_resolved': avg_ver_to_res_str if has_scoped_data else "Not enough historical data for this selection",
         'weather_insight': weather_insight
     }
 
     has_data = total_in_period > 0
+    geo_label = county_filter if county_filter != 'all' else 'this selection'
 
     resp_data = {
         'trend_data': trend_data,
@@ -446,12 +454,12 @@ def get_historical_defect_trends(current_user):
         'view_by': view_by,
         'series': series_keys,
         'has_sufficient_data': has_data,
-        'message': None if has_data else 'Not enough historical report data is available for this period.',
+        'message': None if has_data else f'No defect reports recorded for {geo_label} in the selected period.',
         'summary': {
-            'most_reported_defect': most_reported_defect,
+            'most_reported_defect': most_reported_defect if has_data else 'None',
             'critical_reports_count': critical_in_period,
             'resolved_reports_count': resolved_in_period,
-            'most_active_location': most_active_loc,
+            'most_active_location': most_active_loc if has_data else 'None',
             'total_reports': total_in_period,
             'recurrence_insights': recurrence_insights
         },
@@ -518,8 +526,11 @@ def get_critical_calendar(current_user):
             continue
 
         loc_name = str(meta.get('location_name') or rep.get('location_name') or rep.get('description') or '')
-        if county_filter and county_filter.lower() != 'all' and county_filter.lower() not in loc_name.lower():
-            continue
+        rep_county = str(meta.get('county') or rep.get('county') or '')
+        if county_filter and county_filter.lower() != 'all':
+            c_low = county_filter.lower()
+            if c_low not in loc_name.lower() and c_low not in rep_county.lower():
+                continue
         if ward_filter and ward_filter.lower() != 'all' and ward_filter.lower() != 'all areas' and ward_filter.lower() not in loc_name.lower():
             continue
 

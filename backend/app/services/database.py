@@ -31,7 +31,11 @@ class DatabaseService:
             'infrastructure_reports': {},
             'submitted_images': {},
             'ai_assessments': {},
-            'professional_reviews': {}
+            'professional_reviews': {},
+            'safety_advisories': {},
+            'notifications': {},
+            'system_audit_logs': {},
+            'citizen_feedback': {}
         }
         self.connect()
 
@@ -151,13 +155,14 @@ class DatabaseService:
             'created_at': now_iso
         }
 
-        # Seed realistic sample report
+        # Seed realistic sample reports with Kenya County attribution
         rep_1 = 'REP-2026-0001'
         img_1 = 'img_seed_01'
         ass_1 = 'ass_seed_01'
 
         self._mock_data['infrastructure_reports'][rep_1] = {
             '_id': rep_1,
+            'report_id': rep_1,
             'user_id': citizen_id,
             'asset_id': asset_1,
             'description': 'Road surface cavity observed across center southbound carriageway.',
@@ -165,10 +170,13 @@ class DatabaseService:
             'date_submitted': now_iso,
             'latitude': -1.2921,
             'longitude': 36.8219,
+            'county': 'Nairobi',
             'metadata': {
-                'location_name': 'Uhuru Highway near Nyayo Stadium',
+                'location_name': 'Uhuru Highway near Nyayo Stadium, Nairobi',
+                'county': 'Nairobi',
                 'asset_type': 'Road / Pavement',
                 'priority': 'Critical',
+                'relative_severity': 'Critical',
                 'validation_status': 'valid',
                 'is_unusual': False,
                 'requires_engineer_review': True,
@@ -187,6 +195,7 @@ class DatabaseService:
         }
         self._mock_data['ai_assessments'][ass_1] = {
             '_id': ass_1,
+            'report_id': rep_1,
             'image_id': img_1,
             'defect_class': 'Pothole',
             'confidence_score': 0.946,
@@ -206,7 +215,101 @@ class DatabaseService:
             'class_id': 2,
             'class_name': 'Pothole',
             'validation_status': 'valid',
-            'created_at': datetime.utcnow().isoformat()
+            'created_at': now_iso
+        }
+
+        # Seed Active Safety Advisory for rep_1 (composite marker & context popup verification)
+        adv_1 = 'adv_seed_01'
+        self._mock_data['safety_advisories'][adv_1] = {
+            '_id': adv_1,
+            'advisory_id': adv_1,
+            'report_id': rep_1,
+            'latitude': -1.2921,
+            'longitude': 36.8219,
+            'location_name': 'Uhuru Highway near Nyayo Stadium, Nairobi',
+            'status': 'active',
+            'note': 'Reduce speed across center southbound carriageway due to severe pavement depression.',
+            'created_at': now_iso,
+            'issued_at': now_iso
+        }
+
+        # Seed additional reports to provide baseline statistical volume for Nairobi
+        rep_2 = 'REP-2026-0002'
+        img_2 = 'img_seed_02'
+        ass_2 = 'ass_seed_02'
+        self._mock_data['infrastructure_reports'][rep_2] = {
+            '_id': rep_2,
+            'report_id': rep_2,
+            'user_id': citizen_id,
+            'asset_id': asset_2,
+            'description': 'Structural longitudinal crack on viaduct support beam.',
+            'status': 'Verified',
+            'date_submitted': now_iso,
+            'latitude': -1.2758,
+            'longitude': 36.8835,
+            'county': 'Nairobi',
+            'metadata': {
+                'location_name': 'Outer Ring Road Viaduct, Nairobi',
+                'county': 'Nairobi',
+                'asset_type': 'Bridge',
+                'priority': 'Medium',
+                'relative_severity': 'Medium',
+                'validation_status': 'valid',
+                'is_unusual': False,
+                'requires_engineer_review': False,
+                'latitude': -1.2758,
+                'longitude': 36.8835
+            }
+        }
+        self._mock_data['ai_assessments'][ass_2] = {
+            '_id': ass_2,
+            'report_id': rep_2,
+            'image_id': img_2,
+            'defect_class': 'Crack',
+            'confidence_score': 0.892,
+            'relative_severity': 'Medium',
+            'area_percentage': 12.0,
+            'model_name': 'SSD-MobileNetV2',
+            'created_at': now_iso
+        }
+
+        rep_3 = 'REP-2026-0003'
+        img_3 = 'img_seed_03'
+        ass_3 = 'ass_seed_03'
+        self._mock_data['infrastructure_reports'][rep_3] = {
+            '_id': rep_3,
+            'report_id': rep_3,
+            'user_id': citizen_id,
+            'asset_id': asset_3,
+            'description': 'Surface deterioration along municipal retaining wall perimeter.',
+            'status': 'Received',
+            'date_submitted': now_iso,
+            'latitude': -1.3005,
+            'longitude': 36.8231,
+            'county': 'Nairobi',
+            'metadata': {
+                'location_name': 'Nyayo Municipal Annex, Nairobi',
+                'county': 'Nairobi',
+                'asset_type': 'Building',
+                'priority': 'Low',
+                'relative_severity': 'Low',
+                'validation_status': 'valid',
+                'is_unusual': False,
+                'requires_engineer_review': False,
+                'latitude': -1.3005,
+                'longitude': 36.8231
+            }
+        }
+        self._mock_data['ai_assessments'][ass_3] = {
+            '_id': ass_3,
+            'report_id': rep_3,
+            'image_id': img_3,
+            'defect_class': 'Surface deterioration',
+            'confidence_score': 0.854,
+            'relative_severity': 'Low',
+            'area_percentage': 8.5,
+            'model_name': 'SSD-MobileNetV2',
+            'created_at': now_iso
         }
 
     def _ensure_initial_seeds(self):
@@ -231,21 +334,56 @@ class DatabaseService:
             self.db[collection_name].insert_one(doc)
             return doc['_id']
         else:
-            self._mock_data[collection_name][doc['_id']] = doc
+            col = self._mock_data.setdefault(collection_name, {})
+            col[doc['_id']] = doc
             return doc['_id']
+
+    def _get_nested(self, item, key):
+        if not key or not isinstance(item, dict):
+            return None
+        if '.' not in key:
+            return item.get(key)
+        curr = item
+        for part in key.split('.'):
+            if isinstance(curr, dict):
+                curr = curr.get(part)
+            else:
+                return None
+        return curr
+
+    def _matches_query(self, item, query):
+        if not query:
+            return True
+        for k, v in query.items():
+            if k == '$or' and isinstance(v, list):
+                if not any(self._matches_query(item, sub_q) for sub_q in v):
+                    return False
+            elif k == '$and' and isinstance(v, list):
+                if not all(self._matches_query(item, sub_q) for sub_q in v):
+                    return False
+            elif isinstance(v, dict):
+                val = self._get_nested(item, k)
+                for op, op_val in v.items():
+                    if op == '$ne' and val == op_val:
+                        return False
+                    elif op == '$in' and (not isinstance(op_val, (list, tuple, set)) or val not in op_val):
+                        return False
+                    elif op == '$nin' and (isinstance(op_val, (list, tuple, set)) and val in op_val):
+                        return False
+            else:
+                val = self._get_nested(item, k)
+                if val != v:
+                    return False
+        return True
 
     def find_one(self, collection_name, query):
         if not self.use_mock:
             doc = self.db[collection_name].find_one(self._format_query(query))
             return self._clean_doc(doc)
         else:
-            for item in self._mock_data[collection_name].values():
-                match = True
-                for k, v in query.items():
-                    if item.get(k) != v:
-                        match = False
-                        break
-                if match:
+            col = self._mock_data.setdefault(collection_name, {})
+            for item in col.values():
+                if self._matches_query(item, query):
                     return dict(item)
             return None
 
@@ -259,13 +397,9 @@ class DatabaseService:
             return [self._clean_doc(d) for d in cursor]
         else:
             results = []
-            for item in self._mock_data[collection_name].values():
-                match = True
-                for k, v in query.items():
-                    if item.get(k) != v:
-                        match = False
-                        break
-                if match:
+            col = self._mock_data.setdefault(collection_name, {})
+            for item in col.values():
+                if self._matches_query(item, query):
                     results.append(dict(item))
             if sort_key:
                 results.sort(key=lambda x: x.get(sort_key, ''), reverse=reverse)
@@ -284,10 +418,11 @@ class DatabaseService:
         if not self.use_mock and self.db is not None:
             return self.db[collection_name].update_one(self._format_query(query), {'$set': update_values}, upsert=upsert)
         else:
+            col = self._mock_data.setdefault(collection_name, {})
             item = self.find_one(collection_name, query)
             if item:
                 target_id = item['_id']
-                self._mock_data[collection_name][target_id].update(update_values)
+                col[target_id].update(update_values)
                 return True
             elif upsert:
                 doc = dict(query)
@@ -300,19 +435,21 @@ class DatabaseService:
         if not self.use_mock and self.db is not None:
             return self.db[collection_name].update_many(self._format_query(query), {'$set': update_values})
         else:
+            col = self._mock_data.setdefault(collection_name, {})
             items = self.find(collection_name, query)
             for item in items:
                 target_id = item['_id']
-                self._mock_data[collection_name][target_id].update(update_values)
+                col[target_id].update(update_values)
             return True
 
     def delete_one(self, collection_name, query):
         if not self.use_mock:
             return self.db[collection_name].delete_one(self._format_query(query))
         else:
+            col = self._mock_data.setdefault(collection_name, {})
             item = self.find_one(collection_name, query)
-            if item:
-                del self._mock_data[collection_name][item['_id']]
+            if item and item['_id'] in col:
+                del col[item['_id']]
                 return True
             return False
 
@@ -320,9 +457,11 @@ class DatabaseService:
         if not self.use_mock and self.db is not None:
             return self.db[collection_name].delete_many(self._format_query(query))
         else:
+            col = self._mock_data.setdefault(collection_name, {})
             items = self.find(collection_name, query)
             for item in items:
-                del self._mock_data[collection_name][item['_id']]
+                if item['_id'] in col:
+                    del col[item['_id']]
             return True
 
     def _format_query(self, query):

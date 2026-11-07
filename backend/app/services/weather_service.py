@@ -114,7 +114,8 @@ class WeatherService:
         if len(eligible) < 3:
             return {
                 'has_sufficient_data': False,
-                'message': 'Not enough historical coordinate-linked reports for weather correlation analysis.'
+                'message': 'Not enough historical coordinate-linked reports for weather correlation analysis.',
+                'qualification': 'Observed historical association. Pavement deterioration involves coupled engineering factors including cumulative traffic loading, subgrade moisture, and drainage capacity.'
             }
 
         # Analyze preceding 7 days rainfall for up to 15 recent reports
@@ -140,7 +141,8 @@ class WeatherService:
         if total_analyzed < 3:
             return {
                 'has_sufficient_data': False,
-                'message': 'Insufficient cached meteorological observations.'
+                'message': 'Insufficient cached meteorological observations.',
+                'qualification': 'Observed historical association. Pavement deterioration involves coupled engineering factors including cumulative traffic loading, subgrade moisture, and drainage capacity.'
             }
 
         pct = round((wet_period_reports / total_analyzed) * 100)

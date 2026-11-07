@@ -987,8 +987,8 @@
                         </div>
                         <div class="chart-canvas-wrapper" style="position: relative; min-height: 240px; height: 260px;">
                             <canvas id="degradationChart" class="trend-canvas"></canvas>
-                            <div id="trendEmptyState" class="canvas-placeholder hidden" style="position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; background: rgba(15, 23, 42, 0.75);">
-                                <p style="color: #94a3b8; font-size: 0.85rem;"><i class='bx bx-info-circle'></i> Not enough historical report data is available for this period.</p>
+                            <div id="trendEmptyState" class="trend-empty-overlay hidden" style="position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; background: rgba(248, 250, 252, 0.85); backdrop-filter: blur(2px); border-radius: 6px; z-index: 2; pointer-events: none;">
+                                <p id="trendEmptyStateText" style="color: #475569; font-size: 0.85rem; font-weight: 500;"><i class='bx bx-info-circle'></i> No defect reports recorded for this selection.</p>
                             </div>
                         </div>
                         <div class="chart-legend" id="trendLegend" style="display: flex; gap: 1rem; flex-wrap: wrap; margin-top: 0.5rem;">

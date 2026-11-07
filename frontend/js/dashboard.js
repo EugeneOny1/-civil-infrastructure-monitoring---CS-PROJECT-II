@@ -56,12 +56,18 @@ const Dashboard = {
         if (viewBySelect) viewBySelect.addEventListener('change', () => this.loadDegradationChart());
 
         if (countySelect) countySelect.addEventListener('change', () => {
+            const cVal = countySelect.value;
+            const wVal = wardSelect ? wardSelect.value : 'all';
+            this.loadKpis(cVal, wVal);
             this.loadDegradationChart();
             this.loadCriticalCalendar();
             this.loadReportsList();
         });
 
         if (wardSelect) wardSelect.addEventListener('change', () => {
+            const cVal = countySelect ? countySelect.value : 'all';
+            const wVal = wardSelect.value;
+            this.loadKpis(cVal, wVal);
             this.loadDegradationChart();
             this.loadCriticalCalendar();
             this.loadReportsList();
@@ -81,18 +87,53 @@ const Dashboard = {
         ]);
     },
 
-    async loadKpis() {
+    async loadKpis(countyParam, wardParam) {
         try {
-            const summary = await window.Api.getSummary();
+            const county = countyParam !== undefined ? countyParam : (document.getElementById('trendCountySelect')?.value || 'all');
+            const ward = wardParam !== undefined ? wardParam : (document.getElementById('trendWardSelect')?.value || 'all');
+
             const queueEl = document.getElementById('kpiActiveQueue');
             const verifiedEl = document.getElementById('kpiVerifiedCount');
             const modelEl = document.getElementById('kpiModelVersion');
             const critEl = document.getElementById('kpiCriticalHazards');
 
-            if (queueEl) queueEl.textContent = summary.active_defect_queue ?? 0;
-            if (verifiedEl) verifiedEl.textContent = summary.verified_inspections ?? 0;
-            if (modelEl) modelEl.textContent = summary.model_version || 'SSD-MobileNetV2';
-            if (critEl) critEl.textContent = summary.severity_breakdown?.Critical ?? 0;
+            const isGeoFiltered = (county && county !== 'all') || (ward && ward !== 'all' && ward !== 'All Areas');
+
+            if (!isGeoFiltered) {
+                const summary = await window.Api.getSummary();
+                if (queueEl) queueEl.textContent = summary.active_defect_queue ?? 0;
+                if (verifiedEl) verifiedEl.textContent = summary.verified_inspections ?? 0;
+                if (modelEl) modelEl.textContent = summary.model_version || 'SSD-MobileNetV2';
+                if (critEl) critEl.textContent = summary.severity_breakdown?.Critical ?? 0;
+            } else {
+                // Compute geographic KPI counts from reports matching geographic filter
+                const data = await window.Api.getReports({ exclude_status: 'none' });
+                let reports = Array.isArray(data.reports) ? data.reports : [];
+                if (county && county !== 'all') {
+                    reports = reports.filter(r => {
+                        const loc = (r.asset?.location || r.metadata?.location_name || '').toLowerCase();
+                        return loc.includes(county.toLowerCase());
+                    });
+                }
+                if (ward && ward !== 'all' && ward !== 'All Areas') {
+                    reports = reports.filter(r => {
+                        const loc = (r.asset?.location || r.metadata?.location_name || '').toLowerCase();
+                        return loc.includes(ward.toLowerCase());
+                    });
+                }
+
+                const activeQueue = reports.filter(r => (r.status || '').toLowerCase() !== 'resolved').length;
+                const verified = reports.filter(r => (r.status || '') === 'Verified').length;
+                const critical = reports.filter(r => {
+                    const sev = (r.assessment?.relative_severity || r.metadata?.relative_severity || '').toLowerCase();
+                    return sev === 'critical' || sev === 'high';
+                }).length;
+
+                if (queueEl) queueEl.textContent = activeQueue;
+                if (verifiedEl) verifiedEl.textContent = verified;
+                if (modelEl) modelEl.textContent = 'SSD-MobileNetV2';
+                if (critEl) critEl.textContent = critical;
+            }
         } catch (e) {
             console.error("KPI load error:", e);
         }
@@ -117,14 +158,71 @@ const Dashboard = {
         }
     },
 
+    getTrendChartOptions() {
+        return {
+            responsive: true,
+            maintainAspectRatio: false,
+            interaction: {
+                mode: 'index',
+                intersect: false
+            },
+            plugins: {
+                legend: {
+                    display: false
+                },
+                tooltip: {
+                    backgroundColor: '#0f172a',
+                    titleColor: '#f8fafc',
+                    bodyColor: '#cbd5e1',
+                    borderColor: 'rgba(255, 255, 255, 0.12)',
+                    borderWidth: 1,
+                    padding: 10,
+                    boxPadding: 4,
+                    usePointStyle: true,
+                    callbacks: {
+                        footer: (items) => {
+                            let sum = 0;
+                            items.forEach(it => { sum += (it.parsed.y || 0); });
+                            return `Total Period Reports: ${sum}`;
+                        }
+                    }
+                }
+            },
+            scales: {
+                x: {
+                    grid: {
+                        color: 'rgba(255, 255, 255, 0.05)',
+                        drawBorder: false
+                    },
+                    ticks: {
+                        color: '#94a3b8',
+                        font: { size: 10, family: 'Inter, Montserrat, sans-serif' }
+                    }
+                },
+                y: {
+                    beginAtZero: true,
+                    grid: {
+                        color: 'rgba(255, 255, 255, 0.08)',
+                        drawBorder: false
+                    },
+                    ticks: {
+                        color: '#94a3b8',
+                        font: { size: 10, family: 'Inter, Montserrat, sans-serif' },
+                        precision: 0
+                    }
+                }
+            }
+        };
+    },
+
     drawHistoricalDefectChart(apiData) {
         const canvas = document.getElementById('degradationChart');
         const emptyState = document.getElementById('trendEmptyState');
         const legendContainer = document.getElementById('trendLegend');
         if (!canvas) return;
 
-        const trendData = apiData?.trend_data || [];
-        const series = apiData?.series || ['Crack', 'Pothole', 'Surface deterioration'];
+        const trendData = Array.isArray(apiData?.trend_data) ? apiData.trend_data : [];
+        const series = Array.isArray(apiData?.series) ? apiData.series : ['Crack', 'Pothole', 'Surface deterioration'];
         const viewBy = apiData?.view_by || 'defect_class';
         const hasData = Boolean(apiData?.has_sufficient_data && trendData.length > 0 && trendData.some(d => (d.total || 0) > 0));
 
@@ -138,7 +236,7 @@ const Dashboard = {
         if (repEl) repEl.textContent = summary.most_reported_defect || 'None';
         if (critEl) critEl.textContent = summary.critical_reports_count ?? 0;
         if (resEl) resEl.textContent = summary.resolved_reports_count ?? 0;
-        if (locEl) locEl.textContent = summary.most_active_location || 'Corridors';
+        if (locEl) locEl.textContent = summary.most_active_location || 'None';
 
         // Render recurrence insights from real database history (Section 31)
         this.renderRecurrenceInsights(summary.recurrence_insights);
@@ -174,30 +272,65 @@ const Dashboard = {
             `).join('');
         }
 
-        // Handle empty data state
+        const county = document.getElementById('trendCountySelect')?.value || 'all';
+
+        // Section 7: Chart.js Zero-Data Safety
         if (!hasData) {
+            const emptyTextEl = document.getElementById('trendEmptyStateText');
+            if (emptyTextEl) {
+                const geoLabel = county !== 'all' ? `No defect reports recorded for ${county} in the selected period.` : 'No defect reports recorded for this selection.';
+                emptyTextEl.innerHTML = `<i class='bx bx-info-circle'></i> ${apiData?.message || geoLabel}`;
+            }
             if (emptyState) emptyState.classList.remove('hidden');
+
+            const labels = trendData.length > 0 ? trendData.map(d => d.period) : ['Month 1', 'Month 2', 'Month 3', 'Month 4', 'Month 5', 'Month 6'];
+            const zeroDatasets = series.map(s => {
+                const color = COLORS[s] || '#94a3b8';
+                return {
+                    label: s,
+                    data: labels.map(() => 0),
+                    borderColor: color,
+                    backgroundColor: color + '1a',
+                    tension: 0.35,
+                    cubicInterpolationMode: 'monotone',
+                    fill: false,
+                    pointRadius: 2,
+                    pointHoverRadius: 4,
+                    pointBackgroundColor: color,
+                    pointBorderColor: '#0f172a',
+                    pointBorderWidth: 1.5,
+                    borderWidth: 2
+                };
+            });
+
             if (this.trendChart) {
                 this.trendChart.destroy();
                 this.trendChart = null;
             }
-            const ctx = canvas.getContext('2d');
-            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            if (typeof Chart !== 'undefined') {
+                const ctx = canvas.getContext('2d');
+                this.trendChart = new Chart(ctx, {
+                    type: 'line',
+                    data: {
+                        labels: labels,
+                        datasets: zeroDatasets
+                    },
+                    options: this.getTrendChartOptions()
+                });
+            }
             return;
         } else {
             if (emptyState) emptyState.classList.add('hidden');
         }
 
-        // Section 25 & 39: Chart.js with smooth monotone cubic interpolation
+        // Section 25 & 39: Chart.js with smooth monotone cubic interpolation for populated data
         if (typeof Chart !== 'undefined') {
             if (this.trendChart) {
                 this.trendChart.destroy();
                 this.trendChart = null;
             }
-
             const ctx = canvas.getContext('2d');
             const labels = trendData.map(d => d.period);
-
             const datasets = series.map(s => {
                 const color = COLORS[s] || '#94a3b8';
                 return {
@@ -223,60 +356,7 @@ const Dashboard = {
                     labels: labels,
                     datasets: datasets
                 },
-                options: {
-                    responsive: true,
-                    maintainAspectRatio: false,
-                    interaction: {
-                        mode: 'index',
-                        intersect: false
-                    },
-                    plugins: {
-                        legend: {
-                            display: false
-                        },
-                        tooltip: {
-                            backgroundColor: '#0f172a',
-                            titleColor: '#f8fafc',
-                            bodyColor: '#cbd5e1',
-                            borderColor: 'rgba(255, 255, 255, 0.12)',
-                            borderWidth: 1,
-                            padding: 10,
-                            boxPadding: 4,
-                            usePointStyle: true,
-                            callbacks: {
-                                footer: (items) => {
-                                    let sum = 0;
-                                    items.forEach(it => { sum += (it.parsed.y || 0); });
-                                    return `Total Period Reports: ${sum}`;
-                                }
-                            }
-                        }
-                    },
-                    scales: {
-                        x: {
-                            grid: {
-                                color: 'rgba(255, 255, 255, 0.05)',
-                                drawBorder: false
-                            },
-                            ticks: {
-                                color: '#94a3b8',
-                                font: { size: 10, family: 'Inter, Montserrat, sans-serif' }
-                            }
-                        },
-                        y: {
-                            beginAtZero: true,
-                            grid: {
-                                color: 'rgba(255, 255, 255, 0.08)',
-                                drawBorder: false
-                            },
-                            ticks: {
-                                color: '#94a3b8',
-                                font: { size: 10, family: 'Inter, Montserrat, sans-serif' },
-                                precision: 0
-                            }
-                        }
-                    }
-                }
+                options: this.getTrendChartOptions()
             });
         }
     },
@@ -329,14 +409,18 @@ const Dashboard = {
         const subTitle = document.getElementById('calSubtitle');
         if (!gridContainer || !calData) return;
 
+        const total = calData.total_critical_reports ?? 0;
         if (subTitle) {
-            const count = calData.total_critical_reports ?? 0;
-            subTitle.textContent = `${count} Critical Incident${count === 1 ? '' : 's'} (${calData.time_range})`;
+            if (total === 0) {
+                subTitle.textContent = `No critical reports recorded for this selection.`;
+            } else {
+                subTitle.textContent = `${total} Critical Incident${total === 1 ? '' : 's'} (${calData.time_range || 'Selected timeframe'})`;
+            }
         }
 
-        const days = calData.days || [];
+        const days = Array.isArray(calData.days) ? calData.days : [];
         if (days.length === 0) {
-            gridContainer.innerHTML = '<div style="padding:1rem; color:#94a3b8; font-size:0.8rem;">No critical incidents recorded in this timeframe.</div>';
+            gridContainer.innerHTML = '<div style="padding:1.5rem; text-align:center; color:#94a3b8; font-size:0.85rem; border:1px dashed var(--border-color); border-radius:6px;">No critical reports recorded for this selection.</div>';
             return;
         }
 
@@ -513,7 +597,7 @@ const Dashboard = {
             container.innerHTML = `
                 <div style="padding: 1.25rem; color: #64748b; font-size: 0.85rem; background: rgba(15, 23, 42, 0.04); border-radius: 6px; border: 1px dashed var(--border-color); display: flex; align-items: center; gap: 10px;">
                     <i class='bx bx-info-circle' style="font-size: 1.35rem; color: #0284c7; flex-shrink: 0;"></i>
-                    <span>Not enough historical data yet to calculate empirical recurrence or corridor velocity.</span>
+                    <span>${insights?.message || 'Not enough historical data for this selection.'}</span>
                 </div>
             `;
             return;
@@ -675,7 +759,12 @@ const Dashboard = {
             }
 
             if (reports.length === 0) {
-                queueContainer.innerHTML = `<div class="canvas-placeholder"><p>No infrastructure defect reports matching selected filter.</p></div>`;
+                queueContainer.innerHTML = `
+                    <div class="queue-empty-state" style="padding: 2.5rem 1.5rem; text-align: center; color: #64748b; background: rgba(15, 23, 42, 0.03); border: 1px dashed var(--border-color); border-radius: 8px;">
+                        <i class='bx bx-folder-open' style="font-size: 2rem; color: #94a3b8; margin-bottom: 0.5rem; display: block;"></i>
+                        <p style="font-weight: 500; margin: 0; font-size: 0.88rem;">No reports match the selected filters.</p>
+                    </div>
+                `;
                 return;
             }
 
