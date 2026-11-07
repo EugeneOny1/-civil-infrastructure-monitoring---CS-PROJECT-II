@@ -993,6 +993,43 @@ const DefectMap = {
                 marker.openPopup();
             }
         }, 300);
+    },
+
+    // Focus on monitored corridor from Intelligence Insights action link
+    focusCorridor(corridorName) {
+        if (!this.map || !corridorName) return;
+        this.invalidateSize();
+
+        if (window.Navigation && typeof window.Navigation.navigateTo === 'function') {
+            window.Navigation.navigateTo('map');
+        }
+
+        const normTarget = String(corridorName).trim().toLowerCase();
+        const matchedCoords = [];
+        const reports = this.reportsData || [];
+        for (const rep of reports) {
+            const loc = (rep.location_name || rep.road_name || rep.location || '').toLowerCase();
+            const ward = (rep.sub_county || rep.area_ward || '').toLowerCase();
+            if (loc.includes(normTarget) || normTarget.includes(loc) || (ward && (ward.includes(normTarget) || normTarget.includes(ward)))) {
+                const lat = Number(rep.latitude || (rep.location && rep.location.coordinates && rep.location.coordinates[1]));
+                const lng = Number(rep.longitude || (rep.location && rep.location.coordinates && rep.location.coordinates[0]));
+                if (!isNaN(lat) && !isNaN(lng) && lat !== 0 && lng !== 0) {
+                    matchedCoords.push([lat, lng]);
+                }
+            }
+        }
+
+        setTimeout(() => {
+            this.invalidateSize();
+            if (matchedCoords.length > 0 && typeof L !== 'undefined') {
+                if (matchedCoords.length === 1) {
+                    this.map.setView(matchedCoords[0], Math.max(this.map.getZoom(), 15), { animate: true });
+                } else {
+                    const bounds = L.latLngBounds(matchedCoords);
+                    this.map.fitBounds(bounds, { padding: [50, 50], maxZoom: 16, animate: true });
+                }
+            }
+        }, 250);
     }
 };
 

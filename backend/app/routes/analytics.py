@@ -429,8 +429,9 @@ def get_historical_defect_trends(current_user):
     top_asset = max(asset_type_counts.items(), key=lambda x: x[1])[0] if asset_type_counts else "Road / Pavement"
     top_repeat_corridor = max(corridor_total_counts.items(), key=lambda x: x[1]) if corridor_total_counts else None
 
-    # Weather Association Analysis (Sections 36-38)
+    # Weather Association Analysis & Pattern Intelligence (Sections 14-26, 36-38)
     weather_insight = weather_service.analyze_weather_associations(scoped_reports)
+    pattern_intelligence = weather_service.analyze_pattern_intelligence(scoped_reports, county_filter, ward_filter)
 
     has_scoped_data = len(scoped_reports) >= 3
     monitoring_insights = {
@@ -442,7 +443,8 @@ def get_historical_defect_trends(current_user):
         'top_corridor_repeat': f"{top_repeat_corridor[0]} ({top_repeat_corridor[1]} reports)" if (has_scoped_data and top_repeat_corridor) else "Not enough historical data for this selection",
         'avg_received_to_verified': avg_rec_to_ver_str if has_scoped_data else "Not enough historical data for this selection",
         'avg_verified_to_resolved': avg_ver_to_res_str if has_scoped_data else "Not enough historical data for this selection",
-        'weather_insight': weather_insight
+        'weather_insight': weather_insight,
+        'pattern_intelligence': pattern_intelligence
     }
 
     has_data = total_in_period > 0
@@ -560,6 +562,23 @@ def get_critical_calendar(current_user):
                 daily_corridors[day_key][loc_name] += 1
             total_critical += 1
 
+    ref_coords = None
+    if county_filter and county_filter.lower() != 'all':
+        for rep in all_reports:
+            meta = rep.get('metadata') or {}
+            c_low = county_filter.lower()
+            loc_n = str(meta.get('location_name') or rep.get('location_name') or '').lower()
+            rep_c = str(meta.get('county') or rep.get('county') or '').lower()
+            if c_low in loc_n or c_low in rep_c:
+                lat = rep.get('latitude') or meta.get('latitude')
+                lng = rep.get('longitude') or meta.get('longitude')
+                if lat and lng:
+                    try:
+                        ref_coords = (float(lat), float(lng))
+                        break
+                    except (ValueError, TypeError):
+                        pass
+
     # Build continuous day records for calendar grid
     days = []
     cur = start_date
@@ -583,6 +602,15 @@ def get_critical_calendar(current_user):
         corridor_counts = daily_corridors.get(d_key, {})
         top_corridor = max(corridor_counts.items(), key=lambda x: x[1])[0] if corridor_counts else ''
 
+        rainfall_7d = None
+        if cnt > 0 and ref_coords:
+            try:
+                win = weather_service.get_report_rainfall_windows(ref_coords[0], ref_coords[1], cur)
+                if win:
+                    rainfall_7d = win.get('precip_7d')
+            except Exception:
+                rainfall_7d = None
+
         days.append({
             'date': d_key,
             'day_of_week': cur.weekday(),
@@ -590,9 +618,71 @@ def get_critical_calendar(current_user):
             'intensity': intensity,
             'reports': daily_report_ids.get(d_key, []),
             'defect_breakdown': defect_breakdown,
-            'top_corridor': top_corridor
+            'top_corridor': top_corridor,
+            'rainfall_7d': rainfall_7d
         })
         cur += timedelta(days=1)
+
+    # Build month-centric carousel groupings (Sections 6-12)
+    months_map = {}
+    for d in days:
+        m_key = d['date'][:7]
+        if m_key not in months_map:
+            y, m_num = int(m_key[:4]), int(m_key[5:7])
+            months_map[m_key] = {
+                'key': m_key,
+                'label': f"{calendar.month_name[m_num]} {y}",
+                'year': y,
+                'month': m_num,
+                'days': [],
+                'total_critical': 0,
+                'defect_counts': defaultdict(int),
+                'corridor_counts': defaultdict(int),
+                'resolved_during_month': 0
+            }
+        m_obj = months_map[m_key]
+        m_obj['days'].append(d)
+        m_obj['total_critical'] += d['count']
+        for c_name, c_cnt in d.get('defect_breakdown', {}).items():
+            m_obj['defect_counts'][c_name] += c_cnt
+        if d.get('top_corridor'):
+            m_obj['corridor_counts'][d['top_corridor']] += d['count']
+
+    # Attribute resolved reports during each month for this geographic scope
+    for rep in all_reports:
+        r_status = rep.get('status')
+        if r_status == 'Resolved':
+            meta = rep.get('metadata') or {}
+            loc_n = str(meta.get('location_name') or rep.get('location_name') or rep.get('description') or '')
+            rep_c = str(meta.get('county') or rep.get('county') or '')
+            if county_filter and county_filter.lower() != 'all':
+                c_low = county_filter.lower()
+                if c_low not in loc_n.lower() and c_low not in rep_c.lower():
+                    continue
+            if ward_filter and ward_filter.lower() != 'all' and ward_filter.lower() != 'all areas' and ward_filter.lower() not in loc_n.lower():
+                continue
+            r_dt_str = rep.get('resolved_at') or rep.get('last_updated_at') or rep.get('date_submitted')
+            if r_dt_str and len(r_dt_str) >= 7:
+                r_m_key = r_dt_str[:7]
+                if r_m_key in months_map:
+                    months_map[r_m_key]['resolved_during_month'] += 1
+
+    months_list = []
+    for m_key in sorted(months_map.keys()):
+        m_data = months_map[m_key]
+        top_def = max(m_data['defect_counts'].items(), key=lambda x: x[1])[0] if m_data['defect_counts'] else 'None'
+        top_corr = max(m_data['corridor_counts'].items(), key=lambda x: x[1])[0] if m_data['corridor_counts'] else 'None'
+        months_list.append({
+            'key': m_key,
+            'label': m_data['label'],
+            'year': m_data['year'],
+            'month': m_data['month'],
+            'days': m_data['days'],
+            'total_critical': m_data['total_critical'],
+            'most_reported_defect': top_def,
+            'most_active_corridor': top_corr,
+            'resolved_during_month': m_data['resolved_during_month']
+        })
 
     resp = make_response(jsonify({
         'time_range': time_range,
@@ -600,6 +690,7 @@ def get_critical_calendar(current_user):
         'start_date': start_date.strftime('%Y-%m-%d'),
         'end_date': end_date.strftime('%Y-%m-%d'),
         'days': days,
+        'months': months_list,
         'max_daily_count': max_count,
         'note': 'Critical Reports Calendar = Critical reports received over time (temporal concentration)'
     }), 200)

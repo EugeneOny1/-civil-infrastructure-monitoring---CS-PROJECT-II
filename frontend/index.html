@@ -872,13 +872,16 @@
                     <span class="kpi-footer">Awaiting engineer validation</span>
                 </div>
 
-                <div class="kpi-card" id="kpiCardVerified" style="cursor: pointer;" title="Click to filter prioritized queue by verified inspections">
-                    <span class="kpi-label">VERIFIED INSPECTIONS</span>
+                <div class="kpi-card" id="kpiCardVerified" style="cursor: pointer;" title="Click to filter prioritized queue by verified inspections (toggle)">
+                    <div style="display: flex; justify-content: space-between; align-items: center;">
+                        <span class="kpi-label">VERIFIED INSPECTIONS</span>
+                        <span id="kpiVerifiedActiveBadge" class="kpi-active-pill hidden"><i class='bx bx-check'></i> Active Filter</span>
+                    </div>
                     <div class="kpi-value-row">
                         <span class="kpi-number" id="kpiVerifiedCount">0</span>
                         <span class="kpi-unit">Records</span>
                     </div>
-                    <span class="kpi-footer">Validated by professional engineers (click to filter)</span>
+                    <span class="kpi-footer">Validated by professional engineers (click to toggle filter)</span>
                 </div>
 
                 <div class="kpi-card">
@@ -1010,7 +1013,12 @@
                                 <span class="step-tag">CRITICAL REPORTS CALENDAR</span>
                                 <span class="mode-tag" id="calSubtitle">Temporal Incident Concentration</span>
                             </div>
-                            <div class="filter-controls" style="display: flex; gap: 0.4rem; align-items: center;">
+                            <div class="filter-controls" style="display: flex; gap: 0.5rem; align-items: center;">
+                                <div class="cal-nav-controls" style="display: flex; align-items: center; gap: 0.35rem;">
+                                    <button type="button" class="btn-cal-carousel-nav" id="btnCalPrevMonth" title="Previous Month" aria-label="Previous Month"><i class='bx bx-chevron-left'></i></button>
+                                    <span id="calCurrentMonthLabel" class="cal-active-month-pill">Loading...</span>
+                                    <button type="button" class="btn-cal-carousel-nav" id="btnCalNextMonth" title="Next Month" aria-label="Next Month"><i class='bx bx-chevron-right'></i></button>
+                                </div>
                                 <select id="calRangeSelect" class="filter-select" style="font-size: 0.78rem; padding: 4px 8px;">
                                     <option value="3m">Last 3 Months</option>
                                     <option value="6m" selected>Last 6 Months</option>
@@ -1019,11 +1027,16 @@
                             </div>
                         </div>
 
-                        <!-- Native Calendar Day Grid Container -->
-                        <div class="critical-calendar-wrapper" style="overflow-x: auto; padding: 0.75rem 0 0.25rem 0;">
-                            <div id="criticalCalendarGrid" class="critical-calendar-grid">
-                                <!-- Populated dynamically via JS -->
+                        <!-- Month-Centric Carousel Stage -->
+                        <div class="critical-calendar-wrapper" style="overflow: hidden; padding: 0.75rem 0 0.25rem 0;">
+                            <div id="criticalCalendarCarouselStage" class="month-carousel-stage" tabindex="0" role="region" aria-label="Critical Reports Month Carousel">
+                                <!-- Populated dynamically with prev, active, next month cards -->
                             </div>
+                        </div>
+
+                        <!-- Active Month Summary Strip -->
+                        <div id="calActiveMonthSummary" class="cal-month-summary-strip">
+                            <!-- Populated dynamically via JS -->
                         </div>
 
                         <!-- Calendar Legend & Explicit Analytical Distinctions -->
@@ -1080,10 +1093,14 @@
                     <div class="glass-card" id="monitoringInsightsPanel" style="padding: 1.25rem;">
                         <div class="card-header-bar" style="margin-bottom: 0.75rem;">
                             <div>
-                                <span class="step-tag">MONITORING INSIGHTS</span>
-                                <span class="mode-tag">Historical & Context Intelligence</span>
+                                <span class="step-tag">MONITORING INTELLIGENCE</span>
+                                <span class="mode-tag">Infrastructure Pattern & Weather Correlation</span>
                             </div>
                         </div>
+                        <div id="monitoringInsightsContent" style="display: flex; flex-direction: column; gap: 0.75rem;">
+                            <!-- Populated dynamically via Dashboard.renderMonitoringInsights -->
+                        </div>
+                    </div>
                         <div id="monitoringInsightsContent" style="display: flex; flex-direction: column; gap: 0.75rem;">
                             <!-- Populated dynamically via Dashboard.renderMonitoringInsights -->
                         </div>

@@ -1,10 +1,15 @@
 /**
  * Dashboard Module - Engineer Monitoring Dashboard (Figure 4.7)
- * Apple-Inspired Clean Light Aesthetic with Interactive Chart.js & Critical Calendar
+ * Apple & PlayStation Inspired Clean Contrast Aesthetic with Interactive Chart.js & Critical Calendar
  */
 const Dashboard = {
     trendChart: null,
     selectedDateFilter: null,
+    calendarData: null,
+    calendarMonths: [],
+    activeMonthIndex: null,
+    isVerifiedFilterActive: false,
+    previousFilterSeverityValue: '',
 
     init() {
         this.bindEvents();
@@ -12,25 +17,39 @@ const Dashboard = {
 
     bindEvents() {
         const filterSelect = document.getElementById('filterSeveritySelect');
-        if (filterSelect) {
-            filterSelect.addEventListener('change', () => this.loadReportsList());
-        }
-
         const btnClearDate = document.getElementById('btnClearDateFilter');
         if (btnClearDate) {
             btnClearDate.addEventListener('click', () => {
                 this.selectedDateFilter = null;
                 const notice = document.getElementById('queueDateFilterNotice');
                 if (notice) notice.classList.add('hidden');
+                this.renderMonthCarousel();
                 this.loadReportsList();
             });
         }
 
+        // Section 36: Verified Inspections KPI Filter Toggle
         const kpiVerified = document.getElementById('kpiCardVerified');
         const kpiVerifiedCount = document.getElementById('kpiVerifiedCount');
-        const triggerVerifiedFilter = () => {
+        const activeBadge = document.getElementById('kpiVerifiedActiveBadge');
+
+        const toggleVerifiedFilter = () => {
             const select = document.getElementById('filterSeveritySelect');
-            if (select) {
+            if (!select) return;
+
+            if (this.isVerifiedFilterActive) {
+                // Second click: restore prior queue filter
+                this.isVerifiedFilterActive = false;
+                if (kpiVerified) kpiVerified.classList.remove('kpi-card-active');
+                if (activeBadge) activeBadge.classList.add('hidden');
+                select.value = this.previousFilterSeverityValue || '';
+                this.loadReportsList();
+            } else {
+                // First click: filter queue to Verified
+                this.previousFilterSeverityValue = select.value === 'Verified' ? '' : select.value;
+                this.isVerifiedFilterActive = true;
+                if (kpiVerified) kpiVerified.classList.add('kpi-card-active');
+                if (activeBadge) activeBadge.classList.remove('hidden');
                 select.value = 'Verified';
                 this.loadReportsList();
                 const queueCard = document.querySelector('.queue-card');
@@ -40,11 +59,27 @@ const Dashboard = {
             }
         };
 
-        if (kpiVerified) kpiVerified.addEventListener('click', triggerVerifiedFilter);
+        if (kpiVerified) kpiVerified.addEventListener('click', toggleVerifiedFilter);
         if (kpiVerifiedCount) kpiVerifiedCount.addEventListener('click', (e) => {
             e.stopPropagation();
-            triggerVerifiedFilter();
+            toggleVerifiedFilter();
         });
+
+        if (filterSelect) {
+            filterSelect.addEventListener('change', () => {
+                if (filterSelect.value === 'Verified') {
+                    this.isVerifiedFilterActive = true;
+                    if (kpiVerified) kpiVerified.classList.add('kpi-card-active');
+                    if (activeBadge) activeBadge.classList.remove('hidden');
+                } else {
+                    this.isVerifiedFilterActive = false;
+                    if (kpiVerified) kpiVerified.classList.remove('kpi-card-active');
+                    if (activeBadge) activeBadge.classList.add('hidden');
+                    this.previousFilterSeverityValue = filterSelect.value;
+                }
+                this.loadReportsList();
+            });
+        }
 
         const rangeSelect = document.getElementById('trendRangeSelect');
         const viewBySelect = document.getElementById('trendViewBySelect');
@@ -76,6 +111,44 @@ const Dashboard = {
         if (calRangeSelect) calRangeSelect.addEventListener('change', () => {
             this.loadCriticalCalendar();
         });
+
+        // Month-Centric Carousel Navigation Controls
+        const btnCalPrev = document.getElementById('btnCalPrevMonth');
+        const btnCalNext = document.getElementById('btnCalNextMonth');
+        if (btnCalPrev) btnCalPrev.addEventListener('click', () => this.switchCarouselMonth(this.activeMonthIndex - 1));
+        if (btnCalNext) btnCalNext.addEventListener('click', () => this.switchCarouselMonth(this.activeMonthIndex + 1));
+
+        const calStage = document.getElementById('criticalCalendarCarouselStage');
+        if (calStage) {
+            calStage.addEventListener('keydown', (e) => {
+                if (e.key === 'ArrowLeft') {
+                    e.preventDefault();
+                    this.switchCarouselMonth(this.activeMonthIndex - 1);
+                } else if (e.key === 'ArrowRight') {
+                    e.preventDefault();
+                    this.switchCarouselMonth(this.activeMonthIndex + 1);
+                }
+            });
+
+            // Touch swipe support
+            let touchStartX = 0;
+            calStage.addEventListener('touchstart', (e) => {
+                if (e.changedTouches && e.changedTouches[0]) {
+                    touchStartX = e.changedTouches[0].screenX;
+                }
+            }, { passive: true });
+
+            calStage.addEventListener('touchend', (e) => {
+                if (e.changedTouches && e.changedTouches[0]) {
+                    const diff = e.changedTouches[0].screenX - touchStartX;
+                    if (diff > 45) {
+                        this.switchCarouselMonth(this.activeMonthIndex - 1);
+                    } else if (diff < -45) {
+                        this.switchCarouselMonth(this.activeMonthIndex + 1);
+                    }
+                }
+            }, { passive: true });
+        }
     },
 
     async loadDashboardData() {
@@ -171,19 +244,19 @@ const Dashboard = {
                     display: false
                 },
                 tooltip: {
-                    backgroundColor: '#0f172a',
+                    backgroundColor: '#0a0f1d',
                     titleColor: '#f8fafc',
                     bodyColor: '#cbd5e1',
-                    borderColor: 'rgba(255, 255, 255, 0.12)',
+                    borderColor: 'rgba(0, 112, 209, 0.4)',
                     borderWidth: 1,
                     padding: 10,
-                    boxPadding: 4,
+                    boxPadding: 5,
                     usePointStyle: true,
                     callbacks: {
                         footer: (items) => {
                             let sum = 0;
                             items.forEach(it => { sum += (it.parsed.y || 0); });
-                            return `Total Period Reports: ${sum}`;
+                            return `Total Reports: ${sum}`;
                         }
                     }
                 }
@@ -291,11 +364,10 @@ const Dashboard = {
                     data: labels.map(() => 0),
                     borderColor: color,
                     backgroundColor: color + '1a',
-                    tension: 0.35,
-                    cubicInterpolationMode: 'monotone',
+                    tension: 0,
                     fill: false,
-                    pointRadius: 2,
-                    pointHoverRadius: 4,
+                    pointRadius: 4,
+                    pointHoverRadius: 7,
                     pointBackgroundColor: color,
                     pointBorderColor: '#0f172a',
                     pointBorderWidth: 1.5,
@@ -323,7 +395,7 @@ const Dashboard = {
             if (emptyState) emptyState.classList.add('hidden');
         }
 
-        // Section 25 & 39: Chart.js with smooth monotone cubic interpolation for populated data
+        // Section 3: Direct point-to-point line chart (tension: 0, no cubic interpolation)
         if (typeof Chart !== 'undefined') {
             if (this.trendChart) {
                 this.trendChart.destroy();
@@ -338,15 +410,14 @@ const Dashboard = {
                     data: trendData.map(d => d[s] || 0),
                     borderColor: color,
                     backgroundColor: color + '1a',
-                    tension: 0.35,
-                    cubicInterpolationMode: 'monotone',
+                    tension: 0,
                     fill: false,
-                    pointRadius: 3,
-                    pointHoverRadius: 6,
+                    pointRadius: 4,
+                    pointHoverRadius: 7,
                     pointBackgroundColor: color,
                     pointBorderColor: '#0f172a',
                     pointBorderWidth: 1.5,
-                    borderWidth: 2.5
+                    borderWidth: 2
                 };
             });
 
@@ -405,11 +476,11 @@ const Dashboard = {
     },
 
     renderCriticalCalendarGrid(calData) {
-        const gridContainer = document.getElementById('criticalCalendarGrid');
-        const subTitle = document.getElementById('calSubtitle');
-        if (!gridContainer || !calData) return;
+        this.calendarData = calData;
+        this.calendarMonths = Array.isArray(calData?.months) ? calData.months : [];
+        const total = calData?.total_critical_reports ?? 0;
 
-        const total = calData.total_critical_reports ?? 0;
+        const subTitle = document.getElementById('calSubtitle');
         if (subTitle) {
             if (total === 0) {
                 subTitle.textContent = `No critical reports recorded for this selection.`;
@@ -418,11 +489,49 @@ const Dashboard = {
             }
         }
 
-        const days = Array.isArray(calData.days) ? calData.days : [];
-        if (days.length === 0) {
-            gridContainer.innerHTML = '<div style="padding:1.5rem; text-align:center; color:#94a3b8; font-size:0.85rem; border:1px dashed var(--border-color); border-radius:6px;">No critical reports recorded for this selection.</div>';
+        // Default active month to the latest month if unset or out of range
+        if (this.activeMonthIndex === null || this.activeMonthIndex === undefined || this.activeMonthIndex >= this.calendarMonths.length) {
+            this.activeMonthIndex = Math.max(0, this.calendarMonths.length - 1);
+        }
+
+        this.renderMonthCarousel();
+    },
+
+    switchCarouselMonth(index) {
+        if (!this.calendarMonths || this.calendarMonths.length === 0) return;
+        if (index < 0 || index >= this.calendarMonths.length) return;
+        this.activeMonthIndex = index;
+        this.renderMonthCarousel();
+    },
+
+    renderMonthCarousel() {
+        const stage = document.getElementById('criticalCalendarCarouselStage');
+        const currentMonthLabel = document.getElementById('calCurrentMonthLabel');
+        const prevBtn = document.getElementById('btnCalPrevMonth');
+        const nextBtn = document.getElementById('btnCalNextMonth');
+        const summaryStrip = document.getElementById('calActiveMonthSummary');
+        if (!stage) return;
+
+        if (!this.calendarMonths || this.calendarMonths.length === 0) {
+            stage.innerHTML = '<div style="padding:2rem; text-align:center; color:#94a3b8; font-size:0.85rem; width:100%;">No critical reports recorded for this selection.</div>';
+            if (currentMonthLabel) currentMonthLabel.textContent = 'No Data';
+            if (prevBtn) prevBtn.disabled = true;
+            if (nextBtn) nextBtn.disabled = true;
+            if (summaryStrip) summaryStrip.innerHTML = '';
             return;
         }
+
+        // Clamp active month index
+        if (this.activeMonthIndex < 0) this.activeMonthIndex = 0;
+        if (this.activeMonthIndex >= this.calendarMonths.length) this.activeMonthIndex = this.calendarMonths.length - 1;
+
+        const activeMonth = this.calendarMonths[this.activeMonthIndex];
+        if (currentMonthLabel && activeMonth) {
+            currentMonthLabel.textContent = activeMonth.label;
+        }
+
+        if (prevBtn) prevBtn.disabled = (this.activeMonthIndex <= 0);
+        if (nextBtn) nextBtn.disabled = (this.activeMonthIndex >= this.calendarMonths.length - 1);
 
         const formatCalDate = (dateStr) => {
             if (!dateStr) return '';
@@ -436,129 +545,187 @@ const Dashboard = {
             return dateStr;
         };
 
-        // Group continuous daily records into columns of weeks (7 days per column)
-        const weekCols = [];
-        let currentWeek = [];
+        const renderMonthCardHtml = (month, roleClass) => {
+            if (!month) return '';
+            const days = Array.isArray(month.days) ? month.days : [];
+            const firstDay = days[0];
+            // In python weekday: 0=Mon, 6=Sun. Calendar header is S M T W T F S (Sun=0).
+            // Convert to Sunday-first (0=Sun, 1=Mon, ..., 6=Sat)
+            const padCount = firstDay ? ((firstDay.day_of_week + 1) % 7) : 0;
 
-        // Pre-pad first week if start day is not Sunday (or Monday)
-        const firstDayOfWeek = days[0].day_of_week; // 0=Mon, 6=Sun
-        for (let i = 0; i < firstDayOfWeek; i++) {
-            currentWeek.push(null);
+            const emptyPadHtml = Array.from({ length: padCount })
+                .map(() => '<div class="cal-day-cell-square is-empty"></div>')
+                .join('');
+
+            const daysHtml = days.map(d => {
+                const dayNum = parseInt(d.date.split('-')[2], 10);
+                const isSelected = this.selectedDateFilter === d.date;
+                return `
+                    <div class="cal-day-cell-square cal-intensity-${d.intensity} ${isSelected ? 'is-selected' : ''}"
+                         data-date="${d.date}"
+                         data-count="${d.count}"
+                         data-rainfall="${d.rainfall_7d !== null && d.rainfall_7d !== undefined ? d.rainfall_7d : ''}"
+                         data-breakdown='${JSON.stringify(d.defect_breakdown || {})}'
+                         data-corridor="${(d.top_corridor || '').replace(/"/g, '&quot;')}"
+                         tabindex="0"
+                         role="button"
+                         aria-label="${d.date}: ${d.count} critical reports">
+                        ${dayNum}
+                    </div>
+                `;
+            }).join('');
+
+            return `
+                <div class="cal-month-card ${roleClass}" data-month-key="${month.key}">
+                    <div class="cal-month-header">
+                        <span class="cal-month-title">${month.label}</span>
+                        <span class="cal-month-crit-badge">${month.total_critical} Critical</span>
+                    </div>
+                    <div class="cal-weekday-row">
+                        <span>S</span><span>M</span><span>T</span><span>W</span><span>T</span><span>F</span><span>S</span>
+                    </div>
+                    <div class="cal-month-grid">
+                        ${emptyPadHtml}
+                        ${daysHtml}
+                    </div>
+                </div>
+            `;
+        };
+
+        const cards = [];
+        if (this.activeMonthIndex > 0) {
+            cards.push(renderMonthCardHtml(this.calendarMonths[this.activeMonthIndex - 1], 'is-prev'));
+        }
+        cards.push(renderMonthCardHtml(activeMonth, 'is-active'));
+        if (this.activeMonthIndex < this.calendarMonths.length - 1) {
+            cards.push(renderMonthCardHtml(this.calendarMonths[this.activeMonthIndex + 1], 'is-next'));
         }
 
-        days.forEach(day => {
-            currentWeek.push(day);
-            if (currentWeek.length === 7) {
-                weekCols.push(currentWeek);
-                currentWeek = [];
-            }
-        });
+        stage.innerHTML = cards.join('');
 
-        if (currentWeek.length > 0) {
-            while (currentWeek.length < 7) {
-                currentWeek.push(null);
-            }
-            weekCols.push(currentWeek);
+        // Wire click on prev/next month cards
+        const prevCard = stage.querySelector('.cal-month-card.is-prev');
+        if (prevCard) {
+            prevCard.addEventListener('click', () => this.switchCarouselMonth(this.activeMonthIndex - 1));
+        }
+        const nextCard = stage.querySelector('.cal-month-card.is-next');
+        if (nextCard) {
+            nextCard.addEventListener('click', () => this.switchCarouselMonth(this.activeMonthIndex + 1));
         }
 
-        gridContainer.innerHTML = weekCols.map(col => `
-            <div class="cal-week-col">
-                ${col.map(d => {
-                    if (!d) {
-                        return '<div class="cal-day-cell" style="opacity:0; pointer-events:none;"></div>';
-                    }
-                    return `
-                        <div class="cal-day-cell cal-intensity-${d.intensity}"
-                             data-date="${d.date}"
-                             data-count="${d.count}"
-                             data-breakdown='${JSON.stringify(d.defect_breakdown || {})}'
-                             data-corridor="${(d.top_corridor || '').replace(/"/g, '&quot;')}"
-                             tabindex="0"
-                             role="button"
-                             aria-label="${d.date}: ${d.count} critical reports">
-                        </div>
-                    `;
-                }).join('')}
-            </div>
-        `).join('');
+        // Wire active month day cell interactions
+        const activeCard = stage.querySelector('.cal-month-card.is-active');
+        if (activeCard) {
+            const dayCells = activeCard.querySelectorAll('.cal-day-cell-square:not(.is-empty)');
+            dayCells.forEach(cell => {
+                const date = cell.getAttribute('data-date');
+                const cnt = parseInt(cell.getAttribute('data-count') || '0', 10);
+                const rainfall = cell.getAttribute('data-rainfall');
+                let breakdown = {};
+                try { breakdown = JSON.parse(cell.getAttribute('data-breakdown') || '{}'); } catch (e) {}
+                const corridor = cell.getAttribute('data-corridor') || '';
 
-        // Wire interactive hover tooltip (Section 40) & click filter (Section 41)
-        const cells = gridContainer.querySelectorAll('.cal-day-cell:not([style*="opacity:0"])');
-        cells.forEach(cell => {
-            const date = cell.getAttribute('data-date');
-            const cnt = parseInt(cell.getAttribute('data-count') || '0', 10);
-            let breakdown = {};
-            try { breakdown = JSON.parse(cell.getAttribute('data-breakdown') || '{}'); } catch (e) {}
-            const corridor = cell.getAttribute('data-corridor') || '';
+                const showTooltip = () => {
+                    const tip = this.getCalTooltip();
+                    const formattedDate = formatCalDate(date);
+                    let html = `<div style="font-weight:700; color:#f8fafc; margin-bottom:4px; font-size:0.8rem;">${formattedDate}</div>`;
 
-            const showTooltip = (e) => {
-                const tip = this.getCalTooltip();
-                const formattedDate = formatCalDate(date);
-                let html = `<div style="font-weight:700; color:#f8fafc; margin-bottom:4px; font-size:0.8rem;">${formattedDate}</div>`;
-
-                if (cnt === 0) {
-                    html += `<div style="color:#94a3b8; font-size:0.75rem;">0 Critical Reports</div>`;
-                } else {
-                    html += `<div style="font-weight:700; color:#ef4444; margin-bottom:6px; font-size:0.78rem;">${cnt} Critical Report${cnt === 1 ? '' : 's'}</div>`;
-
-                    const breakdownEntries = Object.entries(breakdown);
-                    if (breakdownEntries.length > 0) {
-                        const lines = breakdownEntries.map(([cls, c]) => `<span>${c} ${cls}${c > 1 ? 's' : ''}</span>`);
-                        html += `<div style="color:#cbd5e1; margin-bottom:6px; font-size:0.74rem; display:flex; flex-direction:column; gap:2px;">${lines.join('')}</div>`;
+                    if (cnt === 0) {
+                        html += `<div style="color:#94a3b8; font-size:0.75rem;">0 Critical Reports</div>`;
+                    } else {
+                        html += `<div style="font-weight:700; color:#ef4444; margin-bottom:6px; font-size:0.78rem;">${cnt} Critical Report${cnt === 1 ? '' : 's'}</div>`;
+                        const breakdownEntries = Object.entries(breakdown);
+                        if (breakdownEntries.length > 0) {
+                            const lines = breakdownEntries.map(([cls, c]) => `<span>${c} ${cls}${c > 1 ? 's' : ''}</span>`);
+                            html += `<div style="color:#cbd5e1; margin-bottom:6px; font-size:0.74rem; display:flex; flex-direction:column; gap:2px;">${lines.join('')}</div>`;
+                        }
+                        if (corridor) {
+                            html += `<div style="color:#94a3b8; font-size:0.72rem; margin-top:4px; border-top:1px solid #334155; padding-top:4px;">Most active corridor:<br><strong style="color:#38bdf8;">${corridor}</strong></div>`;
+                        }
                     }
 
-                    if (corridor) {
-                        html += `<div style="color:#94a3b8; font-size:0.72rem; margin-top:4px; border-top:1px solid #334155; padding-top:4px;">Most active corridor:<br><strong style="color:#38bdf8;">${corridor}</strong></div>`;
+                    if (rainfall !== null && rainfall !== '' && rainfall !== undefined) {
+                        html += `<div style="color:#38bdf8; font-size:0.72rem; margin-top:4px; border-top:1px solid #334155; padding-top:4px;"><i class='bx bx-cloud-rain'></i> Preceding 7-Day Rainfall: <strong>${rainfall} mm</strong></div>`;
                     }
-                }
 
-                tip.innerHTML = html;
-                tip.style.display = 'block';
-                tip.style.opacity = '1';
+                    tip.innerHTML = html;
+                    tip.style.display = 'block';
+                    tip.style.opacity = '1';
 
-                const rect = cell.getBoundingClientRect();
-                const tipWidth = 220;
-                let left = rect.left + (rect.width / 2) - (tipWidth / 2);
-                if (left < 10) left = 10;
-                if (left + tipWidth > window.innerWidth - 10) left = window.innerWidth - tipWidth - 10;
-                tip.style.left = `${left}px`;
-                tip.style.top = `${Math.max(10, rect.top - 100)}px`;
-            };
+                    const rect = cell.getBoundingClientRect();
+                    const tipWidth = 220;
+                    let left = rect.left + (rect.width / 2) - (tipWidth / 2);
+                    if (left < 10) left = 10;
+                    if (left + tipWidth > window.innerWidth - 10) left = window.innerWidth - tipWidth - 10;
+                    tip.style.left = `${left}px`;
+                    tip.style.top = `${Math.max(10, rect.top - 110)}px`;
+                };
 
-            const hideTooltip = () => {
-                const tip = document.getElementById('calCustomTooltip');
-                if (tip) {
-                    tip.style.display = 'none';
-                    tip.style.opacity = '0';
-                }
-            };
-
-            cell.addEventListener('mouseenter', showTooltip);
-            cell.addEventListener('focus', showTooltip);
-            cell.addEventListener('mouseleave', hideTooltip);
-            cell.addEventListener('blur', hideTooltip);
-
-            // Click behavior: filter prioritized queue to reports on this date (Section 41)
-            cell.addEventListener('click', () => {
-                if (cnt > 0) {
-                    this.selectedDateFilter = date;
-                    const dateNotice = document.getElementById('queueDateFilterNotice');
-                    const dateVal = document.getElementById('queueDateFilterVal');
-                    if (dateNotice && dateVal) {
-                        dateNotice.classList.remove('hidden');
-                        dateVal.textContent = `${formatCalDate(date)} (${cnt} Critical Report${cnt === 1 ? '' : 's'})`;
+                const hideTooltip = () => {
+                    const tip = document.getElementById('calCustomTooltip');
+                    if (tip) {
+                        tip.style.display = 'none';
+                        tip.style.opacity = '0';
                     }
-                    this.loadReportsList();
-                    if (window.App && typeof window.App.showToast === 'function') {
-                        window.App.showToast(`Filtered queue to reports on ${formatCalDate(date)}`, 'info');
+                };
+
+                cell.addEventListener('mouseenter', showTooltip);
+                cell.addEventListener('focus', showTooltip);
+                cell.addEventListener('mouseleave', hideTooltip);
+                cell.addEventListener('blur', hideTooltip);
+
+                cell.addEventListener('click', () => {
+                    if (cnt > 0) {
+                        if (this.selectedDateFilter === date) {
+                            // Toggle off date filter
+                            this.selectedDateFilter = null;
+                            const notice = document.getElementById('queueDateFilterNotice');
+                            if (notice) notice.classList.add('hidden');
+                        } else {
+                            this.selectedDateFilter = date;
+                            const dateNotice = document.getElementById('queueDateFilterNotice');
+                            const dateVal = document.getElementById('queueDateFilterVal');
+                            if (dateNotice && dateVal) {
+                                dateNotice.classList.remove('hidden');
+                                dateVal.textContent = `${formatCalDate(date)} (${cnt} Critical Report${cnt === 1 ? '' : 's'})`;
+                            }
+                        }
+                        this.renderMonthCarousel();
+                        this.loadReportsList();
+                        const queueCard = document.querySelector('.queue-card');
+                        if (queueCard && typeof queueCard.scrollIntoView === 'function') {
+                            queueCard.scrollIntoView({ behavior: 'smooth' });
+                        }
+                    } else {
+                        if (window.App && typeof window.App.showToast === 'function') {
+                            window.App.showToast(`No critical reports recorded on ${formatCalDate(date)}`, 'info');
+                        }
                     }
-                } else {
-                    if (window.App && typeof window.App.showToast === 'function') {
-                        window.App.showToast(`No critical reports recorded on ${formatCalDate(date)}`, 'info');
-                    }
-                }
+                });
             });
-        });
+        }
+
+        // Active Month Summary Strip
+        if (summaryStrip && activeMonth) {
+            summaryStrip.innerHTML = `
+                <div class="summary-pill">
+                    <span class="summary-pill-label">Critical Reports</span>
+                    <span class="summary-pill-value" style="color: #f87171;">${activeMonth.total_critical}</span>
+                </div>
+                <div class="summary-pill">
+                    <span class="summary-pill-label">Most Reported Defect</span>
+                    <span class="summary-pill-value" style="color: #38bdf8;">${activeMonth.most_reported_defect || 'None'}</span>
+                </div>
+                <div class="summary-pill">
+                    <span class="summary-pill-label">Most Active Corridor</span>
+                    <span class="summary-pill-value" style="color: #fbbf24;">${activeMonth.most_active_corridor || 'None'}</span>
+                </div>
+                <div class="summary-pill">
+                    <span class="summary-pill-label">Resolved During Month</span>
+                    <span class="summary-pill-value" style="color: #34d399;">${activeMonth.resolved_during_month || 0}</span>
+                </div>
+            `;
+        }
     },
 
     renderRecurrenceInsights(insights) {
@@ -593,108 +760,99 @@ const Dashboard = {
         const container = document.getElementById('monitoringInsightsContent');
         if (!container) return;
 
-        if (!insights || !insights.has_sufficient_data) {
+        const patternCards = Array.isArray(insights?.pattern_intelligence) ? insights.pattern_intelligence : [];
+
+        if (!insights || (!insights.has_sufficient_data && patternCards.length === 0)) {
             container.innerHTML = `
-                <div style="padding: 1.25rem; color: #64748b; font-size: 0.85rem; background: rgba(15, 23, 42, 0.04); border-radius: 6px; border: 1px dashed var(--border-color); display: flex; align-items: center; gap: 10px;">
-                    <i class='bx bx-info-circle' style="font-size: 1.35rem; color: #0284c7; flex-shrink: 0;"></i>
-                    <span>${insights?.message || 'Not enough historical data for this selection.'}</span>
+                <div class="playstation-intel-card" style="border-left-color: #64748b;">
+                    <div class="intel-top-bar">
+                        <span class="intel-category-tag" style="background: rgba(100, 116, 139, 0.2); color: #94a3b8; border-color: rgba(100, 116, 139, 0.3);">
+                            DATA ACCUMULATION
+                        </span>
+                        <span class="intel-stat-badge">Sparsity Notice</span>
+                    </div>
+                    <div class="intel-title-row">
+                        <i class='bx bx-radar' style="color: #64748b;"></i>
+                        <span>Weather Context & Pattern Intelligence</span>
+                    </div>
+                    <div class="intel-statement">
+                        ${insights?.message || 'Weather Context Available • Empirical multi-factor correlation requires additional historical reports in this geographic area. Continue logging verified defects to unlock predictive pattern intelligence.'}
+                    </div>
+                    <div class="intel-evidence-strip">
+                        <span class="intel-evidence">Evidence: Observation history awaiting statistical volume</span>
+                    </div>
                 </div>
             `;
             return;
         }
 
-        const cards = [];
-
-        // 1. Critical Defect Activity (Last 30 Days)
-        const isUp = insights.critical_change && insights.critical_change.includes('+');
-        cards.push(`
-            <div class="recurrence-insight-card">
-                <div class="insight-header">
-                    <i class='bx bx-alarm-exclamation' style="color: #ef4444; font-size: 1rem;"></i>
-                    <span>30-Day Critical Defect Volume</span>
+        const cardsHtml = patternCards.map(c => `
+            <div class="playstation-intel-card" id="intel-${c.card_id || 'card'}">
+                <div class="intel-top-bar">
+                    <span class="intel-category-tag">${c.category_tag || 'PATTERN INTELLIGENCE'}</span>
+                    ${c.key_stat ? `<span class="intel-stat-badge">${c.key_stat}</span>` : ''}
                 </div>
-                <div class="insight-value">
-                    ${insights.critical_last_30d ?? 0} Reports
-                    <span style="font-size: 0.76rem; font-weight: 600; color: ${isUp ? '#ef4444' : '#10b981'}; margin-left: 4px;">
-                        (${insights.critical_change || 'No prior period comparison'})
-                    </span>
+                <div class="intel-title-row">
+                    <i class='bx ${c.icon || 'bx-bulb'}'></i>
+                    <span>${c.title}</span>
                 </div>
-                <div class="insight-basis">Empirical rolling 30-day window comparison</div>
-            </div>
-        `);
-
-        // 2. Highest Repeat Corridor
-        cards.push(`
-            <div class="recurrence-insight-card">
-                <div class="insight-header">
-                    <i class='bx bx-map-pin' style="color: #f59e0b; font-size: 1rem;"></i>
-                    <span>Corridor Defect Recurrence</span>
-                </div>
-                <div class="insight-value">${insights.top_corridor_repeat || 'Not enough historical data yet'}</div>
-                <div class="insight-basis">Corridor with highest repeat-incident density</div>
-            </div>
-        `);
-
-        // 3. Top Affected Infrastructure Asset
-        cards.push(`
-            <div class="recurrence-insight-card">
-                <div class="insight-header">
-                    <i class='bx bx-building' style="color: #0284c7; font-size: 1rem;"></i>
-                    <span>Primary Asset Classification</span>
-                </div>
-                <div class="insight-value">${insights.top_asset_type || 'Road / Pavement'}</div>
-                <div class="insight-basis">Most frequently affected civil infrastructure asset</div>
-            </div>
-        `);
-
-        // 4. Operational Lifecycle Velocity
-        cards.push(`
-            <div class="recurrence-insight-card">
-                <div class="insight-header">
-                    <i class='bx bx-time-five' style="color: #10b981; font-size: 1rem;"></i>
-                    <span>Average Lifecycle Velocity</span>
-                </div>
-                <div class="insight-value" style="display: flex; gap: 1rem; font-size: 0.82rem; flex-wrap: wrap;">
-                    <span>Received → Verified: <strong>${insights.avg_received_to_verified || 'Pending data'}</strong></span>
-                    <span>Verified → Resolved: <strong>${insights.avg_verified_to_resolved || 'Pending data'}</strong></span>
-                </div>
-                <div class="insight-basis">Recorded duration across professional review transitions</div>
-            </div>
-        `);
-
-        // 5. Historical Weather Context (Sections 36, 37, 38)
-        if (insights.weather_insight) {
-            const w = insights.weather_insight;
-            if (w.observation) {
-                cards.push(`
-                    <div class="recurrence-insight-card" style="border-left: 3px solid #0284c7;">
-                        <div class="insight-header">
-                            <i class='bx bx-cloud-rain' style="color: #0284c7; font-size: 1rem;"></i>
-                            <span>${w.headline || 'Observed Weather Association'}</span>
-                        </div>
-                        <div class="insight-value" style="font-size: 0.82rem; font-weight: 500; color: #1e293b; line-height: 1.45;">
-                            ${w.observation}
-                        </div>
-                        <div class="insight-basis">${w.qualification || 'Observed historical precipitation association. Does not constitute mechanical causation.'}</div>
+                <div class="intel-statement">${c.statement}</div>
+                ${c.recommendation ? `<div class="intel-recommendation">${c.recommendation}</div>` : ''}
+                <div class="intel-evidence-strip">
+                    <span class="intel-evidence">Evidence: ${c.evidence || 'Recorded empirical reports'}</span>
+                    <div class="intel-actions">
+                        ${(c.actions || []).map(act => `
+                            <button type="button" class="btn-intel-action"
+                                    data-action-id="${act.id}"
+                                    data-corridor="${(act.corridor || '').replace(/"/g, '&quot;')}"
+                                    data-severity="${act.severity || ''}"
+                                    data-defect="${act.defect || ''}">
+                                <i class='bx ${act.icon || 'bx-chevron-right'}'></i> ${act.label}
+                            </button>
+                        `).join('')}
                     </div>
-                `);
-            } else if (w.headline) {
-                cards.push(`
-                    <div class="recurrence-insight-card">
-                        <div class="insight-header">
-                            <i class='bx bx-cloud' style="color: #64748b; font-size: 1rem;"></i>
-                            <span>${w.headline}</span>
-                        </div>
-                        <div class="insight-value" style="font-size: 0.8rem; color: #64748b;">
-                            ${w.message || 'Not enough historical weather data yet.'}
-                        </div>
-                        <div class="insight-basis">${w.qualification || 'Historical precipitation data from Open-Meteo archive.'}</div>
-                    </div>
-                `);
-            }
-        }
+                </div>
+            </div>
+        `).join('');
 
-        container.innerHTML = cards.join('');
+        container.innerHTML = cardsHtml;
+
+        // Wire action buttons
+        container.querySelectorAll('.btn-intel-action').forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                const actionId = btn.getAttribute('data-action-id');
+                const corridor = btn.getAttribute('data-corridor');
+                const severity = btn.getAttribute('data-severity');
+                const defect = btn.getAttribute('data-defect');
+
+                if (actionId === 'show_corridor' && corridor) {
+                    if (window.DefectMap && typeof window.DefectMap.focusCorridor === 'function') {
+                        window.DefectMap.focusCorridor(corridor);
+                    } else if (window.Navigation) {
+                        window.Navigation.navigateTo('map');
+                    }
+                } else if (actionId === 'show_map') {
+                    if (window.Navigation) {
+                        window.Navigation.navigateTo('map');
+                    }
+                } else if (actionId === 'review_queue') {
+                    const select = document.getElementById('filterSeveritySelect');
+                    if (select) {
+                        if (severity) {
+                            select.value = severity;
+                        } else if (defect) {
+                            select.value = '';
+                        }
+                        this.loadReportsList();
+                        const queueCard = document.querySelector('.queue-card');
+                        if (queueCard && typeof queueCard.scrollIntoView === 'function') {
+                            queueCard.scrollIntoView({ behavior: 'smooth' });
+                        }
+                    }
+                }
+            });
+        });
     },
 
     drawDegradationChart(trendData, threshold = 68) {
