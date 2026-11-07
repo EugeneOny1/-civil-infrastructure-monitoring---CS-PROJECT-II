@@ -65,6 +65,41 @@ const Submission = {
             gpsBtn.addEventListener('click', () => this.openLocationPicker(null));
         }
 
+        // Conditional Building Fields Toggle (Sections 8 & 10)
+        const infraTypeSelect = document.getElementById('infraType');
+        const buildingFloorsGroup = document.getElementById('buildingFloorsGroup');
+        const floorsInput = document.getElementById('buildingFloorsInput');
+        const floorsNotSureCheckbox = document.getElementById('buildingFloorsNotSure');
+
+        if (infraTypeSelect && buildingFloorsGroup) {
+            infraTypeSelect.addEventListener('change', () => {
+                const isBuilding = infraTypeSelect.value.toLowerCase().includes('building');
+                if (isBuilding) {
+                    buildingFloorsGroup.classList.remove('hidden');
+                    buildingFloorsGroup.style.display = 'block';
+                } else {
+                    buildingFloorsGroup.classList.add('hidden');
+                    buildingFloorsGroup.style.display = 'none';
+                    if (floorsInput) {
+                        floorsInput.value = '';
+                        floorsInput.disabled = false;
+                    }
+                    if (floorsNotSureCheckbox) floorsNotSureCheckbox.checked = false;
+                }
+            });
+        }
+
+        if (floorsNotSureCheckbox && floorsInput) {
+            floorsNotSureCheckbox.addEventListener('change', () => {
+                if (floorsNotSureCheckbox.checked) {
+                    floorsInput.value = '';
+                    floorsInput.disabled = true;
+                } else {
+                    floorsInput.disabled = false;
+                }
+            });
+        }
+
         // Carousel navigation buttons for multi-image citizen results
         const prevCitizenBtn = document.getElementById('btnCitizenPrev');
         const nextCitizenBtn = document.getElementById('btnCitizenNext');
@@ -724,6 +759,23 @@ const Submission = {
         formData.append('asset_type', infraType);
         formData.append('location', location);
         formData.append('description', notes);
+
+        // Building floors validation & persistence
+        if (infraType.toLowerCase().includes('building')) {
+            const floorsNotSure = document.getElementById('buildingFloorsNotSure')?.checked;
+            const floorsVal = document.getElementById('buildingFloorsInput')?.value.trim();
+            if (floorsNotSure) {
+                formData.append('building_floors_mode', 'not_sure');
+            } else if (floorsVal) {
+                const num = parseInt(floorsVal, 10);
+                if (isNaN(num) || num <= 0) {
+                    window.App.showToast("Number of floors must be a positive whole number greater than 0.", true);
+                    return;
+                }
+                formData.append('building_floors', String(num));
+                formData.append('building_floors_mode', 'known');
+            }
+        }
 
         if (this.selectedFiles.length > 1) {
             const relChoice = document.querySelector('input[name="multiImageRelationship"]:checked')?.value || 'same_defect';

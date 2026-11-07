@@ -85,7 +85,33 @@ const Review = {
             });
         }
 
-        // Direct Lifecycle Controls
+        // Contextual Stage & Lifecycle Controls (Canonical: Received -> Verified -> Under Review -> Resolved)
+        const btnStartInspection = document.getElementById('btnStartInspection');
+        if (btnStartInspection) {
+            btnStartInspection.addEventListener('click', async () => {
+                if (!this.currentReport) return;
+                const reportId = this.currentReport.report_id || this.currentReport._id;
+                try {
+                    btnStartInspection.disabled = true;
+                    btnStartInspection.innerHTML = "<i class='bx bx-loader-alt bx-spin'></i> Starting...";
+                    await window.Api.updateReportStatus(reportId, 'Under Review', 'Detailed inspection and engineering review initiated.');
+                    window.App?.showToast("Inspection initiated. Inspection Notebook is now active.");
+                    await this.loadReportForReview(reportId);
+                    openDrawer();
+                } catch (err) {
+                    window.App?.showToast(err.message || "Failed to start inspection.", true);
+                } finally {
+                    btnStartInspection.disabled = false;
+                    btnStartInspection.innerHTML = "<i class='bx bx-play-circle'></i> Start Inspection / Review";
+                }
+            });
+        }
+
+        const btnReviewOpenNotebook = document.getElementById('btnReviewOpenNotebook');
+        if (btnReviewOpenNotebook) {
+            btnReviewOpenNotebook.addEventListener('click', () => openDrawer());
+        }
+
         const btnUnderReview = document.getElementById('btnMoveUnderReview');
         const btnVerified = document.getElementById('btnMarkVerified');
         const btnResolved = document.getElementById('btnMarkResolved');
@@ -97,7 +123,7 @@ const Review = {
             btnVerified.addEventListener('click', () => this.handleLifecycleTransition('Verified', 'Engineering defect verification and severity confirmation completed.'));
         }
         if (btnResolved) {
-            btnResolved.addEventListener('click', () => this.handleLifecycleTransition('Resolved', 'Infrastructure defect remediation and road maintenance confirmed resolved.'));
+            btnResolved.addEventListener('click', () => this.handleResolutionWorkflow(openDrawer));
         }
 
         // Section 24: Direct "Show on Map" button in Defect Review
@@ -150,6 +176,15 @@ const Review = {
             }
         });
 
+        // Internal Drawer Tabs Switching
+        const drawerTabBtns = document.querySelectorAll('.notebook-tab-btn');
+        drawerTabBtns.forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                const target = e.currentTarget.getAttribute('data-target');
+                this.switchDrawerTab(target);
+            });
+        });
+
         const btnSaveNb = document.getElementById('btnSaveInspectionNotebook');
         if (btnSaveNb) {
             btnSaveNb.addEventListener('click', () => this.saveInspectionNotebook());
@@ -163,6 +198,127 @@ const Review = {
         const btnAddNote = document.getElementById('btnAddNoteCard');
         if (btnAddNote) {
             btnAddNote.addEventListener('click', () => this.addNoteCard());
+        }
+
+        // Mark Objective N/A Modal Events
+        const modalMarkNa = document.getElementById('markObjectiveNaModal');
+        const btnCloseMarkNa = document.getElementById('btnCloseMarkNa');
+        const btnCancelMarkNa = document.getElementById('btnCancelMarkNa');
+        const btnConfirmMarkNa = document.getElementById('btnConfirmMarkNa');
+        const closeMarkNa = () => { if (modalMarkNa) modalMarkNa.classList.remove('active'); };
+
+        if (btnCloseMarkNa) btnCloseMarkNa.addEventListener('click', closeMarkNa);
+        if (btnCancelMarkNa) btnCancelMarkNa.addEventListener('click', closeMarkNa);
+        if (btnConfirmMarkNa) {
+            btnConfirmMarkNa.addEventListener('click', () => {
+                const idx = this._pendingNaIndex;
+                if (idx === undefined || idx === null) return;
+                const reason = document.getElementById('markNaReasonInput')?.value.trim() || '';
+                if (!reason) {
+                    window.App?.showToast("Documented justification is mandatory to mark an objective N/A.", true);
+                    return;
+                }
+                const user = window.Auth?.getUser() || window.App?.currentUser;
+                const authorName = user?.name || 'Reviewing Engineer';
+                const it = this.currentNotebook.checklist[idx];
+                if (it) {
+                    it.is_na = true;
+                    it.status = 'not_applicable';
+                    it.na_reason = reason;
+                    it.na_by = authorName;
+                    it.na_at = new Date().toISOString();
+                    it.completed = false;
+                    it.checked = false;
+                }
+                closeMarkNa();
+                this.renderChecklistItems();
+                window.App?.showToast("Objective marked N/A with documented justification.");
+            });
+        }
+
+        // Transfer Lead Modal Events
+        const modalTransfer = document.getElementById('transferLeadModal');
+        const btnOpenTransfer = document.getElementById('btnOpenTransferLeadModal');
+        const btnCloseTransfer = document.getElementById('btnCloseTransferLead');
+        const btnCancelTransfer = document.getElementById('btnCancelTransferLead');
+        const btnConfirmTransfer = document.getElementById('btnConfirmTransferLead');
+        const closeTransfer = () => { if (modalTransfer) modalTransfer.classList.remove('active'); };
+
+        if (btnOpenTransfer) {
+            btnOpenTransfer.addEventListener('click', () => {
+                if (!this.currentReport) return;
+                const refEl = document.getElementById('transferLeadReportRef');
+                const repId = this.currentReport.report_id || this.currentReport._id;
+                if (refEl) refEl.textContent = `#REP-${repId.slice(-6).toUpperCase()}`;
+                if (modalTransfer) modalTransfer.classList.add('active');
+            });
+        }
+        if (btnCloseTransfer) btnCloseTransfer.addEventListener('click', closeTransfer);
+        if (btnCancelTransfer) btnCancelTransfer.addEventListener('click', closeTransfer);
+        if (btnConfirmTransfer) {
+            btnConfirmTransfer.addEventListener('click', async () => {
+                if (!this.currentReport) return;
+                const reportId = this.currentReport.report_id || this.currentReport._id;
+                const newLeadId = document.getElementById('transferLeadSelect')?.value;
+                const reason = document.getElementById('transferLeadReason')?.value.trim() || '';
+
+                if (!newLeadId) {
+                    window.App?.showToast("Please select the new Lead Engineer.", true);
+                    return;
+                }
+                if (!reason) {
+                    window.App?.showToast("Mandatory transfer reason is required.", true);
+                    return;
+                }
+
+                try {
+                    btnConfirmTransfer.disabled = true;
+                    btnConfirmTransfer.textContent = "Transferring...";
+                    await window.Api.transferLeadEngineer(reportId, newLeadId, reason);
+                    window.App?.showToast("Lead Engineer accountability transferred successfully.");
+                    closeTransfer();
+                    await this.loadReportForReview(reportId);
+                    this.loadDrawerTeam();
+                } catch (err) {
+                    window.App?.showToast(err.message || "Failed to transfer Lead Engineer.", true);
+                } finally {
+                    btnConfirmTransfer.disabled = false;
+                    btnConfirmTransfer.textContent = "Confirm Transfer";
+                }
+            });
+        }
+
+        // Invite Collaborator
+        const btnInvite = document.getElementById('btnSendEngineerInvite');
+        if (btnInvite) {
+            btnInvite.addEventListener('click', async () => {
+                if (!this.currentReport) return;
+                const reportId = this.currentReport.report_id || this.currentReport._id;
+                const engineerId = document.getElementById('inviteEngineerSelect')?.value;
+                const role = document.getElementById('inviteEngineerRole')?.value.trim() || 'Collaborating Engineer';
+
+                if (!engineerId) {
+                    window.App?.showToast("Please select an accredited engineer to invite.", true);
+                    return;
+                }
+
+                try {
+                    btnInvite.disabled = true;
+                    btnInvite.textContent = "Inviting...";
+                    await window.Api.addCollaborator(reportId, engineerId, role);
+                    window.App?.showToast("Engineer invited to inspection team.");
+                    const fresh = await window.Api.getReportById(reportId);
+                    this.currentReport = fresh.report;
+                    this.loadDrawerTeam();
+                    const roleInp = document.getElementById('inviteEngineerRole');
+                    if (roleInp) roleInp.value = '';
+                } catch (err) {
+                    window.App?.showToast(err.message || "Failed to invite collaborator.", true);
+                } finally {
+                    btnInvite.disabled = false;
+                    btnInvite.textContent = "Invite";
+                }
+            });
         }
 
         // Engineer Report-Linked Safety Advisory (Section S)
@@ -461,14 +617,15 @@ const Review = {
             }
 
             const isResolved = (status === 'Resolved');
+            const isUnderReview = (status === 'Under Review');
             const isVerified = (status === 'Verified');
             const isReceived = (status === 'Received');
             const hasReview = Boolean(data.review || (data.report.metadata?.engineer_assessment && data.report.metadata?.engineer_assessment?.decision));
 
-            // Stage visibility
+            // Contextual Stage Visibility (Canonical: Received -> Verified -> Under Review -> Resolved)
             if (stageReceived) stageReceived.style.display = isReceived ? 'flex' : 'none';
-            if (stageUnderReview) stageUnderReview.style.display = (status === 'Under Review' && !hasReview) ? 'flex' : 'none';
-            if (stageVerified) stageVerified.style.display = (isVerified || (status === 'Under Review' && hasReview)) ? 'flex' : 'none';
+            if (stageVerified) stageVerified.style.display = isVerified ? 'flex' : 'none';
+            if (stageUnderReview) stageUnderReview.style.display = isUnderReview ? 'flex' : 'none';
 
             // Submitter & Authorship distinction
             const submitter = data.submitter || {};
@@ -522,11 +679,11 @@ const Review = {
             const verifiedSummary = document.getElementById('verifiedAssessmentSummary');
 
             if (isReceived) {
-                // In Received state, form is hidden until engineer clicks 'Begin Professional Review'
-                if (reviewForm) reviewForm.classList.add('hidden');
+                // In Received state, engineer evaluates automated detections and provides sign-off
+                if (reviewForm) reviewForm.classList.remove('hidden');
                 if (verifiedSummary) verifiedSummary.classList.add('hidden');
-            } else if (hasReview || isVerified || isResolved) {
-                // If professional validation already exists, do NOT show validation controls again
+            } else {
+                // In Verified, Under Review, or Resolved states, professional validation is confirmed
                 if (reviewForm) reviewForm.classList.add('hidden');
                 if (verifiedSummary) {
                     verifiedSummary.classList.remove('hidden');
@@ -539,7 +696,7 @@ const Review = {
 
                     const effClass = data.review?.override_details?.override_class || data.assessment?.defect_class || data.report.metadata?.defect_class || 'Pothole';
                     const effSev = data.review?.override_details?.override_severity || data.assessment?.relative_severity || data.report.metadata?.relative_severity || 'Critical';
-                    const effRev = data.review?.reviewer_name || data.report.metadata?.reviewed_by || 'Accredited Civil Engineer';
+                    const effRev = data.review?.reviewer_name || data.report.metadata?.assigned_engineer_name || data.report.metadata?.reviewed_by || 'Accredited Civil Engineer';
                     const effDec = data.review?.decision || (data.report.metadata?.engineer_assessment?.decision) || 'Confirmed';
                     const effAct = data.report.metadata?.next_action || (data.report.metadata?.engineer_assessment?.next_action) || 'Continue monitoring';
                     const effNotes = data.review?.comments || data.report.metadata?.engineer_notes || 'Defect verification confirmed.';
@@ -554,10 +711,6 @@ const Review = {
                     if (vAct) vAct.textContent = effAct;
                     if (vNotes) vNotes.textContent = effNotes;
                 }
-            } else {
-                // Under Review without existing validation: show review form
-                if (reviewForm) reviewForm.classList.remove('hidden');
-                if (verifiedSummary) verifiedSummary.classList.add('hidden');
             }
 
             // Lock or unlock review controls based on resolution state
@@ -1098,6 +1251,113 @@ const Review = {
         }
     },
 
+    /**
+     * Section 3: Client-side Resolution Guard & Case Closure Workflow
+     * Validates:
+     * 1. Action taken only by assigned Lead Engineer (or system admin).
+     * 2. All field objectives in Inspection Notebook completed OR marked N/A with documented justification.
+     * 3. Formal case closure summary note provided.
+     */
+    async handleResolutionWorkflow(openDrawerCallback = null) {
+        if (!this.currentReport) {
+            window.App?.showToast("No active defect report loaded.", true);
+            return;
+        }
+
+        if (this.currentReport.status === 'Resolved') {
+            window.App?.showToast("This defect report has already completed professional review and resolution. The record is displayed in read-only mode.", true);
+            return;
+        }
+
+        const reportId = this.currentReport.report_id || this.currentReport._id;
+        const meta = this.currentReport.metadata || {};
+
+        // 1. Lead Engineer Authorization Guard
+        const user = window.Auth?.getUser() || window.App?.currentUser;
+        const currentUserId = String(user?.id || user?.user_id || user?._id || '');
+        const isEngAdmin = (user?.role === 'admin');
+        const leadEng = meta.lead_engineer || {};
+        const leadEngId = String(leadEng.user_id || this.currentReport.assigned_engineer_id || meta.assigned_engineer_id || '');
+
+        if (!isEngAdmin && leadEngId && currentUserId && currentUserId !== leadEngId) {
+            const leadName = leadEng.name || meta.assigned_engineer_name || 'Assigned Lead Engineer';
+            window.App?.showToast(`Resolution Guard: Only the assigned Lead Engineer (${leadName}) or a system administrator can formally resolve this case.`, true);
+            return;
+        }
+
+        // 2. Inspection Notebook Field Objectives Guard
+        const checklist = this.currentNotebook.checklist || [];
+        const incomplete = [];
+        const missingNaReasons = [];
+
+        for (const item of checklist) {
+            const isDone = item.completed || item.checked || item.status === 'completed';
+            const isNa = item.is_na || item.status === 'not_applicable';
+            if (!isDone && !isNa) {
+                incomplete.push(item.text || item.label || 'Pending objective');
+            } else if (isNa) {
+                const reason = (item.na_reason || item.reason || '').trim();
+                if (!reason) {
+                    missingNaReasons.push(item.text || item.label || 'N/A objective');
+                }
+            }
+        }
+
+        if (incomplete.length > 0) {
+            window.App?.showToast(`Resolution Guard: ${incomplete.length} inspection objective(s) are pending. Complete all items in the Inspection Notebook before closing this case.`, true);
+            if (openDrawerCallback) openDrawerCallback();
+            this.switchDrawerTab('drawerPanelObjectives');
+            return;
+        }
+
+        if (missingNaReasons.length > 0) {
+            window.App?.showToast(`Resolution Guard: ${missingNaReasons.length} objective(s) marked N/A require documented justification.`, true);
+            if (openDrawerCallback) openDrawerCallback();
+            this.switchDrawerTab('drawerPanelObjectives');
+            return;
+        }
+
+        // 3. Mandatory Formal Resolution Summary Note
+        let resolutionNotes = document.getElementById('engineerNotes')?.value.trim() || '';
+        if (!resolutionNotes) {
+            const promptNote = window.prompt(
+                "Resolution Guard: Please enter a formal defect remediation / case closure summary note:",
+                "All field inspection objectives completed and verified on-site. Maintenance repairs completed to standard. Case formally resolved."
+            );
+            if (!promptNote || !promptNote.trim()) {
+                window.App?.showToast("Resolution cancelled: Professional case closure summary note is required.", true);
+                return;
+            }
+            resolutionNotes = promptNote.trim();
+        }
+
+        // 4. Submit Resolution Transition
+        const btnResolved = document.getElementById('btnMarkResolved');
+        try {
+            if (btnResolved) {
+                btnResolved.disabled = true;
+                btnResolved.innerHTML = "<i class='bx bx-loader-alt bx-spin'></i> Resolving...";
+            }
+
+            await window.Api.updateReportStatus(reportId, 'Resolved', resolutionNotes);
+            window.App?.showToast("Case successfully marked RESOLVED. Defect record is now closed and read-only.");
+            
+            await this.loadReportForReview(reportId);
+
+            if (window.Dashboard) {
+                window.Dashboard.loadDashboardData();
+            }
+        } catch (err) {
+            console.error("[Review] Resolution failed:", err);
+            window.App?.showToast(err.message || "Failed to resolve defect report.", true);
+        } finally {
+            if (btnResolved) {
+                btnResolved.disabled = false;
+                btnResolved.innerHTML = "<i class='bx bx-check-double'></i> Mark Resolved";
+            }
+        }
+    },
+
     async submitProfessionalValidation() {
         if (!this.currentReport) {
             window.App.showToast("No active defect report loaded to review.", true);
@@ -1138,14 +1398,7 @@ const Review = {
                 follow_up_date: followUpDate
             });
 
-            // Automatically transition status to Verified
-            try {
-                await window.Api.updateReportStatus(reportId, 'Verified', `Verified by certified engineer with ${decision} assessment.`);
-            } catch (statusErr) {
-                console.warn("[Review] Could not transition status to Verified:", statusErr);
-            }
-
-            window.App.showToast("Professional validation and engineer review recorded successfully.");
+            window.App.showToast("Defect verified. You are now the Lead Engineer for this case.");
 
             // Reload report state
             await this.loadReportForReview(reportId);
@@ -1166,8 +1419,10 @@ const Review = {
     currentNotebook: {
         checklist: [],
         note_cards: [],
-        compliance_context: {}
+        compliance_context: {},
+        last_updated_at: null
     },
+    _pendingNaIndex: null,
 
     renderInspectionNotebook(report, assetType = '') {
         const isBuilding = assetType.toLowerCase().includes('building') || assetType.toLowerCase().includes('structure');
@@ -1202,28 +1457,50 @@ const Review = {
         const defaultLabels = isBuilding ? defaultBuildingItems : defaultRoadItems;
         const savedList = savedNb.checklist || [];
 
-        // Merge saved checklist state with defaults
-        const mergedChecklist = defaultLabels.map(label => {
-            const found = savedList.find(item => item.label === label);
-            return {
-                label,
-                checked: Boolean(found && found.checked),
-                custom: false
-            };
-        });
-
-        // Retain any saved custom items
-        savedList.filter(item => item.custom).forEach(item => {
-            mergedChecklist.push({
-                label: item.label,
-                checked: Boolean(item.checked),
-                custom: true
+        let mergedChecklist = [];
+        if (savedList.length > 0) {
+            mergedChecklist = savedList.map((item, i) => {
+                const text = item.text || item.label || (defaultLabels[i] || `Objective ${i+1}`);
+                const isCompleted = Boolean(item.completed || item.checked || item.status === 'completed');
+                const isNa = Boolean(item.is_na || item.status === 'not_applicable');
+                return {
+                    id: item.id || `obj_${i+1}`,
+                    text,
+                    label: text,
+                    completed: isCompleted,
+                    checked: isCompleted,
+                    status: isNa ? 'not_applicable' : (isCompleted ? 'completed' : 'pending'),
+                    is_na: isNa,
+                    na_reason: item.na_reason || null,
+                    na_by: item.na_by || null,
+                    na_at: item.na_at || null,
+                    completed_by: item.completed_by || null,
+                    completed_at: item.completed_at || null,
+                    custom: Boolean(item.custom)
+                };
             });
-        });
+        } else {
+            mergedChecklist = defaultLabels.map((label, i) => ({
+                id: `obj_${i+1}`,
+                text: label,
+                label,
+                completed: false,
+                checked: false,
+                status: 'pending',
+                is_na: false,
+                na_reason: null,
+                na_by: null,
+                na_at: null,
+                completed_by: null,
+                completed_at: null,
+                custom: false
+            }));
+        }
 
         this.currentNotebook.checklist = mergedChecklist;
         this.currentNotebook.note_cards = savedNb.note_cards || [];
         this.currentNotebook.compliance_context = savedNb.compliance_context || {};
+        this.currentNotebook.last_updated_at = savedNb.last_updated_at || null;
 
         const titleEl = document.getElementById('checklistTitle');
         if (titleEl) {
@@ -1264,11 +1541,11 @@ const Review = {
         const progressEl = document.getElementById('checklistProgress');
         if (!container) return;
 
-        const items = this.currentNotebook.checklist;
+        const items = this.currentNotebook.checklist || [];
         const total = items.length;
-        const checkedCount = items.filter(i => i.checked).length;
+        const doneCount = items.filter(i => i.completed || i.checked || i.is_na || i.status === 'completed' || i.status === 'not_applicable').length;
 
-        const countText = `${checkedCount} of ${total} completed`;
+        const countText = `${doneCount} of ${total} completed`;
         if (progressEl) progressEl.textContent = countText;
         const drawerProgress = document.getElementById('drawerChecklistProgress');
         if (drawerProgress) drawerProgress.textContent = countText;
@@ -1276,25 +1553,93 @@ const Review = {
         if (pillProgress) pillProgress.textContent = countText;
 
         container.innerHTML = items.map((item, idx) => {
+            const isCompleted = Boolean(item.completed || item.checked || item.status === 'completed');
+            const isNa = Boolean(item.is_na || item.status === 'not_applicable');
+            const text = item.text || item.label || 'Inspection Objective';
+            const author = item.completed_by || item.na_by || '';
+            const dateStr = item.completed_at || item.na_at ? new Date(item.completed_at || item.na_at).toLocaleDateString('en-KE', { dateStyle: 'short' }) : '';
+
+            let styleText = 'color: #1e293b;';
+            if (isCompleted) styleText = 'text-decoration: line-through; color: #64748b;';
+            if (isNa) styleText = 'text-decoration: line-through; color: #94a3b8; font-style: italic;';
+
             return `
-                <label style="display: flex; align-items: flex-start; gap: 0.5rem; cursor: pointer; padding: 3px 0;">
-                    <input type="checkbox" data-index="${idx}" ${item.checked ? 'checked' : ''} style="margin-top: 2px;">
-                    <span style="flex: 1; ${item.checked ? 'text-decoration: line-through; color: #64748b;' : 'color: #1e293b;'}">${item.label}</span>
-                    ${item.custom ? `<button type="button" data-remove-index="${idx}" style="background:none; border:none; color:#94a3b8; cursor:pointer; font-size:12px;" title="Remove custom objective">✕</button>` : ''}
-                </label>
+                <div class="notebook-objective-item" style="display:flex; flex-direction:column; gap:2px; padding:6px 8px; border-radius:6px; background:${isNa ? '#f8fafc' : isCompleted ? '#f0fdf4' : '#ffffff'}; border:1px solid ${isNa ? '#e2e8f0' : isCompleted ? '#bbf7d0' : '#e2e8f0'};">
+                    <div style="display:flex; align-items:flex-start; gap:0.55rem;">
+                        <input type="checkbox" data-index="${idx}" ${isCompleted ? 'checked' : ''} ${isNa ? 'disabled' : ''} style="margin-top:2px; cursor:pointer;">
+                        <div style="flex:1;">
+                            <span style="${styleText}; font-size:0.8rem; line-height:1.35; display:block;">
+                                ${text}
+                                ${isNa ? `<span style="display:inline-block; margin-left:4px; font-size:0.7rem; color:#b45309; background:#fef3c7; padding:1px 5px; border-radius:3px;">N/A: ${item.na_reason || 'Documented'}</span>` : ''}
+                            </span>
+                            ${(author && (isCompleted || isNa)) ? `
+                                <span style="font-size:0.68rem; color:#64748b; display:block; margin-top:1px;">
+                                    ${isCompleted ? '✓ Completed by' : '— Excluded by'} ${author}${dateStr ? ` on ${dateStr}` : ''}
+                                </span>
+                            ` : ''}
+                        </div>
+                        <div style="display:flex; align-items:center; gap:0.3rem;">
+                            ${isNa ? `
+                                <button type="button" data-unmark-na="${idx}" style="font-size:0.68rem; padding:1px 5px; background:none; border:1px solid #cbd5e1; border-radius:3px; color:#475569; cursor:pointer;" title="Re-enable this objective">
+                                    Re-enable
+                                </button>
+                            ` : `
+                                <button type="button" data-mark-na="${idx}" style="font-size:0.68rem; padding:1px 5px; background:none; border:1px solid #cbd5e1; border-radius:3px; color:#64748b; cursor:pointer;" title="Mark this objective as not applicable">
+                                    N/A
+                                </button>
+                            `}
+                            ${item.custom ? `
+                                <button type="button" data-remove-index="${idx}" style="background:none; border:none; color:#ef4444; cursor:pointer; font-size:12px; line-height:1;" title="Remove custom objective">✕</button>
+                            ` : ''}
+                        </div>
+                    </div>
+                </div>
             `;
         }).join('');
 
+        // Wire checkbox toggles
         container.querySelectorAll('input[type="checkbox"]').forEach(cb => {
             cb.addEventListener('change', (e) => {
                 const idx = parseInt(e.target.getAttribute('data-index'), 10);
-                if (this.currentNotebook.checklist[idx]) {
-                    this.currentNotebook.checklist[idx].checked = e.target.checked;
+                const user = window.Auth?.getUser() || window.App?.currentUser;
+                const authorName = user?.name || 'Reviewing Engineer';
+                const it = this.currentNotebook.checklist[idx];
+                if (it) {
+                    it.completed = e.target.checked;
+                    it.checked = e.target.checked;
+                    it.status = e.target.checked ? 'completed' : 'pending';
+                    it.completed_by = e.target.checked ? authorName : null;
+                    it.completed_at = e.target.checked ? new Date().toISOString() : null;
                     this.renderChecklistItems();
                 }
             });
         });
 
+        // Wire Mark N/A
+        container.querySelectorAll('button[data-mark-na]').forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                const idx = parseInt(e.currentTarget.getAttribute('data-mark-na'), 10);
+                this.openMarkNaModal(idx);
+            });
+        });
+
+        // Wire Re-enable
+        container.querySelectorAll('button[data-unmark-na]').forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                const idx = parseInt(e.currentTarget.getAttribute('data-unmark-na'), 10);
+                const it = this.currentNotebook.checklist[idx];
+                if (it) {
+                    it.is_na = false;
+                    it.status = 'pending';
+                    it.na_reason = null;
+                    it.na_by = null;
+                    it.na_at = null;
+                    this.renderChecklistItems();
+                }
+            });
+        });
+
+        // Wire Remove
         container.querySelectorAll('button[data-remove-index]').forEach(btn => {
             btn.addEventListener('click', (e) => {
                 const idx = parseInt(e.currentTarget.getAttribute('data-remove-index'), 10);
@@ -1304,6 +1649,18 @@ const Review = {
         });
     },
 
+    openMarkNaModal(idx) {
+        const item = this.currentNotebook.checklist[idx];
+        if (!item) return;
+        this._pendingNaIndex = idx;
+        const modal = document.getElementById('markObjectiveNaModal');
+        const labelEl = document.getElementById('markNaObjectiveLabel');
+        const reasonInput = document.getElementById('markNaReasonInput');
+        if (labelEl) labelEl.textContent = item.text || item.label || 'Objective';
+        if (reasonInput) reasonInput.value = '';
+        if (modal) modal.classList.add('active');
+    },
+
     addCustomObjective() {
         const inp = document.getElementById('customObjectiveInput');
         if (!inp) return;
@@ -1311,8 +1668,18 @@ const Review = {
         if (!val) return;
 
         this.currentNotebook.checklist.push({
+            id: `custom_${Date.now()}`,
+            text: val,
             label: val,
+            completed: false,
             checked: false,
+            status: 'pending',
+            is_na: false,
+            na_reason: null,
+            na_by: null,
+            na_at: null,
+            completed_by: null,
+            completed_at: null,
             custom: true
         });
         inp.value = '';
@@ -1381,7 +1748,8 @@ const Review = {
         }
 
         const category = catSelect?.value || 'Observation';
-        const author = window.App?.currentUser?.name || 'Reviewing Engineer';
+        const user = window.Auth?.getUser() || window.App?.currentUser;
+        const author = user?.name || 'Reviewing Engineer';
         const timestamp = new Date().toISOString();
 
         if (!this.currentNotebook.note_cards) {
@@ -1398,6 +1766,186 @@ const Review = {
 
         textInp.value = '';
         this.renderNoteCards();
+    },
+
+    // -------------------------------------------------------------------------
+    // Internal Drawer Tabs (Shadcn Tabs UI Pattern)
+    // -------------------------------------------------------------------------
+    switchDrawerTab(panelId) {
+        document.querySelectorAll('.notebook-tab-btn').forEach(btn => {
+            const isMatch = btn.getAttribute('data-target') === panelId;
+            btn.classList.toggle('active', isMatch);
+            btn.style.color = isMatch ? '#0070d1' : '#64748b';
+            btn.style.borderBottom = isMatch ? '2px solid #0070d1' : '2px solid transparent';
+            btn.style.fontWeight = isMatch ? '600' : '500';
+        });
+
+        document.querySelectorAll('.drawer-tab-panel').forEach(panel => {
+            const isMatch = panel.id === panelId;
+            panel.classList.toggle('hidden', !isMatch);
+            panel.style.display = isMatch ? 'block' : 'none';
+        });
+
+        if (panelId === 'drawerPanelEvidence') {
+            this.renderDrawerEvidence();
+        } else if (panelId === 'drawerPanelTeam') {
+            this.loadDrawerTeam();
+        }
+    },
+
+    renderDrawerEvidence() {
+        const data = this.activeReportData || { report: this.currentReport, assessment: this.currentAssessment };
+        const images = (data.images && data.images.length > 0) ? data.images : (data.image ? [data.image] : []);
+        const thumbsContainer = document.getElementById('drawerEvidenceThumbnails');
+        const detailsContainer = document.getElementById('drawerEvidenceDetails');
+        if (!thumbsContainer) return;
+
+        if (images.length === 0) {
+            thumbsContainer.innerHTML = `<p style="color:#94a3b8; font-style:italic;">No photographic evidence attached.</p>`;
+            if (detailsContainer) detailsContainer.innerHTML = '';
+            return;
+        }
+
+        thumbsContainer.innerHTML = images.map((img, idx) => {
+            const isActive = idx === this.activeImageIndex;
+            const thumbUrl = window.Api?.resolveImageUrl(img.url) || img.url;
+            return `
+                <div class="evidence-thumb-card" data-idx="${idx}" style="cursor:pointer; border:2px solid ${isActive ? '#0284c7' : '#e2e8f0'}; border-radius:6px; overflow:hidden; background:#0f172a; position:relative; aspect-ratio:4/3; transition: transform 0.15s ease;">
+                    <img src="${thumbUrl}" alt="Photo ${idx+1}" style="width:100%; height:100%; object-fit:cover;" onerror="this.parentElement.style.background='#1e293b';">
+                    <span style="position:absolute; bottom:2px; left:4px; font-size:0.68rem; color:#ffffff; background:rgba(0,0,0,0.65); padding:1px 5px; border-radius:3px;">
+                        Photo ${idx+1}
+                    </span>
+                </div>
+            `;
+        }).join('');
+
+        thumbsContainer.querySelectorAll('.evidence-thumb-card').forEach(card => {
+            card.addEventListener('click', (e) => {
+                const idx = parseInt(e.currentTarget.getAttribute('data-idx'), 10);
+                this.selectActiveImage(idx);
+                this.renderDrawerEvidence();
+            });
+        });
+
+        // Telemetry details
+        const ai = (data.assessments && data.assessments[this.activeImageIndex]) || data.assessment || {};
+        const detections = ai.detections || [];
+        if (detailsContainer) {
+            detailsContainer.innerHTML = `
+                <div style="background:#ffffff; border:1px solid #e2e8f0; border-radius:6px; padding:0.65rem 0.85rem; margin-top:0.5rem; display:flex; flex-direction:column; gap:0.4rem;">
+                    <div style="display:flex; justify-content:space-between; font-size:0.75rem;">
+                        <span style="color:#64748b;">Active Frame:</span>
+                        <strong style="color:#0f172a;">Photo ${this.activeImageIndex + 1} of ${images.length}</strong>
+                    </div>
+                    <div style="display:flex; justify-content:space-between; font-size:0.75rem;">
+                        <span style="color:#64748b;">Detected Objects:</span>
+                        <strong style="color:#0284c7;">${detections.length} defect bounding box${detections.length === 1 ? '' : 'es'}</strong>
+                    </div>
+                    <div style="display:flex; justify-content:space-between; font-size:0.75rem;">
+                        <span style="color:#64748b;">Primary Defect:</span>
+                        <strong style="color:#0f172a;">${ai.defect_class || 'Surface distress'}</strong>
+                    </div>
+                    <div style="display:flex; justify-content:space-between; font-size:0.75rem;">
+                        <span style="color:#64748b;">Visual Severity:</span>
+                        <span class="severity-pill ${(ai.relative_severity || 'low').toLowerCase()}" style="font-size:0.65rem; padding:1px 6px;">${(ai.relative_severity || 'Low').toUpperCase()}</span>
+                    </div>
+                </div>
+            `;
+        }
+    },
+
+    async loadDrawerTeam() {
+        if (!this.currentReport) return;
+        const reportId = this.currentReport.report_id || this.currentReport._id;
+        const meta = this.currentReport.metadata || {};
+
+        // Lead Engineer info
+        const leadEng = meta.lead_engineer || {};
+        const leadName = leadEng.name || meta.assigned_engineer_name || 'Eng. Regina';
+        const leadEmail = leadEng.email || meta.assigned_engineer_email || 'regina@kenha.co.ke';
+        const leadNameEl = document.getElementById('drawerLeadEngineerName');
+        const leadEmailEl = document.getElementById('drawerLeadEngineerEmail');
+        if (leadNameEl) leadNameEl.textContent = leadName;
+        if (leadEmailEl) leadEmailEl.textContent = leadEmail;
+
+        // Render Collaborators
+        const collabs = meta.collaborators || [];
+        const countEl = document.getElementById('drawerCollaboratorsCount');
+        const listEl = document.getElementById('drawerCollaboratorsList');
+        if (countEl) countEl.textContent = `${collabs.length} Collaborator${collabs.length === 1 ? '' : 's'}`;
+
+        if (listEl) {
+            if (collabs.length === 0) {
+                listEl.innerHTML = `
+                    <div style="font-size: 0.76rem; color: #94a3b8; font-style: italic; padding: 0.5rem 0; text-align: center;">
+                        No inspection collaborators added yet.
+                    </div>
+                `;
+            } else {
+                listEl.innerHTML = collabs.map((c, idx) => {
+                    const addedDate = c.added_at ? new Date(c.added_at).toLocaleDateString('en-KE', { dateStyle: 'short' }) : '';
+                    return `
+                        <div style="display:flex; justify-content:space-between; align-items:center; background:#ffffff; border:1px solid #e2e8f0; border-radius:6px; padding:0.5rem 0.65rem;">
+                            <div style="display:flex; align-items:center; gap:0.5rem;">
+                                <div style="width:28px; height:28px; border-radius:50%; background:#e0f2fe; color:#0369a1; display:flex; align-items:center; justify-content:center; font-weight:700; font-size:0.75rem;">
+                                    ${(c.name || 'E').charAt(0).toUpperCase()}
+                                </div>
+                                <div>
+                                    <span style="font-size:0.8rem; font-weight:600; color:#0f172a; display:block;">${c.name || 'Engineer'}</span>
+                                    <span style="font-size:0.7rem; color:#64748b;">${c.role || 'Collaborating Engineer'}${addedDate ? ` • ${addedDate}` : ''}</span>
+                                </div>
+                            </div>
+                            <button type="button" class="btn-remove-collab" data-collab-id="${c.user_id || c.engineer_id || idx}" style="background:none; border:none; color:#ef4444; font-size:0.72rem; cursor:pointer; padding:2px 6px; border-radius:4px;" title="Remove collaborator">
+                                Remove
+                            </button>
+                        </div>
+                    `;
+                }).join('');
+
+                listEl.querySelectorAll('.btn-remove-collab').forEach(btn => {
+                    btn.addEventListener('click', async (e) => {
+                        const collabId = e.currentTarget.getAttribute('data-collab-id');
+                        try {
+                            await window.Api.removeCollaborator(reportId, collabId);
+                            window.App?.showToast("Collaborator removed.");
+                            const fresh = await window.Api.getReportById(reportId);
+                            this.currentReport = fresh.report;
+                            this.loadDrawerTeam();
+                        } catch (err) {
+                            window.App?.showToast(err.message || "Failed to remove collaborator.", true);
+                        }
+                    });
+                });
+            }
+        }
+
+        // Populate available engineers in invite select & transfer lead select
+        try {
+            const availData = await window.Api.getAvailableEngineers(reportId);
+            const engineers = availData.engineers || availData.available_engineers || [];
+            
+            const inviteSelect = document.getElementById('inviteEngineerSelect');
+            if (inviteSelect) {
+                if (engineers.length === 0) {
+                    inviteSelect.innerHTML = `<option value="">No other engineers available</option>`;
+                } else {
+                    inviteSelect.innerHTML = `<option value="">Select available engineer...</option>` +
+                        engineers.map(e => `<option value="${e.user_id || e._id}">${e.name} (${e.email || 'Accredited'})</option>`).join('');
+                }
+            }
+
+            const transferSelect = document.getElementById('transferLeadSelect');
+            if (transferSelect) {
+                if (engineers.length === 0) {
+                    transferSelect.innerHTML = `<option value="">No available engineers</option>`;
+                } else {
+                    transferSelect.innerHTML = `<option value="">Select new Lead Engineer...</option>` +
+                        engineers.map(e => `<option value="${e.user_id || e._id}">${e.name} (${e.email || 'Accredited'})</option>`).join('');
+                }
+            }
+        } catch (err) {
+            console.warn("[Review] Failed loading available engineers:", err);
+        }
     },
 
     async saveInspectionNotebook() {
@@ -1422,10 +1970,14 @@ const Review = {
             notes: inpNotes?.value.trim() || ''
         };
 
+        const expected_updated_at = this.currentNotebook.last_updated_at ||
+            this.currentReport.metadata?.inspection_notebook?.last_updated_at || null;
+
         const payload = {
             checklist: this.currentNotebook.checklist,
             note_cards: this.currentNotebook.note_cards,
-            compliance_context
+            compliance_context,
+            expected_updated_at
         };
 
         try {
@@ -1435,8 +1987,14 @@ const Review = {
                 btnSave.innerHTML = "<i class='bx bx-loader-alt bx-spin'></i> Saving...";
             }
 
-            await window.Api.updateInspectionNotebook(reportId, payload);
-            window.App?.showToast("Inspection notebook and work notes saved successfully.");
+            const res = await window.Api.updateInspectionNotebook(reportId, payload);
+            if (res.inspection_notebook) {
+                this.currentNotebook.last_updated_at = res.inspection_notebook.last_updated_at;
+                if (this.currentReport.metadata) {
+                    this.currentReport.metadata.inspection_notebook = res.inspection_notebook;
+                }
+            }
+            window.App?.showToast("Inspection notebook saved successfully.");
 
             if (btnSave) {
                 btnSave.disabled = false;
@@ -1447,7 +2005,12 @@ const Review = {
             }
         } catch (err) {
             console.error("[Review] Failed saving inspection notebook:", err);
-            window.App?.showToast(err.message || "Failed to save inspection notebook.", true);
+            if (err.conflict || err.status === 409) {
+                window.App?.showToast("Notebook was modified by another engineer in the team. Refreshing latest inspection record...", true);
+                await this.loadReportForReview(reportId);
+            } else {
+                window.App?.showToast(err.message || "Failed to save inspection notebook.", true);
+            }
             const btnSave = document.getElementById('btnSaveInspectionNotebook');
             if (btnSave) {
                 btnSave.disabled = false;

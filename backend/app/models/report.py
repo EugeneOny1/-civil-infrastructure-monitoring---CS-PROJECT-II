@@ -5,16 +5,16 @@ class InfrastructureReport:
     InfrastructureReport entity mapping to Figure 4.3 Class Diagram and Figure 4.5 Database Schema.
     Tracks citizen/inspector defect submission tickets through verification and resolution.
     """
-    # Canonical report lifecycle statuses
+    # Canonical report lifecycle statuses (Received -> Verified -> Under Review -> Resolved)
     STATUS_RECEIVED = 'Received'
-    STATUS_UNDER_REVIEW = 'Under Review'
     STATUS_VERIFIED = 'Verified'
+    STATUS_UNDER_REVIEW = 'Under Review'
     STATUS_RESOLVED = 'Resolved'
 
     CANONICAL_LIFECYCLE = [
         STATUS_RECEIVED,
-        STATUS_UNDER_REVIEW,
         STATUS_VERIFIED,
+        STATUS_UNDER_REVIEW,
         STATUS_RESOLVED
     ]
 
@@ -26,10 +26,10 @@ class InfrastructureReport:
 
     # Permitted forward lifecycle transitions
     VALID_TRANSITIONS = {
-        STATUS_RECEIVED: [STATUS_UNDER_REVIEW, STATUS_VERIFIED],
-        STATUS_UNDER_REVIEW: [STATUS_VERIFIED, STATUS_RESOLVED],
-        STATUS_VERIFIED: [STATUS_RESOLVED, STATUS_UNDER_REVIEW],
-        STATUS_RESOLVED: [STATUS_UNDER_REVIEW]  # Allows reopening if defect recurs
+        STATUS_RECEIVED: [STATUS_VERIFIED],
+        STATUS_VERIFIED: [STATUS_UNDER_REVIEW],
+        STATUS_UNDER_REVIEW: [STATUS_RESOLVED],
+        STATUS_RESOLVED: []
     }
 
     @classmethod

@@ -16,7 +16,87 @@ const Dashboard = {
 
     init() {
         this.bindEvents();
+        this.loadGeographyHierarchy();
         this.initMonitoringIntelligence();
+    },
+
+    async loadGeographyHierarchy() {
+        try {
+            const countySelect = document.getElementById('trendCountySelect');
+            const subCountySelect = document.getElementById('trendSubCountySelect');
+            const wardSelect = document.getElementById('trendWardSelect');
+            if (!countySelect) return;
+
+            const data = await window.Api.getGeographyHierarchy();
+            const counties = Array.isArray(data.counties) ? data.counties : [];
+
+            // Populate all 47 counties
+            let countyOptions = '<option value="all" selected>All Counties (Kenya)</option>';
+            counties.forEach(c => {
+                countyOptions += `<option value="${c.name}">${c.name}</option>`;
+            });
+            countySelect.innerHTML = countyOptions;
+
+            const onCountyChange = async () => {
+                const cVal = countySelect.value;
+                if (!subCountySelect || !wardSelect) return;
+
+                if (!cVal || cVal.toLowerCase() === 'all') {
+                    subCountySelect.innerHTML = '<option value="all" selected>All Sub-Counties</option>';
+                    wardSelect.innerHTML = '<option value="all" selected>All Areas / Wards</option>';
+                } else {
+                    const cData = await window.Api.getGeographyHierarchy(cVal);
+                    const consts = Array.isArray(cData.constituencies) ? cData.constituencies : [];
+                    const wards = Array.isArray(cData.wards) ? cData.wards : [];
+
+                    let subOptions = '<option value="all" selected>All Sub-Counties</option>';
+                    consts.forEach(cn => {
+                        subOptions += `<option value="${cn}">${cn}</option>`;
+                    });
+                    subCountySelect.innerHTML = subOptions;
+
+                    let wardOptions = '<option value="all" selected>All Areas / Wards</option>';
+                    wards.forEach(w => {
+                        wardOptions += `<option value="${w}">${w}</option>`;
+                    });
+                    wardSelect.innerHTML = wardOptions;
+                }
+
+                this.loadKpis(cVal, wardSelect ? wardSelect.value : 'all');
+                this.loadDegradationChart();
+                this.loadCriticalCalendar();
+                this.loadReportsList();
+                if (this.hasUserQueriedIntelligence) {
+                    this.loadFocusedIntelligence(this.activeIntelligenceMode, this.activeIntelligenceQuery);
+                }
+            };
+
+            const onSubCountyChange = async () => {
+                const cVal = countySelect.value;
+                const scVal = subCountySelect ? subCountySelect.value : 'all';
+                if (wardSelect && cVal && cVal.toLowerCase() !== 'all') {
+                    const cData = await window.Api.getGeographyHierarchy(cVal, scVal);
+                    const wards = Array.isArray(cData.wards) ? cData.wards : [];
+                    let wardOptions = '<option value="all" selected>All Areas / Wards</option>';
+                    wards.forEach(w => {
+                        wardOptions += `<option value="${w}">${w}</option>`;
+                    });
+                    wardSelect.innerHTML = wardOptions;
+                }
+                this.loadKpis(cVal, wardSelect ? wardSelect.value : 'all');
+                this.loadDegradationChart();
+                this.loadCriticalCalendar();
+                this.loadReportsList();
+                if (this.hasUserQueriedIntelligence) {
+                    this.loadFocusedIntelligence(this.activeIntelligenceMode, this.activeIntelligenceQuery);
+                }
+            };
+
+            countySelect.addEventListener('change', onCountyChange);
+            if (subCountySelect) subCountySelect.addEventListener('change', onSubCountyChange);
+        } catch (e) {
+            console.error("[Dashboard] Geography load error:", e);
+        }
     },
 
     bindEvents() {
@@ -32,12 +112,13 @@ const Dashboard = {
             });
         }
 
-        // Section 36: Verified Inspections KPI Filter Toggle
+        // Section 36: My Lead Cases KPI Filter Toggle
         const kpiVerified = document.getElementById('kpiCardVerified');
         const kpiVerifiedCount = document.getElementById('kpiVerifiedCount');
+        const kpiLeadCasesCount = document.getElementById('kpiLeadCasesCount');
         const activeBadge = document.getElementById('kpiVerifiedActiveBadge');
 
-        const toggleVerifiedFilter = () => {
+        const toggleLeadFilter = () => {
             const select = document.getElementById('filterSeveritySelect');
             if (!select) return;
 
@@ -46,15 +127,18 @@ const Dashboard = {
                 this.isVerifiedFilterActive = false;
                 if (kpiVerified) kpiVerified.classList.remove('kpi-card-active');
                 if (activeBadge) activeBadge.classList.add('hidden');
-                select.value = this.previousFilterSeverityValue || '';
+                select.value = this.previousFilterSeverityValue || 'awaiting_verification';
                 this.loadReportsList();
             } else {
-                // First click: filter queue to Verified
-                this.previousFilterSeverityValue = select.value === 'Verified' ? '' : select.value;
+                // First click: filter queue to My Lead Cases
+                this.previousFilterSeverityValue = select.value === 'my_lead_cases' ? 'awaiting_verification' : select.value;
                 this.isVerifiedFilterActive = true;
                 if (kpiVerified) kpiVerified.classList.add('kpi-card-active');
-                if (activeBadge) activeBadge.classList.remove('hidden');
-                select.value = 'Verified';
+                if (activeBadge) {
+                    activeBadge.classList.remove('hidden');
+                    activeBadge.innerHTML = "<i class='bx bx-check'></i> My Cases";
+                }
+                select.value = 'my_lead_cases';
                 this.loadReportsList();
                 const queueCard = document.querySelector('.queue-card');
                 if (queueCard && typeof queueCard.scrollIntoView === 'function') {
@@ -63,15 +147,19 @@ const Dashboard = {
             }
         };
 
-        if (kpiVerified) kpiVerified.addEventListener('click', toggleVerifiedFilter);
+        if (kpiVerified) kpiVerified.addEventListener('click', toggleLeadFilter);
         if (kpiVerifiedCount) kpiVerifiedCount.addEventListener('click', (e) => {
             e.stopPropagation();
-            toggleVerifiedFilter();
+            toggleLeadFilter();
+        });
+        if (kpiLeadCasesCount) kpiLeadCasesCount.addEventListener('click', (e) => {
+            e.stopPropagation();
+            toggleLeadFilter();
         });
 
         if (filterSelect) {
             filterSelect.addEventListener('change', () => {
-                if (filterSelect.value === 'Verified') {
+                if (filterSelect.value === 'my_lead_cases' || filterSelect.value === 'Verified') {
                     this.isVerifiedFilterActive = true;
                     if (kpiVerified) kpiVerified.classList.add('kpi-card-active');
                     if (activeBadge) activeBadge.classList.remove('hidden');
@@ -183,6 +271,7 @@ const Dashboard = {
 
             const queueEl = document.getElementById('kpiActiveQueue');
             const verifiedEl = document.getElementById('kpiVerifiedCount');
+            const leadEl = document.getElementById('kpiLeadCasesCount');
             const modelEl = document.getElementById('kpiModelVersion');
             const critEl = document.getElementById('kpiCriticalHazards');
 
@@ -191,9 +280,10 @@ const Dashboard = {
             if (!isGeoFiltered) {
                 const summary = await window.Api.getSummary();
                 if (queueEl) queueEl.textContent = summary.active_defect_queue ?? 0;
+                if (leadEl) leadEl.textContent = summary.my_lead_cases ?? 0;
                 if (verifiedEl) verifiedEl.textContent = summary.verified_inspections ?? 0;
                 if (modelEl) modelEl.textContent = summary.model_version || 'SSD-MobileNetV2';
-                if (critEl) critEl.textContent = summary.severity_breakdown?.Critical ?? 0;
+                if (critEl) critEl.textContent = summary.critical_received_count ?? summary.critical_hazards ?? 0;
             } else {
                 // Compute geographic KPI counts from reports matching geographic filter
                 const data = await window.Api.getReports({ exclude_status: 'none' });
@@ -211,14 +301,25 @@ const Dashboard = {
                     });
                 }
 
-                const activeQueue = reports.filter(r => (r.status || '').toLowerCase() !== 'resolved').length;
+                const receivedReports = reports.filter(r => (r.status || '').toLowerCase() === 'received');
+                const activeQueue = receivedReports.length;
                 const verified = reports.filter(r => (r.status || '') === 'Verified').length;
-                const critical = reports.filter(r => {
-                    const sev = (r.assessment?.relative_severity || r.metadata?.relative_severity || '').toLowerCase();
+                const critical = receivedReports.filter(r => {
+                    const sev = (r.assessment?.relative_severity || r.metadata?.relative_severity || r.severity || '').toLowerCase();
                     return sev === 'critical' || sev === 'high';
                 }).length;
 
+                const curUser = window.App?.currentUser;
+                const curUserId = String(curUser?._id || curUser?.user_id || '');
+                const leadCount = reports.filter(r => {
+                    const st = (r.status || '').toLowerCase();
+                    if (st === 'resolved') return false;
+                    const leadId = String(r.metadata?.current_lead_engineer?.user_id || r.metadata?.assigned_engineer_id || '');
+                    return leadId && leadId === curUserId;
+                }).length;
+
                 if (queueEl) queueEl.textContent = activeQueue;
+                if (leadEl) leadEl.textContent = leadCount;
                 if (verifiedEl) verifiedEl.textContent = verified;
                 if (modelEl) modelEl.textContent = 'SSD-MobileNetV2';
                 if (critEl) critEl.textContent = critical;
@@ -656,7 +757,7 @@ const Dashboard = {
                             const lines = breakdownEntries.map(([cls, c]) => `<span>${c} ${cls}${c > 1 ? 's' : ''}</span>`);
                             html += `<div style="color:#cbd5e1; margin-bottom:6px; font-size:0.74rem; display:flex; flex-direction:column; gap:2px;">${lines.join('')}</div>`;
                         }
-                        if (corridor) {
+                        if (corridor && cnt > 1) {
                             html += `<div style="color:#94a3b8; font-size:0.72rem; margin-top:4px; border-top:1px solid #334155; padding-top:4px;">Most active corridor:<br><strong style="color:#38bdf8;">${corridor}</strong></div>`;
                         }
                     }
@@ -1214,32 +1315,39 @@ const Dashboard = {
         const queueContainer = document.getElementById('defectQueueList');
         if (!queueContainer) return;
 
-        const filterVal = document.getElementById('filterSeveritySelect')?.value || '';
+        const filterVal = document.getElementById('filterSeveritySelect')?.value || 'awaiting_verification';
         const countyVal = document.getElementById('trendCountySelect')?.value || 'all';
         const wardVal = document.getElementById('trendWardSelect')?.value || 'all';
 
         try {
-            const params = {};
-            if (filterVal === 'Verified') {
-                params.status = 'Verified';
-            } else {
-                params.exclude_status = 'Resolved';
-                if (filterVal && filterVal !== 'Flagged') {
-                    params.severity = filterVal;
-                }
-            }
+            const data = await window.Api.getReports({ exclude_status: 'none' });
+            let reports = Array.isArray(data.reports) ? data.reports : [];
+            const curUser = window.App?.currentUser;
+            const curUserId = String(curUser?._id || curUser?.user_id || '');
 
-            const data = await window.Api.getReports(params);
-            let reports = data.reports || [];
-
-            if (filterVal === 'Verified') {
-                reports = reports.filter(r => (r.status || '') === 'Verified');
-            } else {
-                // Exclude resolved reports from active priority queue
+            if (filterVal === 'awaiting_verification' || !filterVal) {
+                // Operational Default: Received reports awaiting initial engineer verification
+                reports = reports.filter(r => (r.status || '').toLowerCase() === 'received');
+            } else if (filterVal === 'my_lead_cases') {
+                // Cases where logged-in engineer is assigned lead, unresolved
+                reports = reports.filter(r => {
+                    const st = (r.status || '').toLowerCase();
+                    if (st === 'resolved') return false;
+                    const leadId = String(r.metadata?.current_lead_engineer?.user_id || r.metadata?.assigned_engineer_id || r.assigned_engineer_id || '');
+                    return leadId && leadId === curUserId;
+                });
+            } else if (filterVal === 'all_unresolved') {
                 reports = reports.filter(r => (r.status || '').toLowerCase() !== 'resolved');
-            }
-
-            if (filterVal === 'Flagged') {
+            } else if (filterVal === 'Verified') {
+                reports = reports.filter(r => (r.status || '') === 'Verified');
+            } else if (filterVal === 'Critical') {
+                reports = reports.filter(r => {
+                    const sev = (r.assessment?.relative_severity || r.metadata?.relative_severity || r.severity || '').toLowerCase();
+                    return sev === 'critical' || sev === 'high';
+                });
+            } else if (filterVal === 'Resolved') {
+                reports = reports.filter(r => (r.status || '').toLowerCase() === 'resolved');
+            } else if (filterVal === 'Flagged') {
                 reports = reports.filter(r => r.validation_status === 'unusual' || r.requires_engineer_review === true || r.metadata?.is_unusual === true);
             }
 
@@ -1266,6 +1374,21 @@ const Dashboard = {
                 });
             }
 
+            // Prioritization: Critical -> Medium -> Low, then oldest submitted first
+            const SEV_RANKS = { 'critical': 3, 'high': 3, 'moderate': 2, 'medium': 2, 'low': 1 };
+            reports.sort((a, b) => {
+                const sevA = (a.assessment?.relative_severity || a.metadata?.relative_severity || a.severity || 'low').toLowerCase();
+                const sevB = (b.assessment?.relative_severity || b.metadata?.relative_severity || b.severity || 'low').toLowerCase();
+                const rankA = SEV_RANKS[sevA] || 1;
+                const rankB = SEV_RANKS[sevB] || 1;
+                if (rankB !== rankA) {
+                    return rankB - rankA;
+                }
+                const dateA = new Date(a.date_submitted || a.created_at || 0).getTime();
+                const dateB = new Date(b.date_submitted || b.created_at || 0).getTime();
+                return dateA - dateB;
+            });
+
             if (reports.length === 0) {
                 queueContainer.innerHTML = `
                     <div class="queue-empty-state" style="padding: 2.5rem 1.5rem; text-align: center; color: #64748b; background: rgba(15, 23, 42, 0.03); border: 1px dashed var(--border-color); border-radius: 8px;">
@@ -1275,6 +1398,21 @@ const Dashboard = {
                 `;
                 return;
             }
+
+            const formatRelativeAge = (dateStr) => {
+                if (!dateStr) return '';
+                const dt = new Date(dateStr);
+                const now = new Date();
+                const diffMs = now - dt;
+                if (diffMs < 0) return 'Just now';
+                const diffMins = Math.floor(diffMs / (60 * 1000));
+                if (diffMins < 60) return `Submitted ${diffMins}m ago`;
+                const diffHours = Math.floor(diffMins / 60);
+                if (diffHours < 24) return `Submitted ${diffHours}h ago`;
+                const diffDays = Math.floor(diffHours / 24);
+                if (diffDays < 30) return `Submitted ${diffDays}d ago`;
+                return `Submitted ${dt.toLocaleDateString('en-KE', { dateStyle: 'medium' })}`;
+            };
 
             queueContainer.innerHTML = reports.map(r => {
                 const assessment = r.assessment || {};
@@ -1286,6 +1424,19 @@ const Dashboard = {
                 const status = r.status || 'Received';
                 const statusSlug = status.toLowerCase().replace(' ', '-');
                 const isFlagged = r.validation_status === 'unusual' || r.requires_engineer_review === true || r.metadata?.is_unusual === true;
+                const dateStr = r.date_submitted || r.created_at;
+                const ageStr = formatRelativeAge(dateStr);
+
+                let actionBtnLabel = 'Review & Sign Off';
+                if (status === 'Received') {
+                    actionBtnLabel = 'Verify Defect';
+                } else if (status === 'Verified') {
+                    actionBtnLabel = 'Start Inspection';
+                } else if (status === 'Under Review') {
+                    actionBtnLabel = 'Review & Sign Off';
+                } else if (status === 'Resolved') {
+                    actionBtnLabel = 'View Case';
+                }
 
                 return `
                     <div class="queue-item-card ${isFlagged ? 'is-flagged' : ''}" data-report-id="${r.report_id || r._id}">
@@ -1293,6 +1444,7 @@ const Dashboard = {
                             <div style="display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap;">
                                 <span class="queue-item-title">${location}</span>
                                 <span class="status-chip ${statusSlug}">${status}</span>
+                                ${ageStr ? `<span class="queue-age-pill" style="font-size: 0.72rem; color: #64748b; background: #f1f5f9; padding: 2px 6px; border-radius: 4px; display: inline-flex; align-items: center; gap: 3px;"><i class='bx bx-time'></i> ${ageStr}</span>` : ''}
                                 ${isFlagged ? `<span class="badge-tag flagged"><i class='bx bx-error'></i> Unusual Pairing</span>` : ''}
                             </div>
                             <span class="queue-item-meta">${assetType} • ${defectClass} • ${frameId}</span>
@@ -1301,7 +1453,7 @@ const Dashboard = {
                         <div class="queue-item-actions">
                             <span class="severity-pill ${severity.toLowerCase()}">${severity.toUpperCase()}</span>
                             <button type="button" class="btn-review-item btn-open-review" data-report-id="${r.report_id || r._id}">
-                                Review & Sign Off
+                                ${actionBtnLabel}
                             </button>
                         </div>
                     </div>
@@ -1317,6 +1469,7 @@ const Dashboard = {
             });
         } catch (e) {
             console.error("Queue load error:", e);
+        }
         }
     }
 };

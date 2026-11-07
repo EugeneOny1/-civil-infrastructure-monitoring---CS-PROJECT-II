@@ -5,6 +5,7 @@ from flask import Blueprint, jsonify, request, make_response
 from ..services.database import db_service
 from ..services.weather_service import weather_service
 from ..services.monitoring_intelligence import monitoring_intelligence_service
+from ..services.geography_service import geography_service
 from ..utils.auth_helpers import role_required
 
 KENYA_47_COUNTIES = [
@@ -20,21 +21,103 @@ KENYA_47_COUNTIES = [
 
 analytics_bp = Blueprint('analytics', __name__, url_prefix='/api/analytics')
 
+@analytics_bp.route('/geography/hierarchy', methods=['GET'])
+def get_geography_hierarchy():
+    """
+    Returns Kenya authoritative administrative and electoral hierarchy
+    for cascading location filters (County -> Sub-County / Constituency -> Ward -> Locality).
+    Supports all 47 counties, 290 constituencies, and wards.
+    """
+    county = request.args.get('county')
+    constituency = request.args.get('constituency') or request.args.get('sub_county')
+    search_q = request.args.get('q')
+
+    if search_q:
+        results = geography_service.search_location(search_q)
+        return jsonify({'results': results}), 200
+
+    if not county or county.lower() in ('all', 'all counties (kenya)'):
+        return jsonify({
+            'counties': geography_service.get_all_counties(),
+            'total_counties': 47
+        }), 200
+
+    county_data = geography_service.get_county_data(county)
+    if not county_data:
+        return jsonify({
+            'county': county,
+            'constituencies': [],
+            'wards': [],
+            'localities': []
+        }), 200
+
+    constituencies = geography_service.get_constituencies(county)
+    wards = geography_service.get_wards(county, constituency)
+    localities = geography_service.get_localities(county, constituency)
+
+    return jsonify({
+        'county': county_data['name'],
+        'capital': county_data.get('capital', ''),
+        'code': county_data.get('code'),
+        'constituencies': constituencies,
+        'wards': wards,
+        'localities': localities
+    }), 200
+
+
 @analytics_bp.route('/summary', methods=['GET'])
 @role_required('engineer', 'admin')
 def get_summary(current_user):
     """
     FR-07: Summary metrics for the Engineer Monitoring Dashboard (Figure 4.7).
+    Operational focus:
+    - active_defect_queue: count of reports with status == 'Received' (Awaiting Engineer Verification)
+    - critical_received_count / critical_hazards: real count of Received reports with Critical visual severity (relative visual severity >= 15%)
+    - my_lead_cases: count of unresolved reports (Verified or Under Review) where current user is Lead Engineer
+    - verified_inspections: count of reports with status in [Verified, Under Review] or Verified
     """
     from ..models.report import InfrastructureReport
 
     all_reports = db_service.find('infrastructure_reports')
-    all_assessments = db_service.find('ai_assessments')
+    current_user_id = str(current_user.get('_id') or current_user.get('user_id'))
+    current_user_email = current_user.get('email', '')
 
-    # Active defect queue: cases requiring active professional attention (excludes Resolved)
-    active_count = sum(1 for r in all_reports if InfrastructureReport.normalize_lifecycle_status(r.get('status')) in [InfrastructureReport.STATUS_RECEIVED, InfrastructureReport.STATUS_UNDER_REVIEW])
+    # 1. Active Defect Queue = Received reports only
+    received_reports = [
+        r for r in all_reports
+        if InfrastructureReport.normalize_lifecycle_status(r.get('status')) == InfrastructureReport.STATUS_RECEIVED
+    ]
+    active_count = len(received_reports)
+
+    # 2. Critical Reports Awaiting Verification = Received reports with relative visual severity Critical (or >= 15%)
+    critical_received_count = 0
+    for r in received_reports:
+        meta = r.get('metadata') or {}
+        sev = str(meta.get('relative_severity') or r.get('severity') or '').strip().lower()
+        if sev in ['critical', 'high']:
+            critical_received_count += 1
+
+    # 3. My Lead Cases: unresolved cases (Verified or Under Review) where current user is Lead Engineer or assigned reviewer
+    my_lead_cases = 0
+    for r in all_reports:
+        status_norm = InfrastructureReport.normalize_lifecycle_status(r.get('status'))
+        if status_norm in [InfrastructureReport.STATUS_VERIFIED, InfrastructureReport.STATUS_UNDER_REVIEW]:
+            meta = r.get('metadata') or {}
+            lead = meta.get('current_lead_engineer') or {}
+            lead_id = str(lead.get('user_id') or meta.get('assigned_engineer_id') or '')
+            lead_email = lead.get('email') or meta.get('assigned_engineer_email') or ''
+            if lead_id == current_user_id or (current_user_email and lead_email == current_user_email):
+                my_lead_cases += 1
+
+    # 4. Verified count
+    verified_count = sum(
+        1 for r in all_reports
+        if InfrastructureReport.normalize_lifecycle_status(r.get('status')) in [InfrastructureReport.STATUS_VERIFIED, InfrastructureReport.STATUS_UNDER_REVIEW]
+    )
+
     flagged_unusual_count = sum(1 for r in all_reports if r.get('status') == 'Flagged for Review' or r.get('metadata', {}).get('is_unusual') is True)
-    verified_count = sum(1 for r in all_reports if InfrastructureReport.normalize_lifecycle_status(r.get('status')) in [InfrastructureReport.STATUS_VERIFIED, InfrastructureReport.STATUS_RESOLVED])
+
+    all_assessments = db_service.find('ai_assessments')
 
     # Relative visual severity distribution
     critical_count = sum(1 for a in all_assessments if a.get('relative_severity') in ['Critical', 'High'])
@@ -51,6 +134,9 @@ def get_summary(current_user):
 
     resp = make_response(jsonify({
         'active_defect_queue': active_count,
+        'critical_received_count': critical_received_count,
+        'critical_hazards': critical_received_count,
+        'my_lead_cases': my_lead_cases,
         'flagged_unusual_count': flagged_unusual_count,
         'verified_inspections': verified_count,
         'total_submissions': len(all_reports),

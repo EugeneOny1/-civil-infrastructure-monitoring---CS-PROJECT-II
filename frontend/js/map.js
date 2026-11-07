@@ -723,10 +723,8 @@ const DefectMap = {
             marker.reportStatus = point.status;
             marker.hasAdvisory = hasAdvisory;
 
-            // Combined context popup if composite, or individual report popup
-            const popupContent = hasAdvisory
-                ? this.createCombinedPopupContent(point, point.active_advisory)
-                : this.createPopupContent(point);
+            // Individual defect report popup
+            const popupContent = this.createPopupContent(point);
             marker.bindPopup(popupContent, { maxWidth: 320, className: 'leaflet-custom-popup' });
 
             markers.push(marker);
@@ -734,12 +732,6 @@ const DefectMap = {
             if (point.report_id) this.reportMarkers[point.report_id] = marker;
             if (point.display_id) this.reportMarkers[point.display_id] = marker;
             if (point._id) this.reportMarkers[String(point._id)] = marker;
-
-            if (hasAdvisory && matchedAdv) {
-                if (matchedAdv.advisory_id) this.advisoryMarkers[matchedAdv.advisory_id] = marker;
-                if (matchedAdv.report_id) this.advisoryMarkers[matchedAdv.report_id] = marker;
-                if (matchedAdv._id) this.advisoryMarkers[String(matchedAdv._id)] = marker;
-            }
 
             // Section 11: Exclude Resolved reports from active defect density heat!
             // Resolved reports remain accessible as historical markers, but MUST NOT contribute to active heat.
@@ -848,14 +840,24 @@ const DefectMap = {
             const lng = Number(adv.longitude);
             if (isNaN(lat) || isNaN(lng) || lat === 0 || lng === 0) return;
 
-            // Section 18 & 21: If advisory is already represented on a composite report marker at this location,
-            // do not place an overlapping blocking triangle directly on top that intercepts clicks!
-            // The composite marker already provides the context popup with access to both entities.
-            if (adv._has_composite_marker) {
-                return;
+            // Section 11: Independent Safety Advisory Marker Behavior
+            // When an advisory shares coordinates with a defect report, apply a subtle geographic offset (+0.00018 lat, +0.00018 lng)
+            // so both the circular defect marker and triangular advisory marker sit side-by-side (● Defect   △ Advisory).
+            // Both are distinctly visible and clickable; neither intercepts or blocks the other.
+            let renderLat = lat;
+            let renderLng = lng;
+            const isColocated = adv._has_composite_marker || Boolean(adv.report_id) || (this.reportsData && this.reportsData.some(r => {
+                const rLat = Number(r.latitude);
+                const rLng = Number(r.longitude);
+                return Math.abs(rLat - lat) < 0.0002 && Math.abs(rLng - lng) < 0.0002;
+            }));
+
+            if (isColocated) {
+                renderLat = lat + 0.00018;
+                renderLng = lng + 0.00018;
             }
 
-            // Standalone advisory: Render triangular hazard marker on safetyAdvisoryPane
+            // Standalone / offset advisory: Render triangular hazard marker on safetyAdvisoryPane
             const advIcon = L.divIcon({
                 className: 'safety-advisory-triangle-icon',
                 html: `
@@ -866,7 +868,6 @@ const DefectMap = {
                         <div style="position:absolute; inset:0; display:flex; align-items:center; justify-content:center; padding-top:6px; color:#b91c1c; font-size:16px; pointer-events:none;">
                             <i class='bx bx-error-alt'></i>
                         </div>
-                        <span style="display:none;" data-legacy="#1e1b4b bx-shield-quarter"></span>
                     </div>
                 `,
                 iconSize: [34, 34],
@@ -874,8 +875,8 @@ const DefectMap = {
                 popupAnchor: [0, -17]
             });
 
-            // Section 15: Safety Advisory marker placed in dedicated pane (z-index 675)
-            const marker = L.marker([lat, lng], {
+            // Safety Advisory marker placed in dedicated pane (z-index 675)
+            const marker = L.marker([renderLat, renderLng], {
                 icon: advIcon,
                 pane: 'safetyAdvisoryPane'
             });
@@ -940,14 +941,16 @@ const DefectMap = {
         if (!this.map) return;
         this.invalidateSize();
 
-        if (lat && lng && !isNaN(lat) && !isNaN(lng)) {
-            this.map.setView([lat, lng], Math.max(this.map.getZoom(), 14), { animate: true });
+        const marker = (advisoryId && this.advisoryMarkers[advisoryId]) ||
+                       (reportId && this.advisoryMarkers[reportId]) ||
+                       (advisoryId && this.advisoryMarkers[String(advisoryId)]);
+
+        const targetPos = marker ? marker.getLatLng() : (lat && lng && !isNaN(lat) && !isNaN(lng) ? [lat, lng] : null);
+        if (targetPos) {
+            this.map.setView(targetPos, Math.max(this.map.getZoom(), 15), { animate: true });
         }
 
         setTimeout(() => {
-            const marker = (advisoryId && this.advisoryMarkers[advisoryId]) ||
-                           (reportId && this.advisoryMarkers[reportId]) ||
-                           (advisoryId && this.advisoryMarkers[String(advisoryId)]);
             if (marker) {
                 if (this.markerCluster && typeof this.markerCluster.hasLayer === 'function' && this.markerCluster.hasLayer(marker)) {
                     if (typeof this.markerCluster.zoomToShowLayer === 'function') {

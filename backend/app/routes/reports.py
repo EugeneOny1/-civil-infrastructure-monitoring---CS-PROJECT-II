@@ -10,6 +10,7 @@ from ..services.inference import inference_service
 from ..services.validation import validation_service
 from ..utils.auth_helpers import get_current_user, login_required
 from ..utils.file_helpers import allowed_file, save_uploaded_image
+from .reviews import get_default_notebook_template
 
 reports_bp = Blueprint('reports', __name__, url_prefix='/api/reports')
 
@@ -47,6 +48,27 @@ def submit_report(current_user):
     location = request.form.get('location', '').strip()
     asset_type = request.form.get('asset_type', 'Road / Pavement').strip()
     description = request.form.get('description', '').strip()
+
+    # Building-specific storeys / floors validation
+    building_floors = None
+    building_floors_mode = None
+    if 'building' in asset_type.lower():
+        raw_floors_mode = request.form.get('building_floors_mode', '').strip()
+        raw_floors = request.form.get('building_floors')
+        if raw_floors_mode == 'not_sure':
+            building_floors_mode = 'not_sure'
+            building_floors = None
+        elif raw_floors is not None and str(raw_floors).strip() != '':
+            try:
+                floors_val = int(raw_floors)
+                if floors_val <= 0:
+                    return jsonify({'error': 'Number of building floors must be a positive whole number greater than 0.'}), 400
+                building_floors = floors_val
+                building_floors_mode = 'known'
+            except (ValueError, TypeError):
+                return jsonify({'error': 'Number of building floors must be a valid positive integer.'}), 400
+        elif raw_floors_mode:
+            building_floors_mode = raw_floors_mode
     
     # Retrieve optional geographic coordinates
     raw_lat = request.form.get('latitude')
@@ -169,6 +191,8 @@ def submit_report(current_user):
                     'flag_reasons': obs_validation['flag_reasons'],
                     'advisory_notes': obs_validation['advisory_notes'],
                     'priority': obs_validation['priority'],
+                    'building_floors': building_floors,
+                    'building_floors_mode': building_floors_mode,
                     'latitude': obs_lat,
                     'longitude': obs_lng,
                     'status_history': [
@@ -453,6 +477,8 @@ def submit_report(current_user):
             'flag_reasons': validation_result['flag_reasons'],
             'advisory_notes': validation_result['advisory_notes'],
             'priority': validation_result['priority'],
+            'building_floors': building_floors,
+            'building_floors_mode': building_floors_mode,
             'nearby_report_count': validation_result.get('nearby_report_count', 0),
             'nearby_unresolved_count': validation_result.get('nearby_unresolved_count', 0),
             'is_location_cluster': validation_result.get('is_location_cluster', False),
@@ -1051,7 +1077,7 @@ def update_report_status(current_user, report_id):
     """
     FR-06 & Lifecycle Management: Allows authorized Civil Engineers and Administrators
     to transition reports through the canonical lifecycle:
-    Received -> Under Review -> Verified -> Resolved
+    Received -> Verified -> Under Review -> Resolved
     """
     user_role = current_user.get('role', 'citizen')
     if user_role not in ['engineer', 'admin']:
@@ -1072,39 +1098,92 @@ def update_report_status(current_user, report_id):
     current_status = InfrastructureReport.normalize_lifecycle_status(report.get('status'))
 
     # Section 26: Forward-only lifecycle in ordinary engineer operations
-    if current_status == InfrastructureReport.STATUS_RESOLVED:
+    if current_status == InfrastructureReport.STATUS_RESOLVED and user_role != 'admin':
         return jsonify({'error': 'This defect report is resolved and in read-only mode.'}), 400
 
-    if current_status == InfrastructureReport.STATUS_VERIFIED and target_status in [InfrastructureReport.STATUS_RECEIVED, InfrastructureReport.STATUS_UNDER_REVIEW]:
-        return jsonify({'error': 'Forward-only lifecycle: A verified defect cannot return to Received or Under Review.'}), 400
-
-    if not InfrastructureReport.can_transition(current_status, target_status):
+    if user_role != 'admin' and not InfrastructureReport.can_transition(current_status, target_status):
         return jsonify({
-            'error': f"Invalid status transition from '{current_status}' to '{target_status}'. Permitted forward lifecycle: Received -> Under Review -> Verified -> Resolved."
+            'error': f"Invalid status transition from '{current_status}' to '{target_status}'. Permitted forward lifecycle: Received -> Verified -> Under Review -> Resolved."
         }), 400
 
-    now_iso = datetime.now(timezone.utc).isoformat()
-    meta = report.get('metadata', {})
-
-    # Engineer Ownership & Accountability (Section 28)
     user_id_str = str(current_user.get('_id') or current_user.get('user_id'))
-    if target_status in [InfrastructureReport.STATUS_UNDER_REVIEW, InfrastructureReport.STATUS_VERIFIED]:
-        if not meta.get('assigned_engineer_id'):
-            meta['assigned_engineer_id'] = user_id_str
-            meta['assigned_engineer_name'] = current_user.get('name', 'Certified Engineer')
-            meta['assigned_engineer_email'] = current_user.get('email', '')
-            meta['assigned_at'] = now_iso
+    meta = report.get('metadata', {})
+    now_iso = datetime.now(timezone.utc).isoformat()
+
+    # Resolution Guard: strict checks when transitioning to Resolved
+    if target_status == InfrastructureReport.STATUS_RESOLVED:
+        # 1. Lead engineer authorization check:
+        current_lead = meta.get('current_lead_engineer') or {}
+        lead_id = str(current_lead.get('user_id') or meta.get('assigned_engineer_id') or '')
+        if user_role != 'admin' and lead_id and lead_id != user_id_str:
+            lead_name = current_lead.get('name') or meta.get('assigned_engineer_name', 'Assigned Lead Engineer')
+            return jsonify({
+                'error': f"Only the assigned Lead Engineer ({lead_name}) or an administrator can resolve this case."
+            }), 403
+
+        # 2. Inspection Objectives Check:
+        notebook = meta.get('inspection_notebook') or report.get('inspection_notebook') or {}
+        checklist = notebook.get('checklist') or []
+        if not checklist:
+            # If no notebook was persisted yet, load default template to ensure objectives are verified
+            checklist = get_default_notebook_template(report.get('asset_type') or meta.get('asset_type')).get('checklist', [])
+            notebook['checklist'] = checklist
+            meta['inspection_notebook'] = notebook
+
+        incomplete_items = []
+        for item in checklist:
+            if isinstance(item, dict):
+                st = item.get('status', 'pending')
+                if st == 'pending' and not item.get('completed', False):
+                    incomplete_items.append(item.get('text', 'Incomplete objective'))
+                elif st == 'not_applicable' or item.get('is_na'):
+                    if not str(item.get('na_reason', '')).strip():
+                        incomplete_items.append(f"{item.get('text', 'Item')}: Missing N/A rationale")
+        if incomplete_items:
+            return jsonify({
+                'error': f"Cannot resolve case: All inspection objectives must be completed or marked N/A with a documented reason. Pending/unjustified: {', '.join(incomplete_items[:3])}{'...' if len(incomplete_items) > 3 else ''}"
+            }), 400
+
+        # 3. Final closure summary check:
+        if not notes and not notebook.get('summary_notes') and not notebook.get('note_cards'):
+            return jsonify({
+                'error': 'Cannot resolve case: A professional closure summary or engineering resolution note is required.'
+            }), 400
+
+    # Engineer Ownership & Accountability (Canonical: Received -> Verified -> Under Review -> Resolved)
+    if target_status in (InfrastructureReport.STATUS_VERIFIED, InfrastructureReport.STATUS_UNDER_REVIEW):
+        if not meta.get('original_verifying_engineer'):
+            meta['original_verifying_engineer'] = {
+                'user_id': user_id_str,
+                'name': current_user.get('name', 'Certified Engineer'),
+                'email': current_user.get('email', ''),
+                'verified_at': now_iso
+            }
+        if not meta.get('current_lead_engineer'):
+            meta['current_lead_engineer'] = {
+                'user_id': user_id_str,
+                'name': current_user.get('name', 'Certified Engineer'),
+                'email': current_user.get('email', ''),
+                'assigned_at': now_iso
+            }
+        meta['lead_engineer'] = meta['current_lead_engineer']
+        if not meta.get('inspection_notebook') or not meta['inspection_notebook'].get('checklist'):
+            meta['inspection_notebook'] = get_default_notebook_template(report.get('asset_type') or meta.get('asset_type'))
+        meta['assigned_engineer_id'] = user_id_str
+        meta['assigned_engineer_name'] = current_user.get('name', 'Certified Engineer')
+        meta['assigned_engineer_email'] = current_user.get('email', '')
+        meta['assigned_at'] = now_iso
+        meta['requires_engineer_review'] = False
+
     history = meta.get('status_history', [])
     history.append({
         'status': target_status,
         'timestamp': now_iso,
         'updated_by': current_user.get('name', 'Certified Engineer'),
-        'user_id': str(current_user.get('_id') or current_user.get('user_id')),
+        'user_id': user_id_str,
         'notes': notes or f"Status transitioned to {target_status}."
     })
     meta['status_history'] = history
-    if target_status == InfrastructureReport.STATUS_VERIFIED:
-        meta['requires_engineer_review'] = False
 
     # Automatically mark associated safety advisory inactive when report is Resolved
     if target_status == InfrastructureReport.STATUS_RESOLVED:
@@ -1117,6 +1196,14 @@ def update_report_status(current_user, report_id):
         if 'safety_advisory' in meta and isinstance(meta['safety_advisory'], dict):
             meta['safety_advisory']['status'] = 'inactive'
             meta['safety_advisory']['closed_at'] = now_iso
+
+        # Dispatch citizen notification on resolution
+        submitter_id = str(report.get('user_id') or meta.get('submitted_by_id') or '')
+        if submitter_id:
+            from ..services.notification_service import notification_service
+            feedback_str = f" Note: {notes}" if notes else ""
+            msg = f"Your infrastructure defect report has been professionally resolved.{feedback_str}"
+            notification_service.create_notification(submitter_id, report_id, 'resolved', 'Report Resolved', msg)
 
     db_service.update_one('infrastructure_reports', {'_id': report_id}, {
         'status': target_status,

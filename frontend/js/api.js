@@ -384,6 +384,60 @@ const Api = {
         return res.json();
     },
 
+    async getGeographyHierarchy(county = null, constituency = null) {
+        let qry = '';
+        if (county && county.toLowerCase() !== 'all') {
+            qry = `?county=${encodeURIComponent(county)}`;
+            if (constituency && constituency.toLowerCase() !== 'all') {
+                qry += `&constituency=${encodeURIComponent(constituency)}`;
+            }
+        }
+        const res = await this.safeFetch(`${API_BASE}/analytics/geography/hierarchy${qry}`, {
+            headers: this.getHeaders()
+        });
+        if (!res.ok) return { counties: [], constituencies: [], wards: [] };
+        return await res.json();
+    },
+
+    async getAvailableEngineers(reportId = null) {
+        const url = reportId ? `${API_BASE}/reviews/engineers/available?report_id=${encodeURIComponent(reportId)}` : `${API_BASE}/reviews/engineers/available`;
+        const res = await this.safeFetch(url, { headers: this.getHeaders() });
+        if (!res.ok) return { engineers: [] };
+        return await res.json();
+    },
+
+    async addCollaborator(reportId, engineerId, role, inviteNote = '') {
+        const res = await this.safeFetch(`${API_BASE}/reviews/report/${reportId}/collaborators`, {
+            method: 'POST',
+            headers: this.getHeaders(),
+            body: JSON.stringify({ engineer_id: engineerId, role, invite_note: inviteNote })
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || 'Failed to add collaborator.');
+        return data;
+    },
+
+    async removeCollaborator(reportId, engineerId) {
+        const res = await this.safeFetch(`${API_BASE}/reviews/report/${reportId}/collaborators/${engineerId}`, {
+            method: 'DELETE',
+            headers: this.getHeaders()
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || 'Failed to remove collaborator.');
+        return data;
+    },
+
+    async transferLeadEngineer(reportId, newLeadId, reason) {
+        const res = await this.safeFetch(`${API_BASE}/reviews/report/${reportId}/transfer-lead`, {
+            method: 'POST',
+            headers: this.getHeaders(),
+            body: JSON.stringify({ new_lead_engineer_id: newLeadId, transfer_reason: reason })
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || 'Failed to transfer lead engineer.');
+        return data;
+    },
+
     // Engineer Defect Review & Assessment Validation (FR-06)
     async submitReview(assessmentId, reviewData) {
         const res = await this.safeFetch(`${API_BASE}/reviews/${assessmentId}`, {
@@ -641,7 +695,10 @@ const Api = {
         });
         const data = await res.json();
         if (!res.ok) {
-            throw new Error(data.error || 'Failed to save inspection notebook.');
+            const err = new Error(data.error || 'Failed to save inspection notebook.');
+            err.status = res.status;
+            err.conflict = (res.status === 409);
+            throw err;
         }
         return data;
     }
