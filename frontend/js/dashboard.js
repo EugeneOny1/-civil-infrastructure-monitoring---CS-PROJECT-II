@@ -92,8 +92,21 @@ const Dashboard = {
                 }
             };
 
+            const onWardChange = () => {
+                const cVal = countySelect.value;
+                const wVal = wardSelect ? wardSelect.value : 'all';
+                this.loadKpis(cVal, wVal);
+                this.loadDegradationChart();
+                this.loadCriticalCalendar();
+                this.loadReportsList();
+                if (this.hasUserQueriedIntelligence) {
+                    this.loadFocusedIntelligence(this.activeIntelligenceMode, this.activeIntelligenceQuery);
+                }
+            };
+
             countySelect.addEventListener('change', onCountyChange);
             if (subCountySelect) subCountySelect.addEventListener('change', onSubCountyChange);
+            if (wardSelect) wardSelect.addEventListener('change', onWardChange);
         } catch (e) {
             console.error("[Dashboard] Geography load error:", e);
         }
@@ -182,30 +195,6 @@ const Dashboard = {
         if (rangeSelect) rangeSelect.addEventListener('change', () => this.loadDegradationChart());
         if (viewBySelect) viewBySelect.addEventListener('change', () => this.loadDegradationChart());
 
-        if (countySelect) countySelect.addEventListener('change', () => {
-            const cVal = countySelect.value;
-            const wVal = wardSelect ? wardSelect.value : 'all';
-            this.loadKpis(cVal, wVal);
-            this.loadDegradationChart();
-            this.loadCriticalCalendar();
-            this.loadReportsList();
-            if (this.hasUserQueriedIntelligence) {
-                this.loadFocusedIntelligence(this.activeIntelligenceMode, this.activeIntelligenceQuery);
-            }
-        });
-
-        if (wardSelect) wardSelect.addEventListener('change', () => {
-            const cVal = countySelect ? countySelect.value : 'all';
-            const wVal = wardSelect.value;
-            this.loadKpis(cVal, wVal);
-            this.loadDegradationChart();
-            this.loadCriticalCalendar();
-            this.loadReportsList();
-            if (this.hasUserQueriedIntelligence) {
-                this.loadFocusedIntelligence(this.activeIntelligenceMode, this.activeIntelligenceQuery);
-            }
-        });
-
         if (calRangeSelect) calRangeSelect.addEventListener('change', () => {
             this.loadCriticalCalendar();
             if (this.hasUserQueriedIntelligence) {
@@ -253,14 +242,23 @@ const Dashboard = {
     },
 
     async loadDashboardData() {
-        await Promise.all([
+        const results = await Promise.allSettled([
             this.loadKpis(),
             this.loadDegradationChart(),
             this.loadCriticalCalendar(),
             this.loadReportsList()
         ]);
+        results.forEach((res, idx) => {
+            if (res.status === 'rejected') {
+                console.error(`[Dashboard] Component ${idx} error:`, res.reason);
+            }
+        });
         if (this.hasUserQueriedIntelligence) {
-            await this.loadFocusedIntelligence(this.activeIntelligenceMode, this.activeIntelligenceQuery);
+            try {
+                await this.loadFocusedIntelligence(this.activeIntelligenceMode, this.activeIntelligenceQuery);
+            } catch (err) {
+                console.error("[Dashboard] Focused intelligence error:", err);
+            }
         }
     },
 
@@ -564,6 +562,12 @@ const Dashboard = {
             this.renderCriticalCalendarGrid(calData);
         } catch (e) {
             console.error("Critical calendar load error:", e);
+            const stage = document.getElementById('criticalCalendarCarouselStage');
+            const currentMonthLabel = document.getElementById('calCurrentMonthLabel');
+            const subTitle = document.getElementById('calSubtitle');
+            if (currentMonthLabel) currentMonthLabel.textContent = 'Unavailable';
+            if (subTitle) subTitle.textContent = 'Calendar data temporarily unavailable.';
+            if (stage) stage.innerHTML = '<div style="padding:2rem; text-align:center; color:#94a3b8; font-size:0.85rem; width:100%;">Calendar data could not be retrieved.</div>';
         }
     },
 
@@ -1469,7 +1473,6 @@ const Dashboard = {
             });
         } catch (e) {
             console.error("Queue load error:", e);
-        }
         }
     }
 };

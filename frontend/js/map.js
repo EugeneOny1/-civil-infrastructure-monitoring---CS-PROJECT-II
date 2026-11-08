@@ -840,43 +840,40 @@ const DefectMap = {
             const lng = Number(adv.longitude);
             if (isNaN(lat) || isNaN(lng) || lat === 0 || lng === 0) return;
 
-            // Section 11: Independent Safety Advisory Marker Behavior
-            // When an advisory shares coordinates with a defect report, apply a subtle geographic offset (+0.00018 lat, +0.00018 lng)
-            // so both the circular defect marker and triangular advisory marker sit side-by-side (● Defect   △ Advisory).
-            // Both are distinctly visible and clickable; neither intercepts or blocks the other.
-            let renderLat = lat;
-            let renderLng = lng;
+            // Screen-space pixel offset positioning:
+            // Advisory remains geographically bound to the EXACT same defect coordinates [lat, lng],
+            // but when co-located with a defect report, an iconAnchor / screen offset is applied ([16, 32], popup [0, -32])
+            // so the triangular warning marker floats ~16px directly above the circular defect marker.
+            // Neither drifts across roads or parcels during zoom, and both markers remain individually clickable.
             const isColocated = adv._has_composite_marker || Boolean(adv.report_id) || (this.reportsData && this.reportsData.some(r => {
                 const rLat = Number(r.latitude);
                 const rLng = Number(r.longitude);
                 return Math.abs(rLat - lat) < 0.0002 && Math.abs(rLng - lng) < 0.0002;
             }));
 
-            if (isColocated) {
-                renderLat = lat + 0.00018;
-                renderLng = lng + 0.00018;
-            }
+            const iconAnchor = isColocated ? [16, 32] : [16, 16];
+            const popupAnchor = isColocated ? [0, -32] : [0, -16];
 
-            // Standalone / offset advisory: Render triangular hazard marker on safetyAdvisoryPane
+            // Render triangular hazard marker on safetyAdvisoryPane: white triangle, dark symbol (#0f172a), red border (#b91c1c)
             const advIcon = L.divIcon({
                 className: 'safety-advisory-triangle-icon',
                 html: `
-                    <div class="safety-advisory-pin-wrap safety-advisory-triangle-wrap" style="position:relative; width:34px; height:34px; cursor:pointer;" title="Safety Advisory: ${adv.category || 'Road Hazard Alert'}">
-                        <svg viewBox="0 0 36 32" width="34" height="32" style="filter: drop-shadow(0 2px 5px rgba(220,38,38,0.4));">
-                            <path d="M18 3 L34 29 L2 29 Z" fill="#ffffff" stroke="#dc2626" stroke-width="2.8" stroke-linejoin="round"/>
+                    <div class="safety-advisory-pin-wrap safety-advisory-triangle-wrap ${isColocated ? 'is-colocated-advisory' : ''}" style="position:relative; width:32px; height:32px; cursor:pointer;" title="Safety Advisory: ${adv.category || 'Road Hazard Alert'}">
+                        <svg viewBox="0 0 36 32" width="32" height="30" style="filter: drop-shadow(0 2px 4px rgba(0,0,0,0.3)); display:block;">
+                            <path d="M18 3 L34 29 L2 29 Z" fill="#ffffff" stroke="#b91c1c" stroke-width="2.6" stroke-linejoin="round"/>
                         </svg>
-                        <div style="position:absolute; inset:0; display:flex; align-items:center; justify-content:center; padding-top:6px; color:#b91c1c; font-size:16px; pointer-events:none;">
+                        <div style="position:absolute; inset:0; display:flex; align-items:center; justify-content:center; padding-top:6px; color:#0f172a; font-size:15px; font-weight:700; pointer-events:none;">
                             <i class='bx bx-error-alt'></i>
                         </div>
                     </div>
                 `,
-                iconSize: [34, 34],
-                iconAnchor: [17, 17],
-                popupAnchor: [0, -17]
+                iconSize: [32, 32],
+                iconAnchor: iconAnchor,
+                popupAnchor: popupAnchor
             });
 
-            // Safety Advisory marker placed in dedicated pane (z-index 675)
-            const marker = L.marker([renderLat, renderLng], {
+            // Safety Advisory marker placed in dedicated pane (z-index 675) at exact coordinates
+            const marker = L.marker([lat, lng], {
                 icon: advIcon,
                 pane: 'safetyAdvisoryPane'
             });

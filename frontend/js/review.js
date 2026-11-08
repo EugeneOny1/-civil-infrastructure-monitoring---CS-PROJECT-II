@@ -851,18 +851,27 @@ const Review = {
         const galleryContainer = document.getElementById('reviewImageGallery');
         const thumbList = document.getElementById('reviewThumbnailList');
         const carouselNav = document.getElementById('reviewCarouselNav');
+        const carouselOverlay = document.getElementById('reviewCarouselOverlay');
         const dotsContainer = document.getElementById('reviewPaginationDots');
         const counterEl = document.getElementById('reviewGalleryCounter');
         const titleEl = document.getElementById('reviewGalleryTitle');
-        if (!galleryContainer || !thumbList) return;
 
         const images = (data.images && data.images.length > 0) ? data.images : (data.image ? [data.image] : []);
 
         if (images.length <= 1) {
-            galleryContainer.classList.add('hidden');
-            galleryContainer.style.display = 'none';
-            if (carouselNav) carouselNav.classList.add('hidden');
-            thumbList.innerHTML = '';
+            if (galleryContainer) {
+                galleryContainer.classList.add('hidden');
+                galleryContainer.style.display = 'none';
+            }
+            if (carouselNav) {
+                carouselNav.classList.add('hidden');
+                carouselNav.style.display = 'none';
+            }
+            if (carouselOverlay) {
+                carouselOverlay.classList.add('hidden');
+                carouselOverlay.style.display = 'none';
+            }
+            if (thumbList) thumbList.innerHTML = '';
             if (dotsContainer) dotsContainer.innerHTML = '';
             const img = images[0] || {};
             const ass = (data.assessments && data.assessments[0]) || data.assessment || {};
@@ -875,32 +884,19 @@ const Review = {
             titleEl.textContent = isSameDefect ? "Multi-View Perspectives:" : "Corridor Observations:";
         }
 
-        galleryContainer.classList.remove('hidden');
-        galleryContainer.style.display = 'flex';
-        if (carouselNav) carouselNav.classList.remove('hidden');
-
-        // Render thumbnails
-        thumbList.innerHTML = images.map((img, idx) => {
-            const isActive = idx === this.activeImageIndex;
-            const activeStyle = isActive
-                ? 'border: 2px solid #0284c7; box-shadow: 0 0 0 2px rgba(2, 132, 199, 0.4);'
-                : 'border: 2px solid transparent; opacity: 0.7;';
-            const angleName = img.original_filename || `Photo ${idx + 1}`;
-            const thumbUrl = window.Api?.resolveImageUrl(img.url) || img.url;
-            return `
-                <button type="button" class="review-thumb-btn ${isActive ? 'active' : ''}" data-index="${idx}" title="${angleName}" style="cursor: pointer; padding: 0; background: none; border-radius: 4px; overflow: hidden; width: 68px; height: 50px; flex-shrink: 0; ${activeStyle}">
-                    <img src="${thumbUrl}" alt="${angleName}" style="width: 100%; height: 100%; object-fit: cover;" onerror="this.style.display='none'; this.parentElement.innerHTML='<span style=\\'font-size:10px; color:#94a3b8; display:flex; align-items:center; justify-content:center; height:100%; background:#1e293b;\\'>No Image</span>';">
-                </button>
-            `;
-        }).join('');
-
-        thumbList.querySelectorAll('.review-thumb-btn').forEach(btn => {
-            btn.addEventListener('click', (e) => {
-                const targetBtn = e.currentTarget;
-                const idx = parseInt(targetBtn.getAttribute('data-index'), 10);
-                this.selectActiveImage(idx);
-            });
-        });
+        // Hide large separate thumbnail strip slab; show sleek integrated floating controls
+        if (galleryContainer) {
+            galleryContainer.classList.add('hidden');
+            galleryContainer.style.display = 'none';
+        }
+        if (carouselNav) {
+            carouselNav.classList.remove('hidden');
+            carouselNav.style.display = 'flex';
+        }
+        if (carouselOverlay) {
+            carouselOverlay.classList.remove('hidden');
+            carouselOverlay.style.display = 'flex';
+        }
 
         // Hook prev / next carousel buttons
         const btnPrev = document.getElementById('btnReviewPrev');
@@ -982,32 +978,39 @@ const Review = {
         const activeImg = images[index] || images[0] || {};
         const activeAss = (data.assessments && data.assessments[index]) || (index === 0 ? data.assessment : {}) || {};
 
-        // Update counter & title
+        // Update floating carousel counter
         const counterEl = document.getElementById('reviewGalleryCounter');
         if (counterEl) {
             counterEl.textContent = `Photo ${index + 1} of ${images.length}`;
         }
 
-        // Update pagination dots
+        // Update floating carousel pagination dots
         const dotsContainer = document.getElementById('reviewPaginationDots');
         if (dotsContainer) {
             dotsContainer.innerHTML = images.map((_, idx) => {
                 const isActive = idx === index;
-                const dotColor = isActive ? '#38bdf8' : '#475569';
-                const dotWidth = isActive ? '18px' : '6px';
-                return `<span style="display:inline-block; width:${dotWidth}; height:6px; border-radius:3px; background:${dotColor}; transition:all 0.2s ease;"></span>`;
+                const dotColor = isActive ? '#38bdf8' : 'rgba(255, 255, 255, 0.45)';
+                const dotWidth = isActive ? '16px' : '6px';
+                return `<button type="button" data-dot-index="${idx}" style="cursor: pointer; padding: 0; border: none; outline: none; display: inline-block; width: ${dotWidth}; height: 6px; border-radius: 3px; background: ${dotColor}; transition: all 0.2s ease; pointer-events: auto;" title="View photo ${idx + 1}"></button>`;
             }).join('');
+            dotsContainer.querySelectorAll('button[data-dot-index]').forEach(btn => {
+                btn.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    const dotIdx = parseInt(e.currentTarget.getAttribute('data-dot-index'), 10);
+                    this.selectActiveImage(dotIdx);
+                });
+            });
         }
 
-        // Update active class and styles on thumbnails
+        // Update active class and styles on thumbnails (if present in DOM)
         const thumbList = document.getElementById('reviewThumbnailList');
         if (thumbList) {
             thumbList.querySelectorAll('.review-thumb-btn').forEach((btn, idx) => {
                 const isActive = idx === index;
                 btn.classList.toggle('active', isActive);
                 btn.style.border = isActive ? '2px solid #0284c7' : '2px solid transparent';
-                btn.style.boxShadow = isActive ? '0 0 0 2px rgba(2, 132, 199, 0.4)' : 'none';
                 btn.style.opacity = isActive ? '1' : '0.7';
+                btn.style.boxShadow = isActive ? '0 0 0 2px rgba(2, 132, 199, 0.4)' : 'none';
             });
         }
 
@@ -1551,6 +1554,8 @@ const Review = {
         if (drawerProgress) drawerProgress.textContent = countText;
         const pillProgress = document.getElementById('notebookProgressCount');
         if (pillProgress) pillProgress.textContent = countText;
+        const underReviewProgress = document.getElementById('reviewUnderReviewProgress');
+        if (underReviewProgress) underReviewProgress.textContent = countText;
 
         container.innerHTML = items.map((item, idx) => {
             const isCompleted = Boolean(item.completed || item.checked || item.status === 'completed');
@@ -1611,6 +1616,7 @@ const Review = {
                     it.completed_by = e.target.checked ? authorName : null;
                     it.completed_at = e.target.checked ? new Date().toISOString() : null;
                     this.renderChecklistItems();
+                    this.debouncedSaveNotebook();
                 }
             });
         });
@@ -1635,6 +1641,7 @@ const Review = {
                     it.na_by = null;
                     it.na_at = null;
                     this.renderChecklistItems();
+                    this.debouncedSaveNotebook();
                 }
             });
         });
@@ -1645,6 +1652,7 @@ const Review = {
                 const idx = parseInt(e.currentTarget.getAttribute('data-remove-index'), 10);
                 this.currentNotebook.checklist.splice(idx, 1);
                 this.renderChecklistItems();
+                this.debouncedSaveNotebook();
             });
         });
     },
@@ -1948,9 +1956,24 @@ const Review = {
         }
     },
 
-    async saveInspectionNotebook() {
-        if (!this.currentReport) {
-            window.App?.showToast("No active report loaded to save notebook.", true);
+    _saveDebounceTimer: null,
+    debouncedSaveNotebook() {
+        const saveStatus = document.getElementById('drawerSaveStatus');
+        if (saveStatus) {
+            saveStatus.textContent = 'Saving...';
+            saveStatus.style.color = '#f59e0b';
+        }
+        if (this._saveDebounceTimer) clearTimeout(this._saveDebounceTimer);
+        this._saveDebounceTimer = setTimeout(() => {
+            this.saveInspectionNotebook(true);
+        }, 800);
+    },
+
+    async saveInspectionNotebook(isAutosave = false) {
+        if (!this.currentReport || !this.currentNotebook) {
+            if (!isAutosave) {
+                window.App?.showToast("No active report loaded to save notebook.", true);
+            }
             return;
         }
 
@@ -1980,9 +2003,15 @@ const Review = {
             expected_updated_at
         };
 
+        const saveStatus = document.getElementById('drawerSaveStatus');
+        const btnSave = document.getElementById('btnSaveInspectionNotebook');
+
         try {
-            const btnSave = document.getElementById('btnSaveInspectionNotebook');
-            if (btnSave) {
+            if (saveStatus) {
+                saveStatus.textContent = 'Saving...';
+                saveStatus.style.color = '#f59e0b';
+            }
+            if (btnSave && !isAutosave) {
                 btnSave.disabled = true;
                 btnSave.innerHTML = "<i class='bx bx-loader-alt bx-spin'></i> Saving...";
             }
@@ -1994,27 +2023,39 @@ const Review = {
                     this.currentReport.metadata.inspection_notebook = res.inspection_notebook;
                 }
             }
-            window.App?.showToast("Inspection notebook saved successfully.");
 
-            if (btnSave) {
-                btnSave.disabled = false;
-                btnSave.innerHTML = "<i class='bx bx-check'></i> Saved";
-                setTimeout(() => {
-                    btnSave.innerHTML = "<i class='bx bx-save'></i> Save Notebook";
-                }, 2000);
+            if (saveStatus) {
+                saveStatus.textContent = 'Saved';
+                saveStatus.style.color = '#059669';
+            }
+
+            if (!isAutosave) {
+                window.App?.showToast("Inspection notebook saved successfully.");
+                if (btnSave) {
+                    btnSave.disabled = false;
+                    btnSave.innerHTML = "<i class='bx bx-check'></i> Saved";
+                    setTimeout(() => {
+                        btnSave.innerHTML = "<i class='bx bx-save'></i> Save Notebook";
+                    }, 2000);
+                }
             }
         } catch (err) {
             console.error("[Review] Failed saving inspection notebook:", err);
-            if (err.conflict || err.status === 409) {
-                window.App?.showToast("Notebook was modified by another engineer in the team. Refreshing latest inspection record...", true);
-                await this.loadReportForReview(reportId);
-            } else {
-                window.App?.showToast(err.message || "Failed to save inspection notebook.", true);
+            if (saveStatus) {
+                saveStatus.textContent = 'Save Error';
+                saveStatus.style.color = '#ef4444';
             }
-            const btnSave = document.getElementById('btnSaveInspectionNotebook');
-            if (btnSave) {
-                btnSave.disabled = false;
-                btnSave.innerHTML = "<i class='bx bx-save'></i> Save Notebook";
+            if (!isAutosave) {
+                if (err.conflict || err.status === 409) {
+                    window.App?.showToast("Notebook was modified by another engineer in the team. Refreshing latest inspection record...", true);
+                    await this.loadReportForReview(reportId);
+                } else {
+                    window.App?.showToast(err.message || "Failed to save inspection notebook.", true);
+                }
+                if (btnSave) {
+                    btnSave.disabled = false;
+                    btnSave.innerHTML = "<i class='bx bx-save'></i> Save Notebook";
+                }
             }
         }
     }

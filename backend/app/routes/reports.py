@@ -694,7 +694,7 @@ def list_reports(current_user):
             query['status'] = InfrastructureReport.STATUS_RESOLVED
     elif status_filter:
         query['status'] = InfrastructureReport.normalize_lifecycle_status(status_filter)
-    elif exclude_status:
+    elif exclude_status and exclude_status.lower() != 'none':
         query['status'] = {'$ne': InfrastructureReport.normalize_lifecycle_status(exclude_status)}
 
     reports = db_service.find('infrastructure_reports', query, sort_key='date_submitted', reverse=True)

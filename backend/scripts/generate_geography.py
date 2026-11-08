@@ -455,3 +455,4 @@ if __name__ == '__main__':
     with open(out_path, 'w', encoding='utf-8') as f:
         json.dump(data, f, indent=2, ensure_ascii=False)
     print(f"Generated {out_path} with {len(data['counties'])} counties.")
+
