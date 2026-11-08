@@ -550,6 +550,12 @@ const DefectMap = {
                             Inspect in Defect Review →
                         </button>
                     </div>
+                ` : point.is_owner ? `
+                    <div style="margin-top:8px; border-top:1px solid #f1f5f9; padding-top:6px;">
+                        <button type="button" class="btn-secondary btn-sm" style="width:100%; font-size:0.78rem; padding:4px 8px; border-radius:4px; border: 1px solid #cbd5e1; color: #0284c7; font-weight:600;" onclick="window.App.navigateTo('view-tracking', { reportId: '${point.report_id}' })">
+                            View in My Reports Tracking →
+                        </button>
+                    </div>
                 ` : ''}
             </div>
         `;
@@ -925,12 +931,75 @@ const DefectMap = {
     openReportDetails(reportId) {
         if (!reportId) return;
         const user = window.Auth?.getUser();
+
+        // 1. Authenticated Verified Engineer or Admin: Navigate directly to Defect Review
         if (user && (user.role === 'engineer' || user.role === 'admin')) {
             if (window.Review) window.Review.targetReportId = reportId;
             window.App?.navigateTo('view-review', { reportId: reportId });
-        } else {
-            window.App?.navigateTo('view-tracking', { reportId: reportId });
+            return;
         }
+
+        // 2. Check if the authenticated Citizen owns this report
+        const repPoint = (this.reportsData || []).find(r => r.report_id === reportId || r._id === reportId || r.display_id === reportId);
+        const isOwner = user && (
+            (repPoint && repPoint.is_owner === true) ||
+            (window.App?.citizenReports && window.App.citizenReports.some(r => (r.report && (r.report.report_id === reportId || String(r.report._id) === reportId))))
+        );
+
+        if (isOwner) {
+            // Citizen who OWNS the report: Navigate to their personal My Reports tracking card
+            window.App?.navigateTo('view-tracking', { reportId: reportId });
+            return;
+        }
+
+        // 3. Citizen who does NOT own report, or Anonymous / Logged-out user:
+        // Remain on Infrastructure Map, pan/zoom to the associated defect marker, and open existing defect popup
+        this.focusDefectMarkerOnMap(reportId, repPoint ? repPoint.latitude : null, repPoint ? repPoint.longitude : null);
+    },
+
+    focusDefectMarkerOnMap(reportId, lat, lng) {
+        if (!this.map) return;
+        this.invalidateSize();
+
+        // Close any currently open advisory popup
+        this.map.closePopup();
+
+        const marker = (reportId && this.reportMarkers[reportId]) ||
+                       (reportId && this.reportMarkers[String(reportId)]) ||
+                       (reportId && this.reportMarkers[`#${reportId}`]);
+
+        let targetPos = marker ? marker.getLatLng() : null;
+        if (!targetPos && lat !== null && lng !== null && !isNaN(Number(lat)) && !isNaN(Number(lng))) {
+            targetPos = [Number(lat), Number(lng)];
+        }
+
+        if (targetPos) {
+            this.map.setView(targetPos, Math.max(this.map.getZoom(), 16), { animate: true });
+        }
+
+        const openAndHighlight = (m) => {
+            if (!m) return;
+            m.openPopup();
+            const el = m.getElement();
+            if (el) {
+                el.classList.add('marker-highlight-pulse');
+                setTimeout(() => el.classList.remove('marker-highlight-pulse'), 3000);
+            }
+        };
+
+        setTimeout(() => {
+            if (marker) {
+                if (this.markerCluster && typeof this.markerCluster.hasLayer === 'function' && this.markerCluster.hasLayer(marker)) {
+                    if (typeof this.markerCluster.zoomToShowLayer === 'function') {
+                        this.markerCluster.zoomToShowLayer(marker, () => {
+                            openAndHighlight(marker);
+                        });
+                        return;
+                    }
+                }
+                openAndHighlight(marker);
+            }
+        }, 250);
     },
 
     // Section 17: Unified advisory opening function shared by direct map-click and notification deep-link

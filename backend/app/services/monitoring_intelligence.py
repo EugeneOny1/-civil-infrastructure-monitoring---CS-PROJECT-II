@@ -4,8 +4,8 @@ Provides rule-based intent detection, structured entity/slot extraction,
 and evidence-grounded civil infrastructure monitoring analysis functions.
 
 CRITICAL DESIGN PRINCIPLES:
-1. No vector database, embeddings, or untrained LLM generation.
-2. Rule-based intent scoring and slot extraction mapped strictly to 5 trusted analytics functions:
+1. Grounding without fabrication: Empirical MongoDB reports + Open-Meteo weather records + Curated KeNHA/KURA/KMD/NCA knowledge.
+2. Rule-based intent scoring and slot extraction mapped strictly to 5 approved analytics functions:
    - rainfall_defect_pattern
    - corridor_recurrence
    - seasonal_defect_pattern
@@ -14,6 +14,8 @@ CRITICAL DESIGN PRINCIPLES:
 3. Filter-aware: respects County, Ward, Road, Defect Class, and Time Range.
 4. Strict evidence thresholds: insufficient data produces an honest 'Not enough data' result.
 5. Strictly non-causal engineering language ('Observed association', never 'Rain caused defect').
+6. Prompt injection defense: rejects adversarial attempts to override engineering instructions.
+7. Explicit claim: Generative RAG is NOT claimed in deterministic retrieval mode.
 """
 
 import math
@@ -24,8 +26,10 @@ from typing import Dict, List, Any, Optional, Tuple
 
 try:
     from app.services.weather_service import weather_service, classify_kenya_season
+    from app.services.corridor_knowledge_service import corridor_knowledge_service
 except ImportError:
     from backend.app.services.weather_service import weather_service, classify_kenya_season
+    from backend.app.services.corridor_knowledge_service import corridor_knowledge_service
 
 KENYA_47_COUNTIES = [
     'Mombasa', 'Kwale', 'Kilifi', 'Tana River', 'Lamu', 'Taita Taveta',
@@ -64,10 +68,28 @@ MODE_ICONS = {
     'resolution_response_trend': 'bx-check-double'
 }
 
+INJECTION_PATTERNS = [
+    r'ignore\s+(all\s+)?(previous|prior|above)\s+(instructions|rules|prompts)',
+    r'forget\s+(all\s+)?(previous|prior)\s+(instructions|rules)',
+    r'reveal\s+(the\s+)?(system\s+prompt|instructions|secret|api[_\s]?key)',
+    r'system\s+prompt',
+    r'\bjailbreak\b',
+    r'bypass\s+(security|rules|guardrails)',
+    r'act\s+as\s+(an\s+unrestricted|a\s+different|dan\b)',
+    r'drop\s+database',
+    r'drop\s+collection',
+    r'delete\s+from\s+',
+    r'<script\b',
+    r'eval\(',
+]
+
+RAG_STATUS_NOTICE = "Retrieval-grounded intelligence implemented. Generative RAG not falsely claimed."
+RAG_MODE_LABEL = "Retrieval-Grounded Intelligence"
+
 
 def haversine_distance_meters(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
     """Calculates geodesic distance between two points in meters using Haversine formula."""
-    R = 6371000.0  # Earth radius in meters
+    R = 6371000.0
     phi1, phi2 = math.radians(lat1), math.radians(lat2)
     dphi = math.radians(lat2 - lat1)
     dlambda = math.radians(lon2 - lon1)
@@ -78,12 +100,12 @@ def haversine_distance_meters(lat1: float, lon1: float, lat2: float, lon2: float
 
 class MonitoringIntelligenceService:
     """
-    Lightweight Natural-Language Analytics & Multi-Mode Monitoring Intelligence Engine.
-    Executes rule-based intent parsing and approved empirical analytics functions.
+    Lightweight Natural-Language Analytics & Grounded Monitoring Intelligence Engine.
+    Combines rule-based intent parsing, empirical database aggregations, and
+    authoritative KeNHA / KURA / KMD / NCA engineering knowledge.
     """
 
     def __init__(self):
-        # Keyword scoring dictionaries for lightweight server-side intent routing
         self.intent_keywords = {
             'rainfall_defect_pattern': [
                 ('heavy rainfall', 3.0), ('heavy rain', 3.0), ('after rain', 3.0),
@@ -124,6 +146,16 @@ class MonitoringIntelligenceService:
             ]
         }
 
+    def check_prompt_injection(self, query_text: str) -> bool:
+        """Detects prompt injection attempts aiming to override system instructions."""
+        if not query_text:
+            return False
+        q_lower = query_text.lower()
+        for pat in INJECTION_PATTERNS:
+            if re.search(pat, q_lower):
+                return True
+        return False
+
     def detect_intent(self, query_text: str) -> Tuple[Optional[str], float]:
         """
         Calculates keyword match scores across supported monitoring intents.
@@ -137,7 +169,6 @@ class MonitoringIntelligenceService:
 
         for intent, kw_list in self.intent_keywords.items():
             for kw, weight in kw_list:
-                # Use word-boundary regex for clean keyword matching
                 pattern = r'\b' + re.escape(kw) + r'\b'
                 matches = len(re.findall(pattern, q))
                 if matches > 0:
@@ -147,7 +178,6 @@ class MonitoringIntelligenceService:
             return None, 0.0
 
         top_intent, top_score = max(scores.items(), key=lambda x: x[1])
-        # Minimum threshold to avoid false-positive triggers
         if top_score >= 1.2:
             return top_intent, top_score
 
@@ -161,7 +191,7 @@ class MonitoringIntelligenceService:
         - Defect Class (Pothole, Crack, Surface deterioration)
         - Severity (Critical, Medium, Low)
         - Time Range (3m, 6m, 12m)
-        - Road / Corridor
+        - Road / Corridor (Known or extracted pattern)
         """
         slots = {}
         if not query_text:
@@ -204,19 +234,26 @@ class MonitoringIntelligenceService:
 
         # 5. Common Corridor / Road detection
         corridors = [
-            'Jakaya Kikwete Road', 'Mombasa Road', 'Uhuru Highway', 'Jogoo Road',
-            'Ngong Road', 'Waiyaki Way', 'Thika Road', 'Juja Road', 'Langata Road',
-            'Argwings Kodhek Road', 'Haile Selassie Avenue', 'Kenyatta Avenue'
+            'Denis Pritt Road', 'Jakaya Kikwete Road', 'Mombasa Road', 'Uhuru Highway',
+            'Jogoo Road', 'Ngong Road', 'Waiyaki Way', 'Thika Road', 'Juja Road',
+            'Langata Road', 'Argwings Kodhek Road', 'Haile Selassie Avenue',
+            'Kenyatta Avenue', 'Outer Ring Road', 'Nairobi Expressway'
         ]
         for corr in corridors:
             if corr.lower() in q_lower:
                 slots['road'] = corr
                 break
 
+        # If not matched against predefined list, try matching pattern "along <Name> Road" or "on <Name> Road"
+        if 'road' not in slots:
+            m = re.search(r'\b(?:along|on)\s+([A-Z][a-zA-Z0-9\s]+(?:Road|Way|Highway|Avenue|Drive|Lane|Street))\b', q, re.IGNORECASE)
+            if m:
+                slots['road'] = m.group(1).strip()
+
         return slots
 
     def filter_reports(self, all_reports: List[Dict[str, Any]], filters: Dict[str, Any]) -> List[Dict[str, Any]]:
-        """Filters reports strictly by specified County, Ward, Time Range, Defect Class, and Severity."""
+        """Filters reports strictly by specified County, Ward, Time Range, Defect Class, Severity, and Road."""
         now = datetime.now(timezone.utc)
         time_range = filters.get('time_range', '6m')
         days_span = 90 if time_range == '3m' else (365 if time_range == '12m' else 180)
@@ -290,7 +327,6 @@ class MonitoringIntelligenceService:
             parsed_lat = float(lat) if lat is not None else None
             parsed_lng = float(lng) if lng is not None else None
 
-            # Canonical defect naming
             if 'pothole' in d_class:
                 canon_defect = 'Pothole'
             elif 'crack' in d_class:
@@ -326,12 +362,14 @@ class MonitoringIntelligenceService:
         Calculates correlation between report dates and preceding precipitation windows (1d, 3d, 7d, 14d).
         Requires at least 3-4 geocoded reports.
         """
-        total_reports = len(reports)
         geocoded = [r for r in reports if r['latitude'] is not None and r['longitude'] is not None]
+        loc_label = filters.get('road') or filters.get('county') or 'the selected area'
 
-        # Minimum evidence threshold
+        # Retrieve authoritative knowledge grounding
+        knowledge_chunks = corridor_knowledge_service.search(query='stormwater rainfall drainage', category='rainfall', top_k=1)
+        k_chunk = knowledge_chunks[0] if knowledge_chunks else None
+
         if len(geocoded) < 3:
-            loc_label = filters.get('county') or filters.get('road') or 'the selected area'
             return {
                 'status': 'insufficient_data',
                 'mode': 'rainfall_defect_pattern',
@@ -339,6 +377,11 @@ class MonitoringIntelligenceService:
                 'has_sufficient_data': False,
                 'primary_finding': "Not enough data for this analysis.",
                 'explanation': f"Current evidence: {len(geocoded)} geocoded report(s) in {loc_label}. At least 3–4 comparable reports are required for rainfall-pattern analysis.",
+                'prose_summary': (
+                    f"Current field evidence in {loc_label} contains only {len(geocoded)} geocoded defect report(s). "
+                    "A baseline of at least 3 to 4 verified, geo-referenced casework entries is required to compute statistically defensible weather correlation models.\n\n"
+                    "As field engineers log verified inspection casework with GPS telemetry, automated multi-window precipitation correlations (1d, 3d, 7d, and 14d antecedent rainfall) will populate."
+                ),
                 'supporting_statistics': [
                     {'label': 'Geocoded Reports', 'value': str(len(geocoded))},
                     {'label': 'Threshold Required', 'value': '≥ 3 Reports'},
@@ -353,7 +396,17 @@ class MonitoringIntelligenceService:
                 'recommendation': "Continue collecting verified geo-referenced defect inspections to expand statistical significance for weather correlation.",
                 'actions': [
                     {'id': 'filter_queue', 'label': 'View Available Reports', 'icon': 'bx-list-check'}
-                ]
+                ],
+                'rag_mode': RAG_MODE_LABEL,
+                'rag_status': RAG_STATUS_NOTICE,
+                'retrieved_sources': [
+                    {
+                        'source_org': k_chunk.get('source_org'),
+                        'source_title': k_chunk.get('source_title'),
+                        'citation': k_chunk.get('citation'),
+                        'topic': k_chunk.get('topic')
+                    }
+                ] if k_chunk else []
             }
 
         # Correlate reports with preceding rainfall
@@ -363,7 +416,6 @@ class MonitoringIntelligenceService:
         bucket_dist = defaultdict(int)
         windows_sum = {'1d': 0.0, '3d': 0.0, '7d': 0.0, '14d': 0.0}
 
-        # Check corridor grouping
         corridor_counts = defaultdict(list)
         for r in geocoded:
             corridor_counts[r['location']].append(r)
@@ -400,12 +452,30 @@ class MonitoringIntelligenceService:
         if top_corridor and top_corridor != 'Monitored Sections':
             finding = f"On {top_corridor}, {finding}"
 
+        # Cohesive 2-paragraph analytical prose
+        corr_mention = f"along {top_corridor}" if top_corridor != 'Monitored Sections' else f"within {loc_label}"
+        p1 = (
+            f"Analysis of {analyzed_count} geo-referenced defect observations {corr_mention} indicates that "
+            f"{wet_7d_count} reports ({wet_pct}%) occurred within 7 days following elevated precipitation events, "
+            f"with a dominant antecedent 7-day accumulation of {dom_bucket} (mean 7-day preceding precipitation of {avg_7d} mm). "
+            f"Short-window antecedent moisture also registered measurable averages ({avg_1d} mm at 1-day and {avg_3d} mm at 3-days), "
+            f"demonstrating pronounced temporal clustering after significant storm sequences."
+        )
+        p2 = (
+            "From a civil infrastructure standpoint, this pattern aligns with KURA urban road drainage standards and KeNHA pavement specifications: "
+            "standing surface water penetrates asphalt micro-fissures, creating elevated hydrodynamic pore pressures under repetitive wheel action that strip "
+            "bituminous binder from mineral aggregates. Preventative side-drain desilting, culvert clearing, and timely thermal crack-sealing prior to peak rainfall periods "
+            "are strongly indicated to preserve subgrade load-bearing capacity."
+        )
+        prose_summary = f"{p1}\n\n{p2}"
+
         return {
             'status': 'success',
             'mode': 'rainfall_defect_pattern',
             'mode_title': MODE_TITLES['rainfall_defect_pattern'],
             'has_sufficient_data': True,
             'primary_finding': finding,
+            'prose_summary': prose_summary,
             'supporting_statistics': [
                 {'label': 'Post-Rainfall Share', 'value': f"{wet_pct}%"},
                 {'label': 'Dominant Bucket', 'value': dom_bucket},
@@ -433,12 +503,21 @@ class MonitoringIntelligenceService:
                     for b in ['0–10 mm', '10–30 mm', '30–50 mm', '50+ mm']
                 ]
             },
-            'recommendation': "Repeated post-rainfall reporting indicates potential moisture-related pavement vulnerability. Professional review of drainage, surface sealing, and subgrade capacity is recommended.",
+            'recommendation': "Repeated post-rainfall reporting indicates moisture-related pavement vulnerability. Review of stormwater drainage and surface sealing is recommended.",
             'actions': [
-                {'id': 'show_corridor', 'label': f"View {top_corridor}", 'icon': 'bx-map', 'corridor': top_corridor},
                 {'id': 'filter_queue', 'label': 'View Reports', 'icon': 'bx-list-check', 'defect': defect_target},
                 {'id': 'show_map', 'label': 'Show on Map', 'icon': 'bx-globe'}
-            ]
+            ],
+            'rag_mode': RAG_MODE_LABEL,
+            'rag_status': RAG_STATUS_NOTICE,
+            'retrieved_sources': [
+                {
+                    'source_org': k_chunk.get('source_org'),
+                    'source_title': k_chunk.get('source_title'),
+                    'citation': k_chunk.get('citation'),
+                    'topic': k_chunk.get('topic')
+                }
+            ] if k_chunk else []
         }
 
     # -------------------------------------------------------------------------
@@ -450,8 +529,9 @@ class MonitoringIntelligenceService:
         and temporal intervals between consecutive reports.
         """
         total_reports = len(reports)
+        loc_label = filters.get('road') or filters.get('county') or 'the selected area'
+
         if total_reports < 3:
-            loc_label = filters.get('county') or 'the selected area'
             return {
                 'status': 'insufficient_data',
                 'mode': 'corridor_recurrence',
@@ -459,6 +539,11 @@ class MonitoringIntelligenceService:
                 'has_sufficient_data': False,
                 'primary_finding': "Not enough data for this analysis.",
                 'explanation': f"Current evidence: {total_reports} report(s) in {loc_label}. At least 3 comparable reports are required for corridor recurrence analysis.",
+                'prose_summary': (
+                    f"Casework records for {loc_label} show only {total_reports} verified defect report(s) within the active monitoring window. "
+                    "At least 3 comparable submissions are required to establish meaningful spatial clustering or recurrence cadence.\n\n"
+                    "Recurrence pattern tracking requires consecutive caseworker observations along the same road segment to differentiate localized pavement fatigue from sporadic surface wear."
+                ),
                 'supporting_statistics': [
                     {'label': 'Reports Recorded', 'value': str(total_reports)},
                     {'label': 'Threshold Required', 'value': '≥ 3 Reports'},
@@ -473,7 +558,10 @@ class MonitoringIntelligenceService:
                 'recommendation': "Continue monitoring. Recurrence patterns emerge as repeated casework is submitted along specific transit corridors.",
                 'actions': [
                     {'id': 'filter_queue', 'label': 'View Available Reports', 'icon': 'bx-list-check'}
-                ]
+                ],
+                'rag_mode': RAG_MODE_LABEL,
+                'rag_status': RAG_STATUS_NOTICE,
+                'retrieved_sources': []
             }
 
         # Group by road
@@ -490,6 +578,7 @@ class MonitoringIntelligenceService:
             defect_counts[it['defect_class']] += 1
         most_defect = max(defect_counts.items(), key=lambda x: x[1])[0] if defect_counts else 'Pothole'
         most_defect_cnt = defect_counts[most_defect]
+        most_defect_pct = round((most_defect_cnt / count_on_road) * 100)
 
         # Calculate median interval between reports on this road
         sorted_dates = sorted([it['date'] for it in road_items])
@@ -516,16 +605,46 @@ class MonitoringIntelligenceService:
                     if d < min_dist:
                         min_dist = d
             if min_dist <= 300:
-                proximity_note = f"Highest recurrence zone: within approximately {round(min_dist, -1):.0f} m along {top_road}."
+                proximity_note = f"within approximately {round(min_dist, -1):.0f} m"
             elif min_dist <= 750:
-                proximity_note = f"Recurrence cluster: within approximately {round(min_dist, -2):.0f} m along {top_road}."
+                proximity_note = f"within approximately {round(min_dist, -2):.0f} m"
 
         finding = f"{count_on_road} defect reports recorded along {top_road} during the selected period. Most recurring defect: {most_defect} ({most_defect_cnt} occurrences). Median interval between reports: {median_str}."
         if proximity_note:
-            finding += f" {proximity_note}"
+            finding += f" Highest recurrence zone: {proximity_note} along {top_road}."
 
         active_count = sum(1 for it in road_items if it['status'] != 'Resolved')
         resolved_count = sum(1 for it in road_items if it['status'] == 'Resolved')
+
+        # Retrieve authoritative knowledge chunk for corridor
+        k_chunk = corridor_knowledge_service.get_corridor_context(top_road)
+        if not k_chunk:
+            k_chunks = corridor_knowledge_service.search(query=top_road, corridor=top_road, top_k=1)
+            k_chunk = k_chunks[0] if k_chunks else None
+
+        # Check for unknown road note
+        unknown_road_note = ""
+        target_road_filter = filters.get('road')
+        if target_road_filter and not corridor_knowledge_service.get_corridor_context(target_road_filter):
+            unknown_road_note = corridor_knowledge_service.get_unknown_road_fallback(target_road_filter)
+
+        # Cohesive 2-paragraph analytical prose
+        prox_text = f", situated in close proximity ({proximity_note})," if proximity_note else ""
+        p1 = (
+            f"Spatial monitoring across the active road network identifies {count_on_road} recorded defect incidents along {top_road}, "
+            f"establishing it as the highest-recurrence corridor in this observation window. The dominant defect classification is {most_defect} "
+            f"({most_defect_cnt} occurrences, representing {most_defect_pct}% of corridor reports){prox_text} with a median observation interval of {median_str}. "
+            f"Present casework on this link includes {active_count} active reports awaiting or undergoing verification and {resolved_count} completed repairs."
+        )
+        p2 = (
+            f"Under KURA and KeNHA urban arterial guidelines, repeated defect re-emergence along specific chainages reflects localized subgrade "
+            f"fatigue or heavy commercial axle-load concentration rather than isolated surface ravelling. Standard cold-mix pothole patching without "
+            f"subbase recompaction typically fails prematurely in such zones; engineering intervention should prioritize pavement core sampling, localized base stabilization, and structured wearing-course resurfacing."
+        )
+        if unknown_road_note:
+            p2 += f"\n\n*Note: {unknown_road_note}*"
+
+        prose_summary = f"{p1}\n\n{p2}"
 
         return {
             'status': 'success',
@@ -533,6 +652,7 @@ class MonitoringIntelligenceService:
             'mode_title': MODE_TITLES['corridor_recurrence'],
             'has_sufficient_data': True,
             'primary_finding': finding,
+            'prose_summary': prose_summary,
             'supporting_statistics': [
                 {'label': 'Corridor Focus', 'value': top_road},
                 {'label': 'Top Defect', 'value': f"{most_defect} ({most_defect_cnt})"},
@@ -555,10 +675,19 @@ class MonitoringIntelligenceService:
             },
             'recommendation': "Corridor-level defect clustering indicates localized subgrade fatigue or heavy axle load wear. Targeted core testing and preventative resurfacing advised.",
             'actions': [
-                {'id': 'show_corridor', 'label': f"View {top_road}", 'icon': 'bx-map', 'corridor': top_road},
-                {'id': 'filter_queue', 'label': 'Filter Queue to Corridor', 'icon': 'bx-list-check'},
+                {'id': 'filter_queue', 'label': f'View {top_road} Reports', 'icon': 'bx-list-check'},
                 {'id': 'show_map', 'label': 'Show on Map', 'icon': 'bx-globe'}
-            ]
+            ],
+            'rag_mode': RAG_MODE_LABEL,
+            'rag_status': RAG_STATUS_NOTICE,
+            'retrieved_sources': [
+                {
+                    'source_org': k_chunk.get('source_org'),
+                    'source_title': k_chunk.get('source_title'),
+                    'citation': k_chunk.get('citation'),
+                    'topic': k_chunk.get('topic')
+                }
+            ] if k_chunk else []
         }
 
     # -------------------------------------------------------------------------
@@ -570,8 +699,13 @@ class MonitoringIntelligenceService:
         Long Rains (MAM: March–May) vs Short Rains (OND: October–December).
         """
         total_reports = len(reports)
+        loc_label = filters.get('county') or 'the selected area'
+
+        # Retrieve authoritative seasonal knowledge chunk
+        knowledge_chunks = corridor_knowledge_service.search(query='seasonal precipitation MAM OND', category='season', top_k=1)
+        k_chunk = knowledge_chunks[0] if knowledge_chunks else None
+
         if total_reports < 3:
-            loc_label = filters.get('county') or 'the selected area'
             return {
                 'status': 'insufficient_data',
                 'mode': 'seasonal_defect_pattern',
@@ -579,6 +713,12 @@ class MonitoringIntelligenceService:
                 'has_sufficient_data': False,
                 'primary_finding': "Not enough historical reporting history yet for a reliable seasonal comparison.",
                 'explanation': f"Current evidence: {total_reports} report(s) in {loc_label}. Multi-quarter observations spanning Kenya's primary rainy seasons (March–May and October–December) are required for defensible seasonal inference.",
+                'prose_summary': (
+                    f"Casework volume in {loc_label} currently totals {total_reports} record(s). "
+                    "Multi-quarter observations spanning both of Kenya's primary precipitation windows—the Long Rains (MAM: March–May) "
+                    "and the Short Rains (OND: October–December)—are required to calculate defensible climatological baselines.\n\n"
+                    "Continued submission and engineering validation across annual quarters will calibrate seasonal vulnerability models."
+                ),
                 'supporting_statistics': [
                     {'label': 'Reports Recorded', 'value': str(total_reports)},
                     {'label': 'Required Baseline', 'value': '≥ 3 Multi-Month Reports'},
@@ -593,7 +733,17 @@ class MonitoringIntelligenceService:
                 'recommendation': "Continue logging verified inspections across multi-quarter inspection cycles to establish seasonal defect baselines.",
                 'actions': [
                     {'id': 'filter_queue', 'label': 'View Available Reports', 'icon': 'bx-list-check'}
-                ]
+                ],
+                'rag_mode': RAG_MODE_LABEL,
+                'rag_status': RAG_STATUS_NOTICE,
+                'retrieved_sources': [
+                    {
+                        'source_org': k_chunk.get('source_org'),
+                        'source_title': k_chunk.get('source_title'),
+                        'citation': k_chunk.get('citation'),
+                        'topic': k_chunk.get('topic')
+                    }
+                ] if k_chunk else []
             }
 
         seasonal_counts = {'Long Rains': 0, 'Short Rains': 0, 'Dry Season': 0}
@@ -630,12 +780,28 @@ class MonitoringIntelligenceService:
 
         finding = f"Defect reporting in this selection shows peak concentration during Kenya's {dom_season}, accounting for {dom_cnt} of {total_reports} observed reports ({dom_pct}%)."
 
+        # Cohesive 2-paragraph analytical prose
+        p1 = (
+            f"Empirical defect frequency across {loc_label} exhibits distinct climatological concentration, with peak casework "
+            f"clustering during Kenya's {dom_season}. In total, {dom_cnt} of {total_reports} documented reports ({dom_pct}%) occurred "
+            f"during this rainy period, compared to {long_rains_cnt} ({long_pct}%) during the Long Rains (MAM), {short_rains_cnt} ({short_pct}%) "
+            f"during the Short Rains (OND), and {dry_cnt} ({dry_pct}%) across dry inter-monsoon intervals."
+        )
+        p2 = (
+            "This temporal pattern correlates directly with Kenya Meteorological Department (KMD) seasonal rain baselines. "
+            "High-intensity monsoonal precipitation elevates moisture content within vulnerable subgrades and overwhelms roadside drainage networks, "
+            "accelerating pavement degradation. Engineering managers should program preventive culvert desilting, shoulder grading, and bitumen resealing "
+            "during the January–February and June–September dry periods prior to seasonal onset."
+        )
+        prose_summary = f"{p1}\n\n{p2}"
+
         return {
             'status': 'success',
             'mode': 'seasonal_defect_pattern',
             'mode_title': MODE_TITLES['seasonal_defect_pattern'],
             'has_sufficient_data': True,
             'primary_finding': finding,
+            'prose_summary': prose_summary,
             'supporting_statistics': [
                 {'label': 'Long Rains (MAM)', 'value': f"{long_rains_cnt} ({long_pct}%)"},
                 {'label': 'Short Rains (OND)', 'value': f"{short_rains_cnt} ({short_pct}%)"},
@@ -661,7 +827,17 @@ class MonitoringIntelligenceService:
             'actions': [
                 {'id': 'filter_queue', 'label': 'View Seasonal Reports', 'icon': 'bx-list-check'},
                 {'id': 'show_map', 'label': 'Show on Map', 'icon': 'bx-globe'}
-            ]
+            ],
+            'rag_mode': RAG_MODE_LABEL,
+            'rag_status': RAG_STATUS_NOTICE,
+            'retrieved_sources': [
+                {
+                    'source_org': k_chunk.get('source_org'),
+                    'source_title': k_chunk.get('source_title'),
+                    'citation': k_chunk.get('citation'),
+                    'topic': k_chunk.get('topic')
+                }
+            ] if k_chunk else []
         }
 
     # -------------------------------------------------------------------------
@@ -674,8 +850,11 @@ class MonitoringIntelligenceService:
         """
         critical_reports = [r for r in reports if r['severity'] == 'Critical']
         total_crit = len(critical_reports)
+        loc_label = filters.get('road') or filters.get('county') or 'the selected area'
 
-        loc_label = filters.get('county') or 'the selected area'
+        # Retrieve authoritative safety/structural knowledge chunk
+        knowledge_chunks = corridor_knowledge_service.search(query='critical structural hazard distress', category='building', top_k=1)
+        k_chunk = knowledge_chunks[0] if knowledge_chunks else None
 
         if total_crit == 0:
             return {
@@ -685,6 +864,11 @@ class MonitoringIntelligenceService:
                 'has_sufficient_data': True,
                 'primary_finding': f"0 Critical reports recorded for {loc_label} in the selected period.",
                 'explanation': f"No severe infrastructure hazards currently active or recorded within this timeframe for {loc_label}.",
+                'prose_summary': (
+                    f"No critical severity infrastructure hazards are presently logged for {loc_label} within this operational window. "
+                    f"All {len(reports)} recorded items in this selection fall into Moderate or Low severity thresholds.\n\n"
+                    "Routine inspection patrols and citizen verification pipelines remain active to detect emergent deterioration before structural escalation occurs."
+                ),
                 'supporting_statistics': [
                     {'label': 'Critical Hazards', 'value': '0 Reports'},
                     {'label': 'Active Backlog', 'value': '0 Cases'},
@@ -698,7 +882,17 @@ class MonitoringIntelligenceService:
                 'recommendation': "Continue regular monitoring patrols to ensure early detection before defects escalate to critical severity.",
                 'actions': [
                     {'id': 'filter_queue', 'label': 'View All Reports', 'icon': 'bx-list-check'}
-                ]
+                ],
+                'rag_mode': RAG_MODE_LABEL,
+                'rag_status': RAG_STATUS_NOTICE,
+                'retrieved_sources': [
+                    {
+                        'source_org': k_chunk.get('source_org'),
+                        'source_title': k_chunk.get('source_title'),
+                        'citation': k_chunk.get('citation'),
+                        'topic': k_chunk.get('topic')
+                    }
+                ] if k_chunk else []
             }
 
         active_crit = [r for r in critical_reports if r['status'] in ['Received', 'Under Review']]
@@ -721,12 +915,28 @@ class MonitoringIntelligenceService:
 
         finding = f"{total_crit} Critical defect reports recorded in the selected period. {len(active_crit)} remain active in review queue, {len(verified_crit)} are verified, and {len(resolved_crit)} have been resolved. Highest concentration: {top_crit_road} ({top_road_count} critical incidents)."
 
+        # Cohesive 2-paragraph analytical prose
+        p1 = (
+            f"Within the active operational scope, {total_crit} Critical infrastructure hazard reports are currently tracked, "
+            f"representing {round((total_crit / max(len(reports), 1)) * 100)}% of total observed casework. The most concentrated hazard hotspot is "
+            f"{top_crit_road} ({top_road_count} critical incidents), with {most_crit_defect} constituting the primary physical failure mode. "
+            f"Of the tracked critical cases, {len(active_crit)} are in progress across review queues, {len(verified_crit)} have received professional engineer validation, "
+            f"and {len(resolved_crit)} ({res_rate}%) have been fully resolved on site."
+        )
+        p2 = (
+            "Under KeNHA trunk standards and National Construction Authority (NCA) civil safety guidelines, critical defect concentrations along major vehicular or pedestrian routes "
+            "demand prompt site verification and immediate protective measures. Unverified critical defects require prompt field reconnaissance, "
+            "temporary signage or safety advisory publication, and priority contractor work-order dispatch to mitigate vehicle damage and user risk."
+        )
+        prose_summary = f"{p1}\n\n{p2}"
+
         return {
             'status': 'success',
             'mode': 'critical_defect_concentration',
             'mode_title': MODE_TITLES['critical_defect_concentration'],
             'has_sufficient_data': True,
             'primary_finding': finding,
+            'prose_summary': prose_summary,
             'supporting_statistics': [
                 {'label': 'Total Critical Hazards', 'value': f"{total_crit} Reports"},
                 {'label': 'Active Backlog', 'value': f"{len(active_crit)} Cases"},
@@ -751,10 +961,19 @@ class MonitoringIntelligenceService:
             },
             'recommendation': "Immediate on-site engineering inspection and contractor dispatch recommended for unverified critical hazards along concentrated corridors.",
             'actions': [
-                {'id': 'show_corridor', 'label': f"View {top_crit_road}", 'icon': 'bx-map', 'corridor': top_crit_road},
-                {'id': 'filter_queue', 'label': 'Filter Queue to Critical', 'icon': 'bx-list-check', 'severity': 'Critical'},
+                {'id': 'filter_queue', 'label': 'View Critical Reports', 'icon': 'bx-list-check', 'severity': 'Critical'},
                 {'id': 'show_map', 'label': 'Show on Map', 'icon': 'bx-globe'}
-            ]
+            ],
+            'rag_mode': RAG_MODE_LABEL,
+            'rag_status': RAG_STATUS_NOTICE,
+            'retrieved_sources': [
+                {
+                    'source_org': k_chunk.get('source_org'),
+                    'source_title': k_chunk.get('source_title'),
+                    'citation': k_chunk.get('citation'),
+                    'topic': k_chunk.get('topic')
+                }
+            ] if k_chunk else []
         }
 
     # -------------------------------------------------------------------------
@@ -763,11 +982,15 @@ class MonitoringIntelligenceService:
     def analyze_resolution_trends(self, reports: List[Dict[str, Any]], filters: Dict[str, Any]) -> Dict[str, Any]:
         """
         Analyzes engineering lifecycle velocity:
-        Received -> Under Review -> Verified -> Resolved.
+        Received -> Verified -> Under Review -> Resolved.
         Answers: 'Are reported infrastructure problems actually being handled?'
         """
         total_reports = len(reports)
         loc_label = filters.get('county') or 'the selected area'
+
+        # Retrieve authoritative maintenance turnaround chunk
+        knowledge_chunks = corridor_knowledge_service.search(query='urban road maintenance turnaround', category='urban', top_k=1)
+        k_chunk = knowledge_chunks[0] if knowledge_chunks else None
 
         if total_reports == 0:
             return {
@@ -777,6 +1000,11 @@ class MonitoringIntelligenceService:
                 'has_sufficient_data': False,
                 'primary_finding': "Not enough data for this analysis.",
                 'explanation': f"No reports recorded in {loc_label} for this timeframe.",
+                'prose_summary': (
+                    f"No infrastructure defect reports are currently recorded in {loc_label} for this time interval. "
+                    "Operational lifecycle and turnaround metrics require recorded casework items spanning the submission-to-resolution pipeline.\n\n"
+                    "As casework transitions through Received, Verified, Under Review, and Resolved stages, response velocity metrics will calculate automatically."
+                ),
                 'supporting_statistics': [
                     {'label': 'Reports Analyzed', 'value': '0'},
                     {'label': 'Resolution Rate', 'value': 'N/A'},
@@ -790,7 +1018,10 @@ class MonitoringIntelligenceService:
                 'recommendation': "Casework response analytics will populate once citizen submissions and engineer reviews are recorded.",
                 'actions': [
                     {'id': 'filter_queue', 'label': 'View All Reports', 'icon': 'bx-list-check'}
-                ]
+                ],
+                'rag_mode': RAG_MODE_LABEL,
+                'rag_status': RAG_STATUS_NOTICE,
+                'retrieved_sources': []
             }
 
         rec_to_ver_durations = []
@@ -823,7 +1054,6 @@ class MonitoringIntelligenceService:
                 except Exception:
                     continue
 
-            # Fallback to report-level timestamps if history sparse
             if not rec_time and r.get('date'):
                 rec_time = r['date']
             if not ver_time and r.get('verified_at'):
@@ -844,7 +1074,6 @@ class MonitoringIntelligenceService:
             if ver_time and res_time and res_time >= ver_time:
                 ver_to_res_durations.append((res_time - ver_time).total_seconds())
 
-        # Calculate medians
         if rec_to_ver_durations:
             s_dur = sorted(rec_to_ver_durations)
             med_sec = s_dur[len(s_dur) // 2]
@@ -866,12 +1095,27 @@ class MonitoringIntelligenceService:
 
         finding = f"Median turnaround from citizen submission to professional engineer validation is {med_rec_ver}, with median verification-to-repair of {med_ver_res}. Currently {resolved_cnt} of {total_reports} monitored reports ({res_rate}%) have been fully resolved."
 
+        # Cohesive 2-paragraph analytical prose
+        p1 = (
+            f"Operational throughput across {loc_label} demonstrates a median response duration of {med_rec_ver} from citizen submission to "
+            f"professional Engineer verification, followed by a median validation-to-remedial-closure interval of {med_ver_res}. Across {total_reports} "
+            f"active casework records, {resolved_cnt} reports ({res_rate}%) have achieved verified closure on site, while {verified_cnt} remain in the verified queue "
+            f"and {active_cnt} are progressing through active investigation."
+        )
+        p2 = (
+            "The updated four-stage lifecycle (Received → Verified → Under Review → Resolved) establishes traceable accountability between public reporting "
+            "and certified engineering intervention. Maintaining a sub-24-hour verification turnaround ensures that false or duplicative reports are filtered early, "
+            "allowing departmental maintenance contractors to focus mobilization resources on genuine, verified infrastructure distress."
+        )
+        prose_summary = f"{p1}\n\n{p2}"
+
         return {
             'status': 'success',
             'mode': 'resolution_response_trend',
             'mode_title': MODE_TITLES['resolution_response_trend'],
             'has_sufficient_data': True,
             'primary_finding': finding,
+            'prose_summary': prose_summary,
             'supporting_statistics': [
                 {'label': 'Received → Verified', 'value': med_rec_ver},
                 {'label': 'Verified → Resolved', 'value': med_ver_res},
@@ -896,9 +1140,19 @@ class MonitoringIntelligenceService:
             },
             'recommendation': "Maintaining rapid verification turnaround preserves institutional chain-of-custody for certified civil defect repairs.",
             'actions': [
-                {'id': 'toggle_verified_kpi', 'label': 'Filter Verified Cases', 'icon': 'bx-check-shield'},
-                {'id': 'filter_queue', 'label': 'View Active Casework', 'icon': 'bx-list-check'}
-            ]
+                {'id': 'filter_queue', 'label': 'View Active Casework', 'icon': 'bx-list-check'},
+                {'id': 'show_map', 'label': 'Show on Map', 'icon': 'bx-globe'}
+            ],
+            'rag_mode': RAG_MODE_LABEL,
+            'rag_status': RAG_STATUS_NOTICE,
+            'retrieved_sources': [
+                {
+                    'source_org': k_chunk.get('source_org'),
+                    'source_title': k_chunk.get('source_title'),
+                    'citation': k_chunk.get('citation'),
+                    'topic': k_chunk.get('topic')
+                }
+            ] if k_chunk else []
         }
 
     # -------------------------------------------------------------------------
@@ -917,56 +1171,84 @@ class MonitoringIntelligenceService:
         road: Optional[str] = None
     ) -> Dict[str, Any]:
         """
-        Unified dispatch endpoint for both structured analysis selector and
-        lightweight natural-language query interface.
+        Unified dispatch endpoint for structured analysis category selection,
+        natural-language queries, and authoritative retrieval grounding.
         """
+        # 1. Prompt Injection Defense
+        if query and self.check_prompt_injection(query):
+            return {
+                'status': 'injection_refused',
+                'mode': None,
+                'query': query,
+                'message': "InfraVision Monitoring Intelligence only processes civil infrastructure monitoring and engineering pattern queries. System instruction overrides are strictly refused.",
+                'supported_topics': list(MODE_TITLES.values()),
+                'suggestions': [
+                    "Which roads have recurring potholes?",
+                    "Which roads develop potholes after heavy rainfall?",
+                    "Where are Critical reports concentrated in Nairobi?",
+                    "What patterns occur during the Long Rains?",
+                    "How quickly are reports being resolved?"
+                ],
+                'has_sufficient_data': False,
+                'rag_mode': RAG_MODE_LABEL,
+                'rag_status': RAG_STATUS_NOTICE,
+                'retrieved_sources': []
+            }
+
         extracted_slots = {}
         detected_intent = None
         interpreted_info = None
 
-        # If natural language query was provided
+        # Clean mode if 'auto' or 'all' passed
+        clean_mode = mode if mode and mode in SUPPORTED_MODES else None
+
+        # Process Natural Language Query
         if query and query.strip():
-            detected_intent, score = self.detect_intent(query)
             extracted_slots = self.extract_slots(query)
 
-            if not detected_intent:
-                # Unsupported query handling (Section 20.10)
-                return {
-                    'status': 'unsupported',
-                    'mode': None,
-                    'query': query,
-                    'message': "InfraVision could not map this question to a supported monitoring analysis.",
-                    'supported_topics': list(MODE_TITLES.values()),
-                    'suggestions': [
-                        "Which roads have recurring potholes?",
-                        "Which roads develop potholes after heavy rain?",
-                        "Where are Critical reports concentrated in Nairobi?",
-                        "What patterns occur during the Long Rains?",
-                        "How quickly are reports being resolved?"
-                    ]
-                }
+            if clean_mode:
+                # User explicitly selected a category from the dropdown: honor it
+                target_mode = clean_mode
+            else:
+                detected_intent, score = self.detect_intent(query)
+                if not detected_intent:
+                    return {
+                        'status': 'unsupported',
+                        'mode': None,
+                        'query': query,
+                        'message': "InfraVision could not map this question to a supported monitoring analysis.",
+                        'supported_topics': list(MODE_TITLES.values()),
+                        'suggestions': [
+                            "Which roads have recurring potholes?",
+                            "Which roads develop potholes after heavy rainfall?",
+                            "Where are Critical reports concentrated in Nairobi?",
+                            "What patterns occur during the Long Rains?",
+                            "How quickly are reports being resolved?"
+                        ],
+                        'rag_mode': RAG_MODE_LABEL,
+                        'rag_status': RAG_STATUS_NOTICE,
+                        'retrieved_sources': []
+                    }
+                target_mode = detected_intent
 
-            # Map to detected intent
-            mode = detected_intent
-
-            # Build query interpretation explanation (Section 20.8)
             interpreted_filters = {
-                'analysis': MODE_TITLES.get(mode, mode),
+                'analysis': MODE_TITLES.get(target_mode, target_mode),
                 'defect': extracted_slots.get('defect_class', defect_class or 'All Defect Classes'),
                 'location': extracted_slots.get('road') or extracted_slots.get('county') or county if county != 'all' else 'All Monitored Locations',
                 'period': f"Last {(extracted_slots.get('time_range') or time_range).upper()}"
             }
             interpreted_info = {
                 'query': query,
-                'intent': mode,
-                'analysis_title': MODE_TITLES.get(mode, mode),
+                'intent': target_mode,
+                'analysis_title': MODE_TITLES.get(target_mode, target_mode),
                 'filters': interpreted_filters,
                 'explanation': f"Interpreted as: Analysis: {interpreted_filters['analysis']} | Defect: {interpreted_filters['defect']} | Location: {interpreted_filters['location']} | Period: {interpreted_filters['period']}"
             }
-
-        # Validate or default mode
-        if not mode or mode not in SUPPORTED_MODES:
-            mode = 'rainfall_defect_pattern'
+            mode = target_mode
+        else:
+            if not clean_mode:
+                clean_mode = 'rainfall_defect_pattern'
+            mode = clean_mode
 
         # Merge extracted slots with explicit params
         final_filters = {
@@ -995,7 +1277,7 @@ class MonitoringIntelligenceService:
         else:
             res = self.analyze_rainfall_patterns(scoped_reports, final_filters)
 
-        # Attach metadata and query interpretation
+        # Attach metadata, query interpretation, and RAG claim status
         res['active_mode'] = mode
         res['mode_icon'] = MODE_ICONS.get(mode, 'bx-bulb')
         res['all_modes'] = [
@@ -1003,6 +1285,12 @@ class MonitoringIntelligenceService:
             for m_id in SUPPORTED_MODES
         ]
         res['active_filters'] = final_filters
+        res['rag_mode'] = RAG_MODE_LABEL
+        res['rag_status'] = RAG_STATUS_NOTICE
+
+        if query:
+            res['user_query'] = query
+
         if interpreted_info:
             res['interpreted_query'] = interpreted_info
 

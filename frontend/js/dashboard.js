@@ -13,6 +13,15 @@ const Dashboard = {
     activeIntelligenceMode: 'rainfall_defect_pattern',
     activeIntelligenceQuery: '',
     hasUserQueriedIntelligence: false,
+    rotatingPhrases: [
+        'rainfall-related defect patterns',
+        'recurrent corridor distress',
+        'seasonal maintenance impacts',
+        'critical structural hazards',
+        'resolution turnaround performance'
+    ],
+    rotatingPhraseIndex: 0,
+    rotatingIntervalId: null,
 
     init() {
         this.bindEvents();
@@ -754,20 +763,23 @@ const Dashboard = {
 
                     if (cnt === 0) {
                         html += `<div style="color:#94a3b8; font-size:0.75rem;">0 Critical Reports</div>`;
+                    } else if (cnt === 1) {
+                        const defectType = Object.keys(breakdown)[0] || 'Critical Defect';
+                        html += `
+                            <div style="font-weight:700; color:#ef4444; margin-bottom:3px; font-size:0.78rem;">1 Critical Report</div>
+                            <div style="color:#cbd5e1; font-size:0.75rem;">${defectType}</div>
+                        `;
                     } else {
-                        html += `<div style="font-weight:700; color:#ef4444; margin-bottom:6px; font-size:0.78rem;">${cnt} Critical Report${cnt === 1 ? '' : 's'}</div>`;
+                        html += `<div style="font-weight:700; color:#ef4444; margin-bottom:4px; font-size:0.78rem;">${cnt} Critical Reports</div>`;
                         const breakdownEntries = Object.entries(breakdown);
                         if (breakdownEntries.length > 0) {
                             const lines = breakdownEntries.map(([cls, c]) => `<span>${c} ${cls}${c > 1 ? 's' : ''}</span>`);
-                            html += `<div style="color:#cbd5e1; margin-bottom:6px; font-size:0.74rem; display:flex; flex-direction:column; gap:2px;">${lines.join('')}</div>`;
-                        }
-                        if (corridor && cnt > 1) {
-                            html += `<div style="color:#94a3b8; font-size:0.72rem; margin-top:4px; border-top:1px solid #334155; padding-top:4px;">Most active corridor:<br><strong style="color:#38bdf8;">${corridor}</strong></div>`;
+                            html += `<div style="color:#cbd5e1; font-size:0.74rem; display:flex; flex-direction:column; gap:2px;">${lines.join('')}</div>`;
                         }
                     }
 
                     if (rainfall !== null && rainfall !== '' && rainfall !== undefined) {
-                        html += `<div style="color:#38bdf8; font-size:0.72rem; margin-top:4px; border-top:1px solid #334155; padding-top:4px;"><i class='bx bx-cloud-rain'></i> Preceding 7-Day Rainfall: <strong>${rainfall} mm</strong></div>`;
+                        html += `<div style="color:#38bdf8; font-size:0.72rem; margin-top:5px; border-top:1px solid #334155; padding-top:4px;"><i class='bx bx-cloud-rain'></i> Preceding 7-Day Rainfall: <strong>${rainfall} mm</strong></div>`;
                     }
 
                     tip.innerHTML = html;
@@ -827,26 +839,9 @@ const Dashboard = {
             });
         }
 
-        // Active Month Summary Strip
-        if (summaryStrip && activeMonth) {
-            summaryStrip.innerHTML = `
-                <div class="summary-pill">
-                    <span class="summary-pill-label">Critical Reports</span>
-                    <span class="summary-pill-value" style="color: #f87171;">${activeMonth.total_critical}</span>
-                </div>
-                <div class="summary-pill">
-                    <span class="summary-pill-label">Most Reported Defect</span>
-                    <span class="summary-pill-value" style="color: #38bdf8;">${activeMonth.most_reported_defect || 'None'}</span>
-                </div>
-                <div class="summary-pill">
-                    <span class="summary-pill-label">Most Active Corridor</span>
-                    <span class="summary-pill-value" style="color: #fbbf24;">${activeMonth.most_active_corridor || 'None'}</span>
-                </div>
-                <div class="summary-pill">
-                    <span class="summary-pill-label">Resolved During Month</span>
-                    <span class="summary-pill-value" style="color: #34d399;">${activeMonth.resolved_during_month || 0}</span>
-                </div>
-            `;
+        // Redundant lower summary container removed per architectural specification (Section 11 & 47)
+        if (summaryStrip) {
+            summaryStrip.innerHTML = '';
         }
     },
 
@@ -857,7 +852,52 @@ const Dashboard = {
         container.innerHTML = '';
     },
 
+    initRotatingPhrases() {
+        if (this.rotatingIntervalId) {
+            clearInterval(this.rotatingIntervalId);
+            this.rotatingIntervalId = null;
+        }
+        const textEl = document.getElementById('intelRotatingText');
+        if (!textEl) return;
+
+        const prefersReducedMotion = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+        this.rotatingIntervalId = setInterval(() => {
+            this.rotatingPhraseIndex = (this.rotatingPhraseIndex + 1) % this.rotatingPhrases.length;
+            const nextText = this.rotatingPhrases[this.rotatingPhraseIndex];
+
+            if (prefersReducedMotion) {
+                textEl.textContent = nextText;
+                return;
+            }
+
+            textEl.classList.add('fade-out');
+            setTimeout(() => {
+                textEl.textContent = nextText;
+                textEl.classList.remove('fade-out');
+                textEl.classList.add('fade-in');
+                setTimeout(() => {
+                    textEl.classList.remove('fade-in');
+                }, 300);
+            }, 260);
+        }, 3800);
+    },
+
     initMonitoringIntelligence() {
+        this.initRotatingPhrases();
+
+        // 1. Embedded category selector pill (ChatGPT Search pill style)
+        const catSelect = document.getElementById('intelCategorySelect');
+        if (catSelect) {
+            catSelect.addEventListener('change', () => {
+                const val = catSelect.value;
+                if (val && val !== 'auto') {
+                    this.activeIntelligenceMode = val;
+                }
+            });
+        }
+
+        // 2. Mode Selector Grid (legacy / backwards compatibility)
         const selectorGrid = document.getElementById('intelModeSelector');
         if (selectorGrid) {
             selectorGrid.querySelectorAll('.intel-mode-btn').forEach(btn => {
@@ -868,11 +908,11 @@ const Dashboard = {
                     this.activeIntelligenceMode = mode;
                     this.activeIntelligenceQuery = '';
 
-                    // Mode selector active state toggle
                     selectorGrid.querySelectorAll('.intel-mode-btn').forEach(b => b.classList.remove('is-active'));
                     btn.classList.add('is-active');
 
-                    // Clear query interpretation banner
+                    if (catSelect) catSelect.value = mode;
+
                     const interpBanner = document.getElementById('intelQueryExplanation');
                     if (interpBanner) interpBanner.classList.add('hidden');
                     const nlpInput = document.getElementById('intelNlpInput');
@@ -883,35 +923,48 @@ const Dashboard = {
             });
         }
 
+        // 3. Capsule Form submission
         const nlpForm = document.getElementById('intelNlpForm');
         if (nlpForm) {
             nlpForm.addEventListener('submit', (e) => {
                 e.preventDefault();
                 const nlpInput = document.getElementById('intelNlpInput');
                 const query = (nlpInput?.value || '').trim();
-                if (!query) return;
+                const selectedCategory = catSelect?.value;
+                const modeToSend = (selectedCategory && selectedCategory !== 'auto') ? selectedCategory : null;
+
+                if (!query && !modeToSend) return;
 
                 this.hasUserQueriedIntelligence = true;
                 this.activeIntelligenceQuery = query;
-                this.loadFocusedIntelligence(null, query);
+                if (modeToSend) {
+                    this.activeIntelligenceMode = modeToSend;
+                }
+                this.loadFocusedIntelligence(modeToSend, query);
             });
         }
 
+        // 4. Compact suggestion chips: populates composer and selects appropriate category
         const suggestionsStrip = document.getElementById('intelNlpSuggestions');
         if (suggestionsStrip) {
             suggestionsStrip.querySelectorAll('.intel-chip-suggestion').forEach(chip => {
                 chip.addEventListener('click', () => {
                     const prompt = chip.getAttribute('data-prompt');
-                    if (!prompt) return;
-                    this.hasUserQueriedIntelligence = true;
+                    const cat = chip.getAttribute('data-category');
                     const nlpInput = document.getElementById('intelNlpInput');
-                    if (nlpInput) nlpInput.value = prompt;
-                    this.activeIntelligenceQuery = prompt;
-                    this.loadFocusedIntelligence(null, prompt);
+                    if (prompt && nlpInput) {
+                        nlpInput.value = prompt;
+                        nlpInput.focus();
+                    }
+                    if (cat && catSelect) {
+                        catSelect.value = cat;
+                        this.activeIntelligenceMode = cat;
+                    }
                 });
             });
         }
 
+        // 5. Clear interpretation banner
         const clearBtn = document.getElementById('btnClearQueryInterpretation');
         if (clearBtn) {
             clearBtn.addEventListener('click', () => {
@@ -931,12 +984,12 @@ const Dashboard = {
         const container = document.getElementById('intelResultWorkspace');
         if (!container) return;
 
-        // Render sleek PlayStation loading state
+        // Render sleek loading state
         container.innerHTML = `
             <div style="padding: 2.5rem 1rem; text-align: center; color: #64748b; font-size: 0.85rem;">
                 <i class='bx bx-loader-alt bx-spin' style="font-size: 1.8rem; color: #0070d1; display: block; margin: 0 auto 0.65rem auto;"></i>
                 <span style="font-weight: 600; color: #1e293b;">Computing Civil Infrastructure Intelligence</span>
-                <p style="font-size: 0.76rem; color: #64748b; margin-top: 4px;">Evaluating verified records & telemetry correlations...</p>
+                <p style="font-size: 0.76rem; color: #64748b; margin-top: 4px;">Evaluating verified records &amp; telemetry correlations...</p>
             </div>
         `;
 
@@ -944,9 +997,10 @@ const Dashboard = {
             const params = {};
             if (query && query.trim()) {
                 params.query = query.trim();
-            } else if (mode) {
+            }
+            if (mode && mode !== 'auto') {
                 params.mode = mode;
-            } else {
+            } else if (!query) {
                 params.mode = this.activeIntelligenceMode || 'rainfall_defect_pattern';
             }
 
@@ -960,9 +1014,16 @@ const Dashboard = {
 
             const res = await window.Api.getMonitoringIntelligence(params);
 
-            // Synchronize active mode selector button
+            // Synchronize active mode and category dropdown
             if (res && res.active_mode) {
                 this.activeIntelligenceMode = res.active_mode;
+                const catSelect = document.getElementById('intelCategorySelect');
+                if (catSelect && catSelect.value === 'auto') {
+                    // keep auto or reflect
+                } else if (catSelect && res.active_mode) {
+                    catSelect.value = res.active_mode;
+                }
+
                 const selectorGrid = document.getElementById('intelModeSelector');
                 if (selectorGrid) {
                     selectorGrid.querySelectorAll('.intel-mode-btn').forEach(b => {
@@ -1009,45 +1070,101 @@ const Dashboard = {
 
         if (!data) {
             container.innerHTML = `
-                <div class="intel-result-card">
-                    <p style="margin: 0; color: #64748b; font-size: 0.85rem;">No monitoring intelligence currently available.</p>
+                <div class="intel-empty-state" style="padding: 2.25rem 1rem; text-align: center; color: #64748b; background: #f8fafc; border: 1px dashed #e2e8f0; border-radius: 8px;">
+                    <i class='bx bx-brain' style="font-size: 1.8rem; color: #0070d1; display: block; margin-bottom: 0.35rem;"></i>
+                    <span style="font-size: 0.92rem; font-weight: 600; color: #1e293b;">What would you like to monitor?</span>
+                    <p style="font-size: 0.78rem; color: #64748b; margin: 0.25rem 0 0 0;">Ask a question or select a focus above to analyze verified defect patterns.</p>
                 </div>
             `;
             return;
         }
 
-        // 1. Unsupported Query State
+        const escapeHtml = (str) => {
+            if (!str) return '';
+            return String(str)
+                .replace(/&/g, '&amp;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;')
+                .replace(/"/g, '&quot;')
+                .replace(/'/g, '&#039;');
+        };
+
+        const userQuestion = data.user_query || this.activeIntelligenceQuery;
+        const userBubbleHtml = userQuestion ? `
+            <div class="intel-user-bubble">
+                <div class="intel-user-meta"><i class='bx bx-user-pin'></i> Civil Engineer</div>
+                <div class="intel-user-text">${escapeHtml(userQuestion)}</div>
+            </div>
+        ` : '';
+
+        // 1. Prompt Injection Refusal State
+        if (data.status === 'injection_refused') {
+            const topicsHtml = (data.supported_topics || []).map(t => `
+                <li style="margin-bottom: 3px; display: flex; align-items: center; gap: 5px;">
+                    <i class='bx bx-check' style="color: #0070d1; font-size: 0.95rem;"></i> <span>${escapeHtml(t)}</span>
+                </li>
+            `).join('');
+
+            container.innerHTML = `
+                ${userBubbleHtml}
+                <div class="intel-response-card" style="border-left-color: #ef4444;">
+                    <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 0.5rem;">
+                        <span class="intel-result-badge" style="background: rgba(239, 68, 68, 0.1); color: #dc2626; border-color: rgba(239, 68, 68, 0.25);">
+                            <i class='bx bx-shield-x'></i> Instruction Override Refused
+                        </span>
+                        <span class="intel-grounding-badge" style="color: #dc2626; background: #fef2f2; border-color: #fecaca;">
+                            <i class='bx bx-lock-alt'></i> Policy Protected
+                        </span>
+                    </div>
+                    <div class="intel-prose-body">
+                        <p style="color: #991b1b; font-weight: 500;">
+                            ${escapeHtml(data.message)}
+                        </p>
+                    </div>
+                    <div style="margin-top: 0.65rem; font-size: 0.78rem; color: #475569; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 6px; padding: 0.65rem 0.85rem;">
+                        <span style="font-weight: 600; color: #1e293b; display: block; margin-bottom: 4px;">InfraVision Monitoring Intelligence exclusively analyzes:</span>
+                        <ul style="margin: 0; padding-left: 0.5rem; color: #64748b; list-style-type: none;">
+                            ${topicsHtml}
+                        </ul>
+                    </div>
+                </div>
+            `;
+            container.scrollTop = container.scrollHeight;
+            return;
+        }
+
+        // 2. Unsupported Query State
         if (data.status === 'unsupported') {
             const suggestionsHtml = (data.suggestions || []).map(s => `
-                <button type="button" class="intel-chip-suggestion dynamic-suggestion" data-prompt="${s.replace(/"/g, '&quot;')}">
-                    ${s}
+                <button type="button" class="intel-chip-suggestion dynamic-suggestion" data-prompt="${escapeHtml(s)}">
+                    ${escapeHtml(s)}
                 </button>
             `).join('');
 
             const topicsHtml = (data.supported_topics || []).map(t => `
                 <li style="margin-bottom: 4px; display: flex; align-items: center; gap: 6px;">
-                    <i class='bx bx-check' style="color: #0070d1; font-size: 1rem;"></i> <span>${t}</span>
+                    <i class='bx bx-check' style="color: #0070d1; font-size: 1rem;"></i> <span>${escapeHtml(t)}</span>
                 </li>
             `).join('');
 
             container.innerHTML = `
-                <div class="intel-result-card" style="border-top-color: #f59e0b;">
+                ${userBubbleHtml}
+                <div class="intel-response-card" style="border-left-color: #f59e0b;">
                     <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 0.5rem;">
                         <span class="intel-result-badge" style="background: rgba(245, 158, 11, 0.1); color: #d97706; border-color: rgba(245, 158, 11, 0.25);">
                             <i class='bx bx-help-circle'></i> Unsupported Query
                         </span>
-                        <span style="font-size: 0.72rem; color: #64748b;">${data.query ? `Query: "${data.query}"` : ''}</span>
                     </div>
-                    <div class="intel-result-finding" style="font-size: 0.95rem; color: #1e293b;">
-                        InfraVision could not map this question to a supported monitoring analysis.
+                    <div class="intel-prose-body">
+                        <p>${escapeHtml(data.message)}</p>
                     </div>
-                    <div style="font-size: 0.78rem; color: #475569; background: #fffbeb; border: 1px solid #fef3c7; border-radius: 6px; padding: 0.75rem 1rem;">
+                    <div style="font-size: 0.78rem; color: #475569; background: #fffbeb; border: 1px solid #fef3c7; border-radius: 6px; padding: 0.75rem 1rem; margin-top: 0.6rem;">
                         <p style="margin: 0 0 0.5rem 0; font-weight: 600; color: #92400e;">InfraVision provides controlled, evidence-grounded civil engineering analytics for:</p>
                         <ul style="margin: 0; padding-left: 0.5rem; color: #78350f; list-style-type: none;">
                             ${topicsHtml}
                         </ul>
                     </div>
-                    <div style="margin-top: 0.25rem;">
+                    <div style="margin-top: 0.65rem;">
                         <span style="font-size: 0.72rem; font-weight: 700; color: #64748b; display: block; margin-bottom: 0.4rem;">TRY ASKING:</span>
                         <div style="display: flex; flex-wrap: wrap; gap: 0.4rem;">
                             ${suggestionsHtml}
@@ -1065,99 +1182,96 @@ const Dashboard = {
                     this.loadFocusedIntelligence(null, prompt);
                 });
             });
+            container.scrollTop = container.scrollHeight;
             return;
         }
 
-        // 2. Insufficient Data State
+        // 3. Insufficient Data State
         if (data.status === 'insufficient_data') {
+            const rawProse = data.prose_summary || data.explanation || data.primary_finding || 'Empirical civil engineering analysis requires additional recorded defect reports in this geographic area.';
+            const paragraphsHtml = rawProse.split('\n\n').map(p => `<p>${escapeHtml(p)}</p>`).join('');
+
             container.innerHTML = `
-                <div class="intel-result-card" style="border-top-color: #64748b;">
+                ${userBubbleHtml}
+                <div class="intel-response-card" style="border-left-color: #64748b;">
                     <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 0.5rem;">
                         <span class="intel-result-badge" style="background: rgba(100, 116, 139, 0.1); color: #475569; border-color: rgba(100, 116, 139, 0.25);">
                             <i class='bx bx-radar'></i> Data Accumulation • Sparsity Notice
                         </span>
-                        <span style="font-size: 0.72rem; color: #64748b; font-weight: 600;">${data.location || 'Selected Location'}</span>
+                        <span style="font-size: 0.72rem; color: #64748b; font-weight: 600;">${escapeHtml(data.location || 'Selected Location')}</span>
                     </div>
-                    <div class="intel-result-finding" style="font-size: 0.95rem; color: #334155;">
-                        ${data.message || 'Empirical civil engineering analysis requires additional recorded defect reports in this geographic area.'}
+                    <div class="intel-prose-body">
+                        ${paragraphsHtml}
                     </div>
-                    <div class="intel-evidence-panel" style="border-left-color: #94a3b8;">
-                        <div style="font-weight: 700; color: #1e293b; margin-bottom: 2px;">Evidence & Threshold Status:</div>
-                        <div>Threshold Requirement: <strong>${data.evidence_threshold || 'Minimum statistical volume required'}</strong></div>
-                        <div>Current Empirical Records: <strong>${data.current_count ?? 0} defect report(s)</strong></div>
-                        <div style="font-size: 0.72rem; color: #64748b; margin-top: 4px;">As field engineers log verified inspection casework in this jurisdiction, automated multi-factor correlation models will populate.</div>
+                    <div class="intel-compact-evidence-footer">
+                        <span><i class='bx bx-info-circle'></i> Requirement: <strong>${escapeHtml(data.evidence_threshold || '≥ 3 Reports')}</strong> • Current Empirical: <strong>${data.current_count ?? 0} report(s)</strong></span>
                     </div>
                 </div>
             `;
+            container.scrollTop = container.scrollHeight;
             return;
         }
 
-        // 3. Success State - SHORT FIRST with progressive disclosure
+        // 4. Success State - Cohesive 1-2 Paragraph Civil Engineering Analysis with Collapsible Evidence
+        const rawProse = data.prose_summary || data.primary_finding || '';
+        const paragraphsHtml = rawProse.split('\n\n').map(p => `<p>${escapeHtml(p)}</p>`).join('');
+
         const stats = data.supporting_stats || data.supporting_statistics || [];
         const statsHtml = stats.map(s => `
             <div class="intel-stat-box">
-                <span class="intel-stat-label">${s.label}</span>
-                <span class="intel-stat-val">${s.value}</span>
+                <span class="intel-stat-label">${escapeHtml(s.label)}</span>
+                <span class="intel-stat-val">${escapeHtml(s.value)}</span>
             </div>
         `).join('');
 
-        // Build comparison breakdown view (housed in collapsible drawer)
+        // Build comparison breakdown view
         let comparisonHtml = '';
         if (data.comparison && Array.isArray(data.comparison.data) && data.comparison.data.length > 0) {
             const comp = data.comparison;
             comparisonHtml = `
                 <div class="intel-comparison-box">
                     <div style="font-weight: 700; color: #1e293b; margin-bottom: 0.6rem; font-size: 0.82rem; display: flex; align-items: center; justify-content: space-between;">
-                        <span>${comp.title || 'Distribution Breakdown'}</span>
+                        <span>${escapeHtml(comp.title || 'Distribution Breakdown')}</span>
                         <span style="font-size: 0.7rem; color: #64748b; font-weight: 500;">Empirical Breakdown</span>
                     </div>
             `;
 
-            if (comp.type === 'rainfall_thresholds' || comp.type === 'season_breakdown' || comp.type === 'severity_breakdown') {
+            if (comp.type === 'rainfall_windows' || comp.type === 'rainfall_thresholds' || comp.type === 'season_breakdown' || comp.type === 'seasonal_distribution' || comp.type === 'severity_breakdown') {
                 comparisonHtml += `<div style="display: flex; flex-direction: column; gap: 0.5rem;">`;
                 comp.data.forEach(item => {
-                    const label = item.bucket || item.season || item.severity || 'Category';
-                    const count = item.count ?? 0;
-                    const pct = item.percentage ?? 0;
-                    const isHighlight = item.is_dominant || item.is_highest;
+                    const label = item.window || item.season || item.bucket || item.severity || 'Category';
+                    const val = item.rainfall || item.share || (item.count !== undefined ? `${item.count} reports` : '');
                     comparisonHtml += `
-                        <div>
-                            <div style="display: flex; justify-content: space-between; font-size: 0.74rem; margin-bottom: 2px;">
-                                <span style="font-weight: ${isHighlight ? '700' : '500'}; color: ${isHighlight ? '#0070d1' : '#334155'};">
-                                    ${label} ${isHighlight ? '★' : ''}
-                                </span>
-                                <span style="font-weight: 600; color: #1e293b;">${count} report${count === 1 ? '' : 's'} (${pct}%)</span>
-                            </div>
-                            <div style="height: 6px; background: #e2e8f0; border-radius: 3px; overflow: hidden;">
-                                <div style="height: 100%; width: ${Math.min(100, Math.max(0, pct))}%; background: ${isHighlight ? '#0070d1' : '#94a3b8'}; border-radius: 3px; transition: width 0.3s ease;"></div>
-                            </div>
+                        <div style="display: flex; justify-content: space-between; font-size: 0.75rem; border-bottom: 1px dashed #f1f5f9; padding-bottom: 3px;">
+                            <span style="font-weight: 600; color: #334155;">${escapeHtml(label)}</span>
+                            <span style="font-weight: 700; color: #0070d1;">${escapeHtml(String(val))}</span>
                         </div>
                     `;
                 });
                 comparisonHtml += `</div>`;
             } else if (comp.type === 'corridor_breakdown') {
                 comparisonHtml += `
-                    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 0.5rem;">
+                    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 0.5rem;">
                 `;
                 comp.data.forEach(c => {
                     comparisonHtml += `
                         <div style="background: #ffffff; border: 1px solid #e2e8f0; border-radius: 6px; padding: 0.55rem 0.75rem;">
-                            <div style="font-weight: 700; color: #1e293b; font-size: 0.78rem;">${c.corridor}</div>
+                            <div style="font-weight: 700; color: #1e293b; font-size: 0.78rem;">${escapeHtml(c.defect_class || c.corridor)}</div>
                             <div style="font-size: 0.72rem; color: #64748b; margin-top: 3px;">
-                                <span style="color: #0070d1; font-weight: 600;">${c.count} report${c.count === 1 ? '' : 's'}</span> • Median interval: <strong>${c.median_interval_days ? c.median_interval_days + 'd' : 'N/A'}</strong>
+                                <span style="color: #0070d1; font-weight: 600;">${c.count} report${c.count === 1 ? '' : 's'}</span> • ${escapeHtml(c.share || '')}
                             </div>
                         </div>
                     `;
                 });
                 comparisonHtml += `</div>`;
-            } else if (comp.type === 'lifecycle_funnel') {
+            } else if (comp.type === 'lifecycle_funnel' || comp.type === 'status_distribution') {
                 comparisonHtml += `
                     <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 0.5rem;">
                 `;
                 comp.data.forEach(step => {
                     comparisonHtml += `
                         <div style="background: #ffffff; border: 1px solid #e2e8f0; border-radius: 6px; padding: 0.55rem 0.75rem; text-align: center;">
-                            <div style="font-size: 0.68rem; color: #64748b; font-weight: 600; text-transform: uppercase;">${step.stage}</div>
+                            <div style="font-size: 0.68rem; color: #64748b; font-weight: 600; text-transform: uppercase;">${escapeHtml(step.stage || step.status)}</div>
                             <div style="font-size: 1.15rem; font-weight: 700; color: #0070d1; margin-top: 2px;">${step.count}</div>
                         </div>
                     `;
@@ -1168,70 +1282,99 @@ const Dashboard = {
             comparisonHtml += `</div>`;
         }
 
-        // Evidence strip details
         const ev = data.evidence || {};
-        const sourceLabel = ev.weather_source || ev.geospatial_source || ev.climate_source || ev.telemetry_source || ev.lifecycle_source || 'MongoDB verified records';
+        const sourceLabel = ev.weather_source || ev.geospatial_source || ev.climate_source || ev.lifecycle_source || 'MongoDB verified records';
 
         // Limit to at most 2 primary actions (View Reports, Show on Map)
         const primaryActions = (data.actions || []).slice(0, 2);
         const actionsHtml = primaryActions.map(act => `
             <button type="button" class="btn-workspace-action"
                     data-action-id="${act.id}"
-                    data-corridor="${(act.corridor || '').replace(/"/g, '&quot;')}"
-                    data-severity="${act.severity || ''}"
-                    data-defect="${act.defect || ''}">
-                <i class='bx ${act.icon || 'bx-right-arrow-alt'}'></i> ${act.label}
+                    data-corridor="${escapeHtml(act.corridor || '')}"
+                    data-severity="${escapeHtml(act.severity || '')}"
+                    data-defect="${escapeHtml(act.defect || '')}">
+                <i class='bx ${act.icon || 'bx-right-arrow-alt'}'></i> ${escapeHtml(act.label)}
             </button>
         `).join('');
 
+        const retrievedOrg = (data.retrieved_sources && data.retrieved_sources.length > 0)
+            ? data.retrieved_sources[0].source_org.split('(')[0].trim()
+            : null;
+        const retrievedCitation = (data.retrieved_sources && data.retrieved_sources.length > 0)
+            ? data.retrieved_sources[0].citation
+            : null;
+
         container.innerHTML = `
-            <div class="intel-result-card">
+            ${userBubbleHtml}
+            <div class="intel-response-card">
                 <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 0.5rem;">
-                    <span class="intel-result-badge">
-                        <i class='bx ${data.mode_icon || 'bx-bulb'}'></i> ${data.title}
-                    </span>
+                    <div style="display: flex; align-items: center; gap: 0.4rem; flex-wrap: wrap;">
+                        <span class="intel-result-badge">
+                            <i class='bx ${data.mode_icon || 'bx-bulb'}'></i> ${escapeHtml(data.title || 'Analysis')}
+                        </span>
+                        ${data.active_mode === 'rainfall_defect_pattern' ? `
+                            <span style="display: inline-flex; align-items: center; gap: 4px; font-size: 0.72rem; color: #0284c7; background: #f0f9ff; border: 1px solid #bae6fd; border-radius: 9999px; padding: 2px 8px; font-weight: 600;">
+                                <i class='bx bx-cloud-rain rain-pulse-icon'></i> Precipitation Analyzed
+                            </span>
+                        ` : ''}
+                        ${retrievedOrg ? `
+                            <span class="intel-grounding-badge" title="${escapeHtml(retrievedCitation || '')}">
+                                <i class='bx bx-shield-quarter'></i> ${escapeHtml(retrievedOrg)} Grounded
+                            </span>
+                        ` : ''}
+                    </div>
                     <span style="font-size: 0.72rem; color: #64748b; font-weight: 600;">
-                        ${ev.reports_analyzed ?? 0} Reports Analyzed • ${ev.location || 'All Monitored Locations'}
+                        ${ev.reports_analyzed ?? 0} Reports Analyzed • ${escapeHtml(ev.location || 'All Monitored Locations')}
                     </span>
                 </div>
 
-                <div class="intel-result-finding">
-                    ${data.primary_finding}
+                <!-- 1-2 Cohesive Professional Analytical Paragraphs -->
+                <div class="intel-prose-body">
+                    ${paragraphsHtml}
                 </div>
 
-                <div class="intel-stats-grid">
-                    ${statsHtml}
-                </div>
-
-                <!-- Progressive Disclosure: View Evidence Toggle -->
-                <div style="margin-top: 0.65rem;">
+                <!-- Compact Evidence Footer Strip -->
+                <div class="intel-compact-evidence-footer">
+                    <span>
+                        <i class='bx bx-data'></i> ${ev.reports_analyzed ?? 0} reports · ${escapeHtml(ev.period || 'Last 6M')} · ${escapeHtml(sourceLabel)}
+                    </span>
                     <button type="button" class="btn-text-subtle" id="btnToggleIntelEvidence"
-                        style="font-size: 0.78rem; color: #0070d1; background: none; border: none; cursor: pointer; padding: 2px 0; display: inline-flex; align-items: center; gap: 4px; font-weight: 600;">
+                        style="font-size: 0.76rem; color: #0070d1; background: none; border: none; cursor: pointer; padding: 0; font-weight: 600; display: inline-flex; align-items: center; gap: 4px;">
                         <i class='bx bx-chevron-down' id="intelEvidenceChevron"></i>
                         <span id="intelEvidenceToggleText">View evidence &amp; breakdown</span>
                     </button>
                 </div>
 
                 <!-- Collapsible Evidence & Breakdown Drawer -->
-                <div id="intelCollapsibleEvidence" class="hidden" style="display: none; margin-top: 0.5rem;">
+                <div id="intelCollapsibleEvidence" class="hidden" style="display: none; margin-top: 0.65rem;">
                     ${comparisonHtml}
 
-                    <div class="intel-evidence-panel">
-                        <div style="font-weight: 700; color: #1e293b; margin-bottom: 2px;">Evidence Basis & Observation Window:</div>
-                        <div>Period: <strong>${ev.period || 'Selected Time Range'}</strong> • Geographical Scope: <strong>${ev.location || 'All Monitored Locations'}</strong></div>
-                        <div style="font-size: 0.72rem; color: #64748b; margin-top: 3px;">Data Grounding: ${sourceLabel}</div>
+                    <div class="intel-stats-grid" style="margin-top: 0.6rem;">
+                        ${statsHtml}
+                    </div>
+
+                    <div class="intel-evidence-panel" style="margin-top: 0.6rem;">
+                        <div style="font-weight: 700; color: #1e293b; margin-bottom: 2px;">Evidence Basis &amp; Observation Window:</div>
+                        <div>Period: <strong>${escapeHtml(ev.period || 'Selected Time Range')}</strong> • Scope: <strong>${escapeHtml(ev.location || 'All Monitored Locations')}</strong></div>
+                        <div style="font-size: 0.72rem; color: #64748b; margin-top: 3px;">Data Grounding: ${escapeHtml(sourceLabel)}</div>
+                        ${retrievedCitation ? `
+                            <div style="font-size: 0.72rem; color: #047857; margin-top: 3px;">
+                                Authoritative Reference: <strong>${escapeHtml(data.retrieved_sources[0].source_title)}</strong> (${escapeHtml(retrievedCitation)})
+                            </div>
+                        ` : ''}
                     </div>
 
                     ${data.recommendation ? `
                         <div class="intel-recommendation-box" style="margin-top: 0.5rem;">
                             <i class='bx bx-check-shield' style="font-size: 1.05rem; vertical-align: -2px; margin-right: 4px;"></i>
-                            <strong>Engineering Advisory:</strong> ${data.recommendation}
+                            <strong>Engineering Advisory:</strong> ${escapeHtml(data.recommendation)}
                         </div>
                     ` : ''}
                 </div>
 
+                <!-- Maximum 2 Direct Action Buttons -->
                 ${actionsHtml ? `
-                    <div class="intel-actions-row" style="margin-top: 0.75rem;">
+                    <div class="intel-actions-row" style="margin-top: 0.85rem;">
                         ${actionsHtml}
                     </div>
                 ` : ''}
@@ -1253,6 +1396,7 @@ const Dashboard = {
         }
 
         this.wireWorkspaceActions(container);
+        container.scrollTop = container.scrollHeight;
     },
 
     wireWorkspaceActions(container) {

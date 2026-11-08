@@ -1183,12 +1183,7 @@
                             </div>
                         </div>
 
-                        <!-- Active Month Summary Strip -->
-                        <div id="calActiveMonthSummary" class="cal-month-summary-strip">
-                            <!-- Populated dynamically via JS -->
-                        </div>
-
-                        <!-- Calendar Legend & Explicit Analytical Distinctions -->
+                        <!-- Calendar Legend & Explicit Analytical Distinctions (Persistent lower element) -->
                         <div class="calendar-footer-strip"
                             style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 0.75rem; margin-top: 0.6rem; padding-top: 0.5rem; border-top: 1px solid rgba(255, 255, 255, 0.08); font-size: 0.75rem; color: #94a3b8;">
                             <div style="display: flex; align-items: center; gap: 0.5rem;">
@@ -1250,30 +1245,45 @@
                         <div class="card-header-bar"
                             style="margin-bottom: 0.5rem; border-bottom: 1px solid #f1f5f9; padding-bottom: 0.6rem;">
                             <div>
-                                <div style="display: flex; align-items: center; gap: 0.5rem;">
+                                <div style="display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap;">
                                     <span class="step-tag"
                                         style="background: rgba(0, 112, 209, 0.1); color: #0070d1; border: 1px solid rgba(0, 112, 209, 0.25);">MONITORING INTELLIGENCE</span>
                                     <span class="mode-tag"
                                         style="background: #f8fafc; color: #475569; border: 1px solid #e2e8f0;">Pattern Analysis Workspace</span>
                                 </div>
-                                <p style="margin: 0.35rem 0 0 0; font-size: 0.82rem; color: #64748b; line-height: 1.4;">
-                                    Ask a question or select a focus below to analyze verified defect patterns.
-                                </p>
+                                <!-- Rotating Contextual Prompt Phrase (Gemini/PlayStation Inspired) -->
+                                <div class="intel-rotating-prompt-wrapper"
+                                    style="margin-top: 0.45rem; font-size: 0.88rem; color: #1e293b; font-weight: 500; display: flex; align-items: center; gap: 6px; flex-wrap: wrap;">
+                                    <span style="color: #64748b;">Find out more about</span>
+                                    <span id="intelRotatingText" class="intel-rotating-text"
+                                        style="color: #0070d1; font-weight: 600; border-bottom: 1.5px solid rgba(0, 112, 209, 0.35);">rainfall-related defect patterns</span>
+                                </div>
                             </div>
                         </div>
 
                         <!-- Sleek Chatbot-Style Capsule Input Bar (Gemini / ChatGPT / Shadcn Inspired) -->
                         <div class="intel-nlp-section" style="margin-top: 0.65rem;">
                             <form id="intelNlpForm" class="intel-nlp-form" style="margin: 0;">
-                                <div class="chat-capsule-input-bar"
-                                    style="display: flex; align-items: center; gap: 0.65rem; background: #ffffff; border: 1.5px solid #e2e8f0; border-radius: 9999px; padding: 6px 8px 6px 14px; box-shadow: 0 2px 10px rgba(15, 23, 42, 0.04); transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);">
-                                    <i class='bx bx-sparkles intel-sparkle-gradient' style="font-size: 1.3rem; flex-shrink: 0;"></i>
+                                <div class="chat-capsule-input-bar">
+                                    <!-- Embedded Category / Tool Selector Pill (ChatGPT Search / Tool style) -->
+                                    <div class="intel-category-pill-wrapper" style="position: relative; display: flex; align-items: center;">
+                                        <select id="intelCategorySelect" class="intel-category-pill-select" title="Focus Category">
+                                            <option value="auto">Auto Focus</option>
+                                            <option value="rainfall_defect_pattern">Rainfall &amp; Weather</option>
+                                            <option value="corridor_recurrence">Road Recurrence</option>
+                                            <option value="seasonal_defect_pattern">Seasonal Patterns</option>
+                                            <option value="critical_defect_concentration">Critical Hazards</option>
+                                            <option value="resolution_response_trend">Resolution Trends</option>
+                                        </select>
+                                    </div>
+
                                     <input type="text" id="intelNlpInput" class="intel-nlp-input"
                                         placeholder="Ask InfraVision about defect patterns, corridors, weather..."
                                         autocomplete="off"
-                                        style="border: none; background: transparent; outline: none; font-size: 0.88rem; flex: 1; color: #0f172a; padding: 0;">
+                                        style="border: none; background: transparent; outline: none; font-size: 0.88rem; flex: 1; color: #0f172a; padding: 0 0.35rem;">
+
                                     <button type="submit" id="btnIntelNlpSubmit" class="btn-chat-analyse">
-                                        <i class='bx bx-analyse'></i> Analyse
+                                        <i class='bx bx-up-arrow-alt' style="font-size: 1.15rem;"></i> <span>Analyse</span>
                                     </button>
                                 </div>
                             </form>
@@ -1283,14 +1293,19 @@
                                 style="display: flex; flex-wrap: wrap; gap: 0.4rem; margin-top: 0.65rem; align-items: center;">
                                 <span style="font-size: 0.72rem; color: #64748b; font-weight: 600;">Suggested:</span>
                                 <button type="button" class="intel-chip-suggestion"
+                                    data-category="corridor_recurrence"
                                     data-prompt="Which roads have recurring potholes?">Recurring potholes</button>
                                 <button type="button" class="intel-chip-suggestion"
+                                    data-category="rainfall_defect_pattern"
                                     data-prompt="Which roads develop potholes after heavy rainfall?">Rainfall patterns</button>
                                 <button type="button" class="intel-chip-suggestion"
+                                    data-category="critical_defect_concentration"
                                     data-prompt="Where are Critical reports concentrated in Nairobi?">Critical in Nairobi</button>
                                 <button type="button" class="intel-chip-suggestion"
+                                    data-category="seasonal_defect_pattern"
                                     data-prompt="What patterns occur during the Long Rains?">Long Rains season</button>
                                 <button type="button" class="intel-chip-suggestion"
+                                    data-category="resolution_response_trend"
                                     data-prompt="How quickly are reports being resolved?">Resolution performance</button>
                             </div>
 
@@ -1312,12 +1327,12 @@
                             </div>
                         </div>
 
-                        <!-- Result Workspace: ONLY ONE primary intelligence result visible at a time (Section 6) -->
-                        <div class="intel-result-workspace" id="intelResultWorkspace" style="margin-top: 0.9rem;">
+                        <!-- Result Workspace: Chat-Stream Experience (Section 6) -->
+                        <div class="intel-result-workspace intel-chat-stream" id="intelResultWorkspace" style="margin-top: 0.9rem;">
                             <div class="intel-empty-state" style="padding: 2.25rem 1rem; text-align: center; color: #64748b; background: #f8fafc; border: 1px dashed #e2e8f0; border-radius: 8px;">
-                                <i class='bx bx-brain' style="font-size: 1.8rem; color: #94a3b8; display: block; margin-bottom: 0.35rem;"></i>
-                                <span style="font-size: 0.88rem; font-weight: 600; color: #334155;">Ready for Analysis</span>
-                                <p style="font-size: 0.78rem; color: #64748b; margin: 0.25rem 0 0 0;">Ask a question or click a suggestion chip to analyze verified defect patterns.</p>
+                                <i class='bx bx-brain' style="font-size: 1.8rem; color: #0070d1; display: block; margin-bottom: 0.35rem;"></i>
+                                <span style="font-size: 0.92rem; font-weight: 600; color: #1e293b;">What would you like to monitor?</span>
+                                <p style="font-size: 0.78rem; color: #64748b; margin: 0.25rem 0 0 0;">Ask a question or select a focus above to analyze verified defect patterns.</p>
                             </div>
                         </div>
                     </div>

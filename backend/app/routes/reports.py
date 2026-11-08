@@ -760,13 +760,16 @@ def get_report_detail(current_user, report_id):
     """Retrieves full details for a single defect report."""
     report = db_service.find_one('infrastructure_reports', {'_id': report_id})
     if not report:
+        report = db_service.find_one('infrastructure_reports', {'report_id': report_id})
+    if not report:
         return jsonify({'error': 'Report not found.'}), 404
 
     # Authorization: citizen may only access their own report
     user_role = current_user.get('role', 'citizen')
     user_id = str(current_user.get('_id') or current_user.get('user_id'))
-    if user_role == 'citizen' and str(report.get('user_id')) != user_id:
-        return jsonify({'error': 'Access denied to this report.'}), 403
+    owner_id = str(report.get('user_id') or report.get('metadata', {}).get('submitted_by_id') or '')
+    if user_role == 'citizen' and owner_id != user_id:
+        return jsonify({'error': 'Forbidden: Access denied to this report.'}), 403
 
     images = db_service.find('submitted_images', {'report_id': report_id})
     image_list = []
@@ -961,9 +964,14 @@ def get_map_reports():
             continue
 
         display_id = meta.get('display_id') or rep.get('display_id') or f"REP-{datetime.now(timezone.utc).year}-{str(rep['_id'])[-4:].upper()}"
+        user_sub = str(user.get('_id') or user.get('user_id')) if user else ''
+        rep_user_id = str(rep.get('user_id') or meta.get('submitted_by_id') or '')
+        is_owner = bool(user_sub and rep_user_id and user_sub == rep_user_id)
+
         point = {
             'report_id': rep['_id'],
             'display_id': display_id,
+            'is_owner': is_owner,
             'latitude': float(lat),
             'longitude': float(lng),
             'location_name': meta.get('location_name', 'Monitored Infrastructure'),
