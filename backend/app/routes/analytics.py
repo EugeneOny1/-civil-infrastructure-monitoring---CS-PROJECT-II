@@ -89,12 +89,13 @@ def get_summary(current_user):
     ]
     active_count = len(received_reports)
 
-    # 2. Critical Reports Awaiting Verification = Received reports with relative visual severity Critical (or >= 15%)
+    # 2. Critical Reports Awaiting Verification = Received reports with relative visual severity Critical (or report_rvsi >= 45.0)
     critical_received_count = 0
     for r in received_reports:
         meta = r.get('metadata') or {}
         sev = str(meta.get('relative_severity') or r.get('severity') or '').strip().lower()
-        if sev in ['critical', 'high']:
+        rvsi = meta.get('report_rvsi') if meta.get('report_rvsi') is not None else meta.get('rvsi_score')
+        if sev in ['critical', 'high'] or (rvsi is not None and float(rvsi) >= 45.0):
             critical_received_count += 1
 
     # 3. My Lead Cases: unresolved cases (Verified or Under Review) where current user is Lead Engineer or assigned reviewer

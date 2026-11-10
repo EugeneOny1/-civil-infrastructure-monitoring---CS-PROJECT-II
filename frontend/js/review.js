@@ -200,6 +200,8 @@ const Review = {
             btnAddNote.addEventListener('click', () => this.addNoteCard());
         }
 
+        this.initMeasurementsForm();
+
         // Mark Objective N/A Modal Events
         const modalMarkNa = document.getElementById('markObjectiveNaModal');
         const btnCloseMarkNa = document.getElementById('btnCloseMarkNa');
@@ -1032,14 +1034,18 @@ const Review = {
 
         const predClassEl = document.getElementById('reviewPredictedClass');
         const calcSevEl = document.getElementById('reviewCalculatedSeverity');
+        const rvsiScore = (ai.rvsi_score !== undefined && ai.rvsi_score !== null)
+            ? ai.rvsi_score
+            : (this.activeReportData?.report?.metadata?.report_rvsi ?? this.activeReportData?.report?.metadata?.rvsi_score ?? this.currentReport?.metadata?.report_rvsi);
+
         if (predClassEl) predClassEl.textContent = defectClass;
-        if (calcSevEl) calcSevEl.textContent = `RELATIVE SEVERITY: ${severity}`;
+        if (calcSevEl) calcSevEl.textContent = `RELATIVE VISUAL SEVERITY: ${severity}${rvsiScore != null ? ` (RVSI: ${rvsiScore})` : ''}`;
 
         const confEl = document.getElementById('telemConfidence');
         const sevEl = document.getElementById('telemSeverity');
         const areaEl = document.getElementById('telemArea');
         if (confEl) confEl.textContent = hasDetections ? `${confidence}%` : '—';
-        if (sevEl) sevEl.textContent = severity;
+        if (sevEl) sevEl.textContent = `${severity}${rvsiScore != null ? ` (${rvsiScore})` : ''}`;
         if (areaEl) areaEl.textContent = `${areaRatio}%`;
 
         // Render inspection canvas with scaled bounding boxes
@@ -1798,6 +1804,171 @@ const Review = {
             this.renderDrawerEvidence();
         } else if (panelId === 'drawerPanelTeam') {
             this.loadDrawerTeam();
+        } else if (panelId === 'drawerPanelMeasurements') {
+            this.renderDrawerMeasurements();
+        }
+    },
+
+    initMeasurementsForm() {
+        const classSelect = document.getElementById('measDefectClass');
+        const potholeFields = document.getElementById('measPotholeFields');
+        const crackFields = document.getElementById('measCrackFields');
+        const surfaceFields = document.getElementById('measSurfaceFields');
+
+        if (classSelect) {
+            classSelect.addEventListener('change', () => {
+                const val = classSelect.value.toLowerCase();
+                if (potholeFields) potholeFields.style.display = val === 'pothole' ? 'flex' : 'none';
+                if (crackFields) crackFields.style.display = val === 'crack' ? 'flex' : 'none';
+                if (surfaceFields) surfaceFields.style.display = val.includes('surface') ? 'flex' : 'none';
+            });
+        }
+
+        const btnSave = document.getElementById('btnSaveMeasurements');
+        if (btnSave) {
+            btnSave.addEventListener('click', async () => {
+                if (!this.targetReportId) {
+                    window.App?.showToast('Please select a report first.', 'warning');
+                    return;
+                }
+
+                const defectType = classSelect ? classSelect.value : 'Pothole';
+                const method = document.getElementById('measMethod')?.value || 'Direct Field Measurement';
+                const notes = document.getElementById('measNotes')?.value || '';
+
+                let payload = {
+                    defect_type: defectType,
+                    method,
+                    notes,
+                    measured_at: new Date().toISOString()
+                };
+
+                if (defectType === 'Pothole') {
+                    const depth = parseFloat(document.getElementById('measPotholeDepth')?.value);
+                    const length = parseFloat(document.getElementById('measPotholeLength')?.value);
+                    const width = parseFloat(document.getElementById('measPotholeWidth')?.value);
+                    const unit = document.getElementById('measPotholeUnit')?.value || 'mm';
+                    if (!isNaN(depth)) payload.max_depth = depth;
+                    if (!isNaN(length)) payload.length = length;
+                    if (!isNaN(width)) payload.width = width;
+                    payload.unit = unit;
+                } else if (defectType === 'Crack') {
+                    const width = parseFloat(document.getElementById('measCrackWidth')?.value);
+                    const length = parseFloat(document.getElementById('measCrackLength')?.value);
+                    const unit = document.getElementById('measCrackUnit')?.value || 'mm';
+                    if (!isNaN(width)) payload.crack_width = width;
+                    if (!isNaN(length)) payload.crack_length = length;
+                    payload.unit = unit;
+                } else {
+                    const area = parseFloat(document.getElementById('measSurfaceArea')?.value);
+                    const span = parseFloat(document.getElementById('measSurfaceSpan')?.value);
+                    if (!isNaN(area)) payload.area = area;
+                    if (!isNaN(span)) payload.length = span;
+                    payload.unit = 'm';
+                }
+
+                btnSave.disabled = true;
+                btnSave.innerHTML = "<i class='bx bx-loader-alt bx-spin'></i> Saving...";
+
+                try {
+                    const resp = await window.Api.request(`/api/reviews/report/${this.targetReportId}/measurements`, 'POST', payload);
+                    window.App?.showToast('Field measurements saved successfully.', 'success');
+
+                    if (this.activeReportData?.report?.metadata) {
+                        this.activeReportData.report.metadata.physical_measurements = resp.physical_measurements;
+                        if (resp.engineering_assessment) {
+                            this.activeReportData.report.metadata.physical_engineering_assessment = resp.engineering_assessment;
+                        }
+                    }
+                    this.renderDrawerMeasurements();
+                } catch (err) {
+                    console.error("Failed to save measurements:", err);
+                    window.App?.showToast(err.message || 'Failed to save measurements.', 'error');
+                } finally {
+                    btnSave.disabled = false;
+                    btnSave.innerHTML = "<i class='bx bx-save'></i> Save Measurements";
+                }
+            });
+        }
+    },
+
+    renderDrawerMeasurements() {
+        const report = this.activeReportData?.report || this.currentReport;
+        if (!report) return;
+
+        const meta = report.metadata || {};
+        const pRec = meta.physical_measurements || meta.inspection_notebook?.physical_measurements;
+        const fhwa = meta.physical_engineering_assessment || meta.inspection_notebook?.physical_engineering_assessment || pRec?.engineering_assessment;
+        const defectClass = meta.defect_class || 'Pothole';
+
+        // Pre-select defect class
+        const classSelect = document.getElementById('measDefectClass');
+        if (classSelect && !pRec) {
+            classSelect.value = defectClass.includes('Pothole') ? 'Pothole' : (defectClass.includes('Crack') ? 'Crack' : 'Surface deterioration');
+            classSelect.dispatchEvent(new Event('change'));
+        }
+
+        if (pRec) {
+            const m = pRec.measurements || {};
+            if (classSelect) {
+                classSelect.value = pRec.defect_type || 'Pothole';
+                classSelect.dispatchEvent(new Event('change'));
+            }
+            if (document.getElementById('measMethod')) document.getElementById('measMethod').value = m.method || pRec.method || 'Straightedge & Depth Gauge';
+            if (document.getElementById('measNotes')) document.getElementById('measNotes').value = pRec.notes || '';
+
+            if (pRec.defect_type === 'Pothole') {
+                if (document.getElementById('measPotholeDepth')) document.getElementById('measPotholeDepth').value = m.max_depth_raw ?? '';
+                if (document.getElementById('measPotholeLength')) document.getElementById('measPotholeLength').value = m.length_raw ?? '';
+                if (document.getElementById('measPotholeWidth')) document.getElementById('measPotholeWidth').value = m.width_raw ?? '';
+                if (document.getElementById('measPotholeUnit')) document.getElementById('measPotholeUnit').value = m.unit || 'mm';
+            } else if (pRec.defect_type === 'Crack') {
+                if (document.getElementById('measCrackWidth')) document.getElementById('measCrackWidth').value = m.crack_width_raw ?? '';
+                if (document.getElementById('measCrackLength')) document.getElementById('measCrackLength').value = m.crack_length_raw ?? '';
+                if (document.getElementById('measCrackUnit')) document.getElementById('measCrackUnit').value = m.unit || 'mm';
+            }
+        }
+
+        const bodyEl = document.getElementById('measAssessmentBody');
+        const badgeEl = document.getElementById('measAssessmentBadge');
+
+        if (!bodyEl) return;
+
+        if (fhwa) {
+            if (badgeEl) badgeEl.textContent = `${fhwa.standard || 'FHWA LTPP'}: ${fhwa.category.toUpperCase()}`;
+            const sevColor = fhwa.category === 'High' ? '#dc2626' : (fhwa.category === 'Moderate' ? '#d97706' : '#16a34a');
+            bodyEl.innerHTML = `
+                <div style="display:flex; flex-direction:column; gap:0.35rem;">
+                    <div style="display:flex; align-items:center; gap:0.5rem;">
+                        <span style="font-weight:700; color:${sevColor}; font-size:0.95rem;">
+                            ${fhwa.category} Severity
+                        </span>
+                        <span style="background:#f1f5f9; color:#475569; font-size:0.72rem; padding:2px 6px; border-radius:4px;">
+                            ${fhwa.measured_depth_mm} mm measured depth
+                        </span>
+                    </div>
+                    <span style="font-size:0.74rem; color:#475569;">${fhwa.rule || 'Pothole depth classification: <25mm Low, 25-50mm Moderate, >50mm High'}</span>
+                    <div style="font-size:0.7rem; color:#64748b; margin-top:2px;">
+                        Recorded by <strong>${pRec?.engineer_name || fhwa.assessed_by || 'Verified Civil Engineer'}</strong> ${pRec?.registration_number ? `(${pRec.registration_number})` : ''}
+                    </div>
+                </div>
+            `;
+        } else if (pRec && pRec.defect_type === 'Crack') {
+            const m = pRec.measurements || {};
+            if (badgeEl) badgeEl.textContent = 'Crack Dimensions';
+            bodyEl.innerHTML = `
+                <div style="display:flex; flex-direction:column; gap:0.35rem;">
+                    <span style="font-weight:600; color:#0f172a; font-size:0.85rem;">
+                        Width: ${m.crack_width_mm || m.crack_width_raw || '—'} mm • Length: ${m.crack_length_mm || m.crack_length_raw || '—'} mm
+                    </span>
+                    <span style="font-size:0.72rem; color:#64748b;">
+                        Recorded by ${pRec.engineer_name || 'Verified Civil Engineer'}. Physical dimensions are preserved for engineering oversight without automated severity categorization.
+                    </span>
+                </div>
+            `;
+        } else {
+            if (badgeEl) badgeEl.textContent = 'FHWA LTPP';
+            bodyEl.innerHTML = `<p style="color:#64748b; font-style:italic; margin:0;">No physical measurements recorded yet for this defect casework.</p>`;
         }
     },
 

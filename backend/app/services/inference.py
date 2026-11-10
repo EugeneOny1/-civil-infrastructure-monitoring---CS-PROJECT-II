@@ -267,7 +267,8 @@ class InferenceService:
         """
         Applies class-aware Non-Maximum Suppression (NMS) duplicate suppression:
         - Same class + high overlap (IoU >= threshold) -> duplicate suppressed (keeps higher confidence).
-        - Different classes (e.g. Crack vs Pothole) -> preserved even if their boxes overlap.
+        - Different classes (e.g. Crack vs Pothole or Surface deterioration) -> preserved
+          even if their boxes overlap, providing primary and alternative defect evidence for review.
         """
         if not detections:
             return []
@@ -293,6 +294,35 @@ class InferenceService:
                 surviving.append(det)
 
         return surviving
+
+    @classmethod
+    def detect_cross_class_overlaps(cls, detections: List[Dict[str, Any]], overlap_threshold: float = 0.35) -> List[Dict[str, Any]]:
+        """
+        Identifies co-located detections belonging to DIFFERENT defect classes.
+        Both predictions are retained for engineer inspection rather than suppressed.
+        """
+        overlaps = []
+        if not detections or len(detections) < 2:
+            return overlaps
+
+        for i in range(len(detections)):
+            for j in range(i + 1, len(detections)):
+                det_a = detections[i]
+                det_b = detections[j]
+                if det_a.get('class_id') != det_b.get('class_id'):
+                    box_a = det_a.get('normalized_box')
+                    box_b = det_b.get('normalized_box')
+                    iou = cls.calculate_box_iou(box_a, box_b)
+                    if iou >= overlap_threshold:
+                        overlaps.append({
+                            'primary_defect': det_a.get('class_name'),
+                            'primary_confidence': det_a.get('confidence'),
+                            'alternative_defect': det_b.get('class_name'),
+                            'alternative_confidence': det_b.get('confidence'),
+                            'iou': round(iou, 4),
+                            'note': 'Cross-class co-located detection preserved for professional engineer review.'
+                        })
+        return overlaps
 
     @classmethod
     def group_crack_regions(cls, detections: List[Dict[str, Any]], distance_threshold: float = 0.08) -> List[Dict[str, Any]]:
@@ -473,7 +503,19 @@ class InferenceService:
 
         # Apply class-aware duplicate suppression (preserves overlapping different classes e.g. Crack + Pothole)
         detections = self.suppress_class_aware_duplicates(raw_detections, iou_threshold=nms_iou)
+        cross_class_overlaps = self.detect_cross_class_overlaps(detections)
         crack_regions = self.group_crack_regions(detections)
+
+        # Calculate canonical Relative Visual Severity Index (RVSI) over cleaned detections
+        rvsi_res = severity_service.calculate_rvsi(
+            detections,
+            image_width=orig_w,
+            image_height=orig_h
+        )
+
+        # Attach item-level RVSI details to each preserved detection
+        for d in detections:
+            d['rvsi_score'] = severity_service.calculate_rvsi([d], image_width=orig_w, image_height=orig_h)['rvsi_score']
 
         # Handle zero detections or aggregate assessment
         if detections:
@@ -486,14 +528,8 @@ class InferenceService:
 
             # Unique detected defect classes across all preserved detections
             detected_classes = list(dict.fromkeys(d['class_name'] for d in detections))
-
-            # Non-inflated relative area calculation:
-            # We take the maximum individual box extent and estimate combined coverage
-            max_single_area = max(d['relative_area'] for d in detections)
-            combined_area = min(1.0, sum(d['relative_area'] for d in detections))
-            # If multiple detections, avoid duplicate area inflation by using max(max_single, 0.75 * combined)
-            effective_area = max(max_single_area, combined_area * 0.75 if len(detections) > 1 else max_single_area)
-            overall_severity = self.calculate_relative_severity(effective_area)
+            overall_severity = rvsi_res['relative_severity']
+            effective_area = rvsi_res['area_extent']
             area_percentage = round(effective_area * 100.0, 2)
         else:
             primary_class_id = None
@@ -501,7 +537,6 @@ class InferenceService:
             primary_confidence = 0.0
             primary_box_px = None
             primary_box_norm = [0.0, 0.0, 0.0, 0.0]
-            total_relative_area = 0.0
             overall_severity = 'Low'
             area_percentage = 0.0
             detected_classes = []
@@ -511,7 +546,10 @@ class InferenceService:
             'model_name': self.model_name,
             'model_version': self.model_version,
             'threshold_applied': conf_thresh,
+            'score_threshold': conf_thresh,
             'iou_threshold_applied': nms_iou,
+            'nms_iou_threshold': nms_iou,
+            'postprocessing_version': severity_service.POSTPROCESSING_VERSION,
             'class_id': primary_class_id,
             'class_name': primary_class_name,
             'defect_class': primary_class_name,  # for backwards compatibility
@@ -522,17 +560,25 @@ class InferenceService:
             'bounding_box_pixels': primary_box_px,
             'relative_severity': overall_severity,
             'severity': overall_severity,
+            'rvsi_score': rvsi_res['rvsi_score'],
+            'area_extent': rvsi_res['area_extent'],
+            'spatial_span': rvsi_res['spatial_span'],
+            'multiplicity': rvsi_res['multiplicity'],
+            'rvsi': rvsi_res,
+            'rvsi_method': rvsi_res['rvsi_method'],
+            'rvsi_version': rvsi_res['rvsi_version'],
+            'severity_threshold_source': rvsi_res['severity_threshold_source'],
             'relative_area': effective_area,
+            'area_ratio': effective_area,  # for backwards compatibility
             'area_percentage': area_percentage,
             'detections': detections,
+            'cross_class_overlaps': cross_class_overlaps,
             'crack_regions': crack_regions,
             'raw_detection_count': len(raw_detections),
+            'cleaned_detection_count': len(detections),
             'suppressed_count': len(raw_detections) - len(detections),
             'image_dimensions': {'width': orig_w, 'height': orig_h},
-            'disclaimer': (
-                "Relative visual severity based on detected bounding-box area. "
-                "Automated preliminary estimate subject to certified civil engineer review."
-            )
+            'disclaimer': severity_service.RVSI_DISCLAIMER
         }
 
 

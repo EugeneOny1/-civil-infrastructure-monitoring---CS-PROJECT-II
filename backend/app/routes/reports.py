@@ -7,6 +7,7 @@ from ..models.assessment import AIAssessment
 from ..models.asset import InfrastructureAsset
 from ..services.database import db_service
 from ..services.inference import inference_service
+from ..services.severity import severity_service
 from ..services.validation import validation_service
 from ..utils.auth_helpers import get_current_user, login_required
 from ..utils.file_helpers import allowed_file, save_uploaded_image
@@ -154,6 +155,7 @@ def submit_report(current_user):
             obs_defect_class = det_res.get('defect_class', 'None Detected')
             obs_severity = det_res.get('relative_severity', 'Low')
             obs_confidence = float(det_res.get('confidence_score') or 0.0)
+            obs_rvsi = float(det_res.get('rvsi_score', 0.0))
 
             # Validation
             obs_validation = validation_service.validate_report(
@@ -178,6 +180,18 @@ def submit_report(current_user):
                     'detected_classes': det_res.get('detected_classes', [obs_defect_class]),
                     'confidence': obs_confidence,
                     'relative_severity': obs_severity,
+                    'severity': obs_severity,
+                    'report_rvsi': obs_rvsi,
+                    'rvsi_score': obs_rvsi,
+                    'image_rvsi_scores': [obs_rvsi],
+                    'aggregation_method': 'single_image',
+                    'aggregation_version': severity_service.AGGREGATION_VERSION,
+                    'rvsi_method': det_res.get('rvsi_method', severity_service.RVSI_METHOD_NAME),
+                    'rvsi_version': det_res.get('rvsi_version', severity_service.RVSI_VERSION),
+                    'severity_threshold_source': det_res.get('severity_threshold_source', severity_service.DEFAULT_RVSI_THRESHOLD_SOURCE),
+                    'postprocessing_version': det_res.get('postprocessing_version', severity_service.POSTPROCESSING_VERSION),
+                    'raw_detection_count': det_res.get('raw_detection_count', len(det_res.get('detections', []))),
+                    'cleaned_detection_count': det_res.get('cleaned_detection_count', len(det_res.get('detections', []))),
                     'image_count': 1,
                     'multi_image_mode': 'multi_defect',
                     'submission_batch_id': batch_id,
@@ -235,6 +249,11 @@ def submit_report(current_user):
                 relative_area=det_res.get('relative_area', 0.0),
                 area_percentage=det_res.get('area_percentage', 0.0),
                 bounding_box_pixels=det_res.get('bounding_box_pixels'),
+                rvsi_score=obs_rvsi,
+                rvsi=det_res.get('rvsi', {}),
+                rvsi_method=det_res.get('rvsi_method', severity_service.RVSI_METHOD_NAME),
+                rvsi_version=det_res.get('rvsi_version', severity_service.RVSI_VERSION),
+                postprocessing_version=det_res.get('postprocessing_version', severity_service.POSTPROCESSING_VERSION),
                 validation_status='valid',
                 validation_message=''
             )
@@ -313,18 +332,13 @@ def submit_report(current_user):
         report_detected_classes = sorted(list(aggregated_classes_set))
         primary_defect_class = report_detected_classes[0]
 
-    # 2. Overall Visual Severity: highest credible Visual Severity observed across submitted views
-    # Critical (3) > Medium / Moderate (2) > Low (1)
-    SEV_WEIGHTS = {'critical': 3, 'moderate': 2, 'medium': 2, 'low': 1}
-    highest_sev_rank = 1
-    overall_visual_severity = 'Low'
-
-    for item in processed_images:
-        s = item['detection'].get('relative_severity', 'Low')
-        rank = SEV_WEIGHTS.get(s.lower(), 1)
-        if rank > highest_sev_rank:
-            highest_sev_rank = rank
-            overall_visual_severity = 'Critical' if rank == 3 else ('Medium' if rank == 2 else 'Low')
+    # 2. Overall Visual Severity & Multi-Image RVSI Evidence Aggregation:
+    # Single-image: report_rvsi = image_rvsi
+    # Multi-image (>= 2 images): report_rvsi = 0.70 * max(image_rvsi_scores) + 0.30 * mean(image_rvsi_scores)
+    image_rvsi_scores = [float(item['detection'].get('rvsi_score', 0.0)) for item in processed_images]
+    report_rvsi_res = severity_service.calculate_report_rvsi(image_rvsi_scores)
+    report_rvsi = report_rvsi_res['report_rvsi']
+    overall_visual_severity = report_rvsi_res['relative_severity']
 
     # 3. Confidence: highest confidence score across detections
     highest_confidence = 0.0
@@ -392,6 +406,12 @@ def submit_report(current_user):
         'mode': 'same_defect',
         'total_views': len(processed_images),
         'combined_visual_severity': overall_visual_severity,
+        'report_rvsi': report_rvsi,
+        'image_rvsi_scores': report_rvsi_res['image_rvsi_scores'],
+        'aggregation_method': report_rvsi_res['aggregation_method'],
+        'aggregation_version': report_rvsi_res['aggregation_version'],
+        'rvsi_method': severity_service.RVSI_METHOD_NAME,
+        'rvsi_version': severity_service.RVSI_VERSION,
         'combined_classes': [c for c in report_detected_classes if c != 'None Detected'],
         'class_assessments': class_assessments,
         'per_view_summary': [
@@ -401,6 +421,7 @@ def submit_report(current_user):
                 'defect_class': item['detection'].get('defect_class', 'None Detected'),
                 'detected_classes': item['detection'].get('detected_classes', []),
                 'relative_severity': item['detection'].get('relative_severity', 'Low'),
+                'rvsi_score': item['detection'].get('rvsi_score', 0.0),
                 'confidence': float(item['detection'].get('confidence_score') or 0.0),
                 'detections_count': len(item['detection'].get('detections', []))
             }
@@ -465,6 +486,16 @@ def submit_report(current_user):
             'detected_classes': report_detected_classes,
             'confidence': highest_confidence,
             'relative_severity': overall_visual_severity,
+            'severity': overall_visual_severity,
+            'report_rvsi': report_rvsi,
+            'rvsi_score': report_rvsi,
+            'image_rvsi_scores': report_rvsi_res['image_rvsi_scores'],
+            'aggregation_method': report_rvsi_res['aggregation_method'],
+            'aggregation_version': report_rvsi_res['aggregation_version'],
+            'rvsi_method': severity_service.RVSI_METHOD_NAME,
+            'rvsi_version': severity_service.RVSI_VERSION,
+            'severity_threshold_source': severity_service.DEFAULT_RVSI_THRESHOLD_SOURCE,
+            'postprocessing_version': severity_service.POSTPROCESSING_VERSION,
             'image_count': len(processed_images),
             'multi_image_mode': multi_image_mode,
             'image_relationship': 'Multiple views of the same defect' if multi_image_mode == 'same_defect' else ('Different defect observations' if multi_image_mode == 'multi_defect' else 'Single image'),
@@ -537,6 +568,11 @@ def submit_report(current_user):
             relative_area=det.get('relative_area', 0.0),
             area_percentage=det.get('area_percentage', 0.0),
             bounding_box_pixels=det.get('bounding_box_pixels'),
+            rvsi_score=det.get('rvsi_score', 0.0),
+            rvsi=det.get('rvsi', {}),
+            rvsi_method=det.get('rvsi_method', severity_service.RVSI_METHOD_NAME),
+            rvsi_version=det.get('rvsi_version', severity_service.RVSI_VERSION),
+            postprocessing_version=det.get('postprocessing_version', severity_service.POSTPROCESSING_VERSION),
             validation_status='valid',
             validation_message=''
         )
@@ -642,11 +678,24 @@ def analyze_image_preview(current_user):
             'confidence_percentage': round(detection_result['confidence_score'] * 100, 1),
             'relative_severity': detection_result['relative_severity'],
             'severity': detection_result['severity'],
+            'rvsi_score': detection_result.get('rvsi_score', 0.0),
+            'area_extent': detection_result.get('area_extent', 0.0),
+            'spatial_span': detection_result.get('spatial_span', 0.0),
+            'multiplicity': detection_result.get('multiplicity', 0.0),
+            'rvsi': detection_result.get('rvsi', {}),
+            'rvsi_method': detection_result.get('rvsi_method', severity_service.RVSI_METHOD_NAME),
+            'rvsi_version': detection_result.get('rvsi_version', severity_service.RVSI_VERSION),
+            'postprocessing_version': detection_result.get('postprocessing_version', severity_service.POSTPROCESSING_VERSION),
             'relative_area': detection_result.get('relative_area', 0.0),
             'area_percentage': detection_result.get('area_percentage', 0.0),
             'bounding_box': detection_result['bounding_box'],
             'bounding_box_pixels': detection_result.get('bounding_box_pixels'),
             'detections': detection_result['detections'],
+            'cross_class_overlaps': detection_result.get('cross_class_overlaps', []),
+            'raw_detection_count': detection_result.get('raw_detection_count', 0),
+            'cleaned_detection_count': detection_result.get('cleaned_detection_count', 0),
+            'score_threshold': detection_result.get('score_threshold', 0.30),
+            'nms_iou_threshold': detection_result.get('nms_iou_threshold', 0.50),
             'validation_status': validation_result['validation_status'],
             'validation_message': validation_result['validation_message'],
             'disclaimer': detection_result.get('disclaimer')
@@ -968,6 +1017,8 @@ def get_map_reports():
         rep_user_id = str(rep.get('user_id') or meta.get('submitted_by_id') or '')
         is_owner = bool(user_sub and rep_user_id and user_sub == rep_user_id)
 
+        rep_rvsi = meta.get('report_rvsi') or meta.get('rvsi_score') or (assessment.get('rvsi_score') if assessment else None) or 0.0
+
         point = {
             'report_id': rep['_id'],
             'display_id': display_id,
@@ -979,6 +1030,8 @@ def get_map_reports():
             'defect_class': defect_c,
             'detected_classes': meta.get('detected_classes', [defect_c]),
             'relative_severity': rel_sev,
+            'report_rvsi': float(rep_rvsi),
+            'rvsi_score': float(rep_rvsi),
             'status': InfrastructureReport.normalize_lifecycle_status(rep.get('status')),
             'date_submitted': rep.get('date_submitted'),
             'image_url': f"/api/reports/images/{image['image_path']}" if image else None

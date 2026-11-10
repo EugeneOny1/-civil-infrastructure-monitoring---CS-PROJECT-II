@@ -3,6 +3,7 @@ from flask import Blueprint, request, jsonify
 from ..models.review import ProfessionalReview
 from ..models.report import InfrastructureReport
 from ..services.database import db_service
+from ..services.severity import severity_service
 from ..utils.auth_helpers import role_required
 
 reviews_bp = Blueprint('reviews', __name__, url_prefix='/api/reviews')
@@ -789,13 +790,114 @@ def transfer_lead_engineer(current_user, report_id):
     }), 200
 
 
+def process_field_measurements(data: dict, current_user: dict, default_defect: str = 'Pothole') -> tuple:
+    """
+    Processes, normalizes, and validates physical engineering measurements.
+    Computes FHWA LTPP depth classification for potholes if valid measured depth exists.
+    Maintains strict separation: does NOT infer depth or crack width from monocular images.
+    """
+    defect_type = (data.get('defect_type') or data.get('defect_class') or default_defect or 'Pothole').strip()
+    reviewer_id = str(current_user.get('_id') or current_user.get('user_id'))
+    reviewer_name = current_user.get('name', 'Certified Engineer')
+    ebk_reg = current_user.get('registration_number') or current_user.get('ebk_number') or ''
+    now_iso = datetime.now(timezone.utc).isoformat()
+    measured_at = data.get('measured_at') or data.get('timestamp') or now_iso
+    method = (data.get('method') or data.get('instrument') or 'Direct Field Measurement').strip()
+    notes = (data.get('notes') or '').strip()
+
+    measurements = {}
+    fhwa_assessment = None
+
+    if 'pothole' in defect_type.lower():
+        depth = data.get('max_depth') if data.get('max_depth') is not None else data.get('depth')
+        unit = (data.get('depth_unit') or data.get('unit') or 'mm').strip().lower()
+        length = data.get('length')
+        width = data.get('width')
+
+        depth_mm = severity_service.normalize_measurement(depth, unit) if depth is not None else None
+        length_mm = severity_service.normalize_measurement(length, unit) if length is not None else None
+        width_mm = severity_service.normalize_measurement(width, unit) if width is not None else None
+
+        measurements = {
+            'max_depth_raw': depth,
+            'max_depth_mm': depth_mm,
+            'length_raw': length,
+            'length_mm': length_mm,
+            'width_raw': width,
+            'width_mm': width_mm,
+            'unit': unit,
+            'method': method,
+            'notes': notes
+        }
+
+        if depth_mm is not None:
+            fhwa_assessment = severity_service.assess_pothole_fhwa(depth_mm, 'mm')
+            if fhwa_assessment:
+                fhwa_assessment['assessed_by'] = reviewer_name
+                fhwa_assessment['assessed_at'] = now_iso
+
+    elif 'crack' in defect_type.lower():
+        width = data.get('crack_width') if data.get('crack_width') is not None else data.get('width')
+        length = data.get('crack_length') if data.get('crack_length') is not None else data.get('length')
+        unit = (data.get('unit') or 'mm').strip().lower()
+
+        width_mm = severity_service.normalize_measurement(width, unit) if width is not None else None
+        length_mm = severity_service.normalize_measurement(length, unit) if length is not None else None
+
+        measurements = {
+            'crack_width_raw': width,
+            'crack_width_mm': width_mm,
+            'crack_length_raw': length,
+            'crack_length_mm': length_mm,
+            'unit': unit,
+            'method': method,
+            'notes': notes
+        }
+        # For cracks, record physical dimensions without fabricating an automated physical severity category
+        fhwa_assessment = None
+
+    else:
+        # Surface deterioration or general civil asset distress
+        area = data.get('area') or data.get('area_m2')
+        length = data.get('length')
+        width = data.get('width')
+        unit = (data.get('unit') or 'm').strip().lower()
+
+        measurements = {
+            'area_m2': float(area) if area is not None else None,
+            'length': float(length) if length is not None else None,
+            'width': float(width) if width is not None else None,
+            'unit': unit,
+            'method': method,
+            'notes': notes
+        }
+        fhwa_assessment = None
+
+    record = {
+        'source': 'professional_field_measurement',
+        'defect_type': defect_type,
+        'measurements': measurements,
+        'engineering_assessment': fhwa_assessment,
+        'engineer_id': reviewer_id,
+        'engineer_name': reviewer_name,
+        'registration_number': ebk_reg,
+        'timestamp': measured_at,
+        'notes': notes
+    }
+
+    return record, fhwa_assessment
+
+
 @reviews_bp.route('/report/<report_id>/inspection-notebook', methods=['POST', 'PUT'])
 @role_required('engineer', 'admin')
 def update_inspection_notebook(current_user, report_id):
     """
     Sections 30-33 & 43: Saves inspection checklist, visual note cards, evidence, and compliance context.
-    Includes concurrency detection (expected_updated_at) and user attribution.
+    Includes concurrency detection (expected_updated_at), physical measurements, and user attribution.
     """
+    if current_user.get('role') not in ['engineer', 'admin']:
+        return jsonify({'error': 'Forbidden: Only verified civil engineers or administrators may modify the inspection notebook.'}), 403
+
     data = request.get_json() or {}
     report = db_service.find_one('infrastructure_reports', {'_id': report_id})
     if not report:
@@ -826,6 +928,17 @@ def update_inspection_notebook(current_user, report_id):
     if 'summary_notes' in data:
         notebook['summary_notes'] = data['summary_notes']
 
+    # Process field measurements if provided
+    if 'physical_measurements' in data:
+        p_raw = data['physical_measurements']
+        def_class = meta.get('defect_class') or report.get('defect_class') or 'Pothole'
+        p_rec, p_fhwa = process_field_measurements(p_raw, current_user, default_defect=def_class)
+        notebook['physical_measurements'] = p_rec
+        meta['physical_measurements'] = p_rec
+        if p_fhwa:
+            notebook['physical_engineering_assessment'] = p_fhwa
+            meta['physical_engineering_assessment'] = p_fhwa
+
     notebook['last_updated_at'] = now_iso
     notebook['last_updated_by'] = current_user.get('name', 'Civil Engineer')
     notebook['last_updated_by_id'] = str(current_user.get('_id') or current_user.get('user_id'))
@@ -841,4 +954,65 @@ def update_inspection_notebook(current_user, report_id):
         'message': 'Inspection notebook updated successfully.',
         'inspection_notebook': notebook
     }), 200
+
+
+@reviews_bp.route('/report/<report_id>/measurements', methods=['POST'])
+@role_required('engineer', 'admin')
+def record_physical_measurements(current_user, report_id):
+    """
+    Records professional physical field measurements (e.g. pothole depth, crack width).
+    Strictly role-protected: Citizens cannot submit engineering measurements (returns 403).
+    Computes FHWA LTPP depth classification for potholes if valid measured depth exists.
+    """
+    if current_user.get('role') not in ['engineer', 'admin']:
+        return jsonify({'error': 'Forbidden: Only verified civil engineers or administrators may record physical measurements.'}), 403
+
+    report = db_service.find_one('infrastructure_reports', {'_id': report_id})
+    if not report:
+        return jsonify({'error': 'Infrastructure report not found.'}), 404
+
+    data = request.get_json() or {}
+    meta = report.get('metadata') or {}
+    def_class = meta.get('defect_class') or report.get('defect_class') or 'Pothole'
+
+    p_rec, p_fhwa = process_field_measurements(data, current_user, default_defect=def_class)
+
+    now_iso = datetime.now(timezone.utc).isoformat()
+    meta['physical_measurements'] = p_rec
+    if p_fhwa:
+        meta['physical_engineering_assessment'] = p_fhwa
+
+    notebook = meta.get('inspection_notebook') or {}
+    notebook['physical_measurements'] = p_rec
+    if p_fhwa:
+        notebook['physical_engineering_assessment'] = p_fhwa
+    notebook['last_updated_at'] = now_iso
+    notebook['last_updated_by'] = current_user.get('name', 'Civil Engineer')
+    notebook['last_updated_by_id'] = str(current_user.get('_id') or current_user.get('user_id'))
+    meta['inspection_notebook'] = notebook
+
+    history = meta.get('status_history', [])
+    meas_summary = f"{p_rec['defect_type']} physical measurement recorded"
+    if p_fhwa:
+        meas_summary += f" [FHWA LTPP: {p_fhwa['category']} severity ({p_fhwa['measured_depth_mm']}mm)]"
+    history.append({
+        'status': report.get('status'),
+        'timestamp': now_iso,
+        'updated_by': current_user.get('name', 'Certified Engineer'),
+        'user_id': str(current_user.get('_id') or current_user.get('user_id')),
+        'note': meas_summary
+    })
+    meta['status_history'] = history
+
+    db_service.update_one('infrastructure_reports', {'_id': report_id}, {
+        'metadata': meta,
+        'last_updated_at': now_iso
+    })
+
+    return jsonify({
+        'message': 'Physical field measurement and engineering assessment recorded successfully.',
+        'physical_measurements': p_rec,
+        'engineering_assessment': p_fhwa
+    }), 201
+
 

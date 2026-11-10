@@ -1522,16 +1522,31 @@ const Dashboard = {
                 });
             }
 
-            // Prioritization: Critical -> Medium -> Low, then oldest submitted first
-            const SEV_RANKS = { 'critical': 3, 'high': 3, 'moderate': 2, 'medium': 2, 'low': 1 };
+            // Strict 4-Tier Prioritized Queue Ordering:
+            // 1. Explicit professional safety advisory / override (highest priority)
+            // 2. Verified Critical Relative Severity
+            // 3. Report RVSI score descending (highest visual severity first)
+            // 4. Age / time awaiting review (oldest submission awaiting review first)
             reports.sort((a, b) => {
+                const advA = (a.metadata?.safety_advisory?.active === true || a.metadata?.next_action === 'Issue Safety Advisory' || a.metadata?.engineer_decision === 'Overridden' || a.review?.decision === 'Overridden') ? 1 : 0;
+                const advB = (b.metadata?.safety_advisory?.active === true || b.metadata?.next_action === 'Issue Safety Advisory' || b.metadata?.engineer_decision === 'Overridden' || b.review?.decision === 'Overridden') ? 1 : 0;
+                if (advB !== advA) return advB - advA;
+
                 const sevA = (a.assessment?.relative_severity || a.metadata?.relative_severity || a.severity || 'low').toLowerCase();
                 const sevB = (b.assessment?.relative_severity || b.metadata?.relative_severity || b.severity || 'low').toLowerCase();
-                const rankA = SEV_RANKS[sevA] || 1;
-                const rankB = SEV_RANKS[sevB] || 1;
-                if (rankB !== rankA) {
-                    return rankB - rankA;
+                const stA = (a.status || '').toLowerCase();
+                const stB = (b.status || '').toLowerCase();
+
+                const verCritA = ((stA === 'verified' || stA === 'under review') && (sevA === 'critical' || sevA === 'high')) ? 1 : 0;
+                const verCritB = ((stB === 'verified' || stB === 'under review') && (sevB === 'critical' || sevB === 'high')) ? 1 : 0;
+                if (verCritB !== verCritA) return verCritB - verCritA;
+
+                const rvsiA = Number(a.metadata?.report_rvsi ?? a.metadata?.rvsi_score ?? a.assessment?.rvsi_score ?? (sevA === 'critical' ? 60 : (sevA === 'moderate' || sevA === 'medium' ? 30 : 10)));
+                const rvsiB = Number(b.metadata?.report_rvsi ?? b.metadata?.rvsi_score ?? b.assessment?.rvsi_score ?? (sevB === 'critical' ? 60 : (sevB === 'moderate' || sevB === 'medium' ? 30 : 10)));
+                if (Math.abs(rvsiB - rvsiA) >= 0.1) {
+                    return rvsiB - rvsiA;
                 }
+
                 const dateA = new Date(a.date_submitted || a.created_at || 0).getTime();
                 const dateB = new Date(b.date_submitted || b.created_at || 0).getTime();
                 return dateA - dateB;
@@ -1574,6 +1589,9 @@ const Dashboard = {
                 const isFlagged = r.validation_status === 'unusual' || r.requires_engineer_review === true || r.metadata?.is_unusual === true;
                 const dateStr = r.date_submitted || r.created_at;
                 const ageStr = formatRelativeAge(dateStr);
+                const rvsiScore = r.metadata?.report_rvsi ?? r.metadata?.rvsi_score ?? assessment.rvsi_score;
+                const hasAdv = (r.metadata?.safety_advisory?.active === true || r.metadata?.next_action === 'Issue Safety Advisory');
+                const fhwa = r.metadata?.physical_engineering_assessment;
 
                 let actionBtnLabel = 'Review & Sign Off';
                 if (status === 'Received') {
@@ -1592,6 +1610,8 @@ const Dashboard = {
                             <div style="display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap;">
                                 <span class="queue-item-title">${location}</span>
                                 <span class="status-chip ${statusSlug}">${status}</span>
+                                ${hasAdv ? `<span class="badge-tag advisory" style="background: #fee2e2; color: #b91c1c; font-size: 0.72rem; padding: 2px 6px; border-radius: 4px; display: inline-flex; align-items: center; gap: 3px;"><i class='bx bx-error-alt'></i> Safety Advisory</span>` : ''}
+                                ${fhwa ? `<span class="badge-tag fhwa" style="background: #e0f2fe; color: #0369a1; font-size: 0.72rem; padding: 2px 6px; border-radius: 4px; display: inline-flex; align-items: center; gap: 3px;"><i class='bx bx-ruler'></i> ${fhwa.category} (${fhwa.measured_depth_mm}mm)</span>` : ''}
                                 ${ageStr ? `<span class="queue-age-pill" style="font-size: 0.72rem; color: #64748b; background: #f1f5f9; padding: 2px 6px; border-radius: 4px; display: inline-flex; align-items: center; gap: 3px;"><i class='bx bx-time'></i> ${ageStr}</span>` : ''}
                                 ${isFlagged ? `<span class="badge-tag flagged"><i class='bx bx-error'></i> Unusual Pairing</span>` : ''}
                             </div>
@@ -1599,7 +1619,7 @@ const Dashboard = {
                             ${isFlagged && r.metadata?.advisory_notes ? `<span style="font-size: 0.72rem; color: #b45309;">${r.metadata.advisory_notes}</span>` : ''}
                         </div>
                         <div class="queue-item-actions">
-                            <span class="severity-pill ${severity.toLowerCase()}">${severity.toUpperCase()}</span>
+                            <span class="severity-pill ${severity.toLowerCase()}">${severity.toUpperCase()}${rvsiScore != null ? ` · ${rvsiScore}` : ''}</span>
                             <button type="button" class="btn-review-item btn-open-review" data-report-id="${r.report_id || r._id}">
                                 ${actionBtnLabel}
                             </button>
