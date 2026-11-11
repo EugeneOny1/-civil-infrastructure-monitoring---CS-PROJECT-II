@@ -9,6 +9,7 @@ from ..services.database import db_service
 from ..services.inference import inference_service
 from ..services.severity import severity_service
 from ..services.validation import validation_service
+from ..services.storage import storage_service
 from ..utils.auth_helpers import get_current_user, login_required
 from ..utils.file_helpers import allowed_file, save_uploaded_image
 from .reviews import get_default_notebook_template
@@ -1284,40 +1285,7 @@ def serve_image(filename):
     """
     Serves uploaded defect photographs for display and bounding-box rendering.
     Supports safe historical path resolution, normalizes legacy directory prefixes,
-    and strictly rejects directory traversal attempts.
+    strictly rejects directory traversal attempts, and resolves across local storage
+    and Google Cloud Storage (GCS).
     """
-    # 1. Path Traversal & Security Validation
-    if not filename or '..' in filename or filename.startswith('/') or filename.startswith('\\'):
-        return jsonify({'error': 'Invalid evidence image path.'}), 400
-
-    # 2. Normalize Legacy Historical Path Prefixes (e.g. backend/uploads/ or uploads/)
-    clean_filename = filename.replace('\\', '/')
-    for prefix in ('backend/uploads/', 'uploads/'):
-        if clean_filename.lower().startswith(prefix):
-            clean_filename = clean_filename[len(prefix):]
-    
-    clean_filename = os.path.basename(clean_filename)
-    if not clean_filename:
-        return jsonify({'error': 'Invalid evidence image filename.'}), 400
-
-    # 3. Canonical Upload Directory
-    canonical_upload_dir = os.path.abspath(current_app.config['UPLOAD_FOLDER'])
-    file_path = os.path.join(canonical_upload_dir, clean_filename)
-
-    # 4. Resolve in canonical directory, or fallback to root workspace uploads directory
-    target_dir = None
-    if os.path.exists(file_path):
-        target_dir = canonical_upload_dir
-    else:
-        root_uploads_dir = os.path.abspath(os.path.join(canonical_upload_dir, '..', '..', 'uploads'))
-        fallback_path = os.path.join(root_uploads_dir, clean_filename)
-        if os.path.exists(fallback_path):
-            target_dir = root_uploads_dir
-
-    if target_dir:
-        resp = send_from_directory(target_dir, clean_filename)
-        resp.headers['Access-Control-Allow-Origin'] = '*'
-        resp.headers['Cache-Control'] = 'public, max-age=86400'
-        return resp
-
-    return jsonify({'error': 'Evidence image unavailable in storage.'}), 404
+    return storage_service.serve_file(filename)

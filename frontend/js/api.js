@@ -5,8 +5,14 @@
 const getApiBase = () => {
     try {
         if (typeof window !== 'undefined') {
-            // When opened directly via file:/// protocol or via Live Server / alternative dev ports
-            if (window.location.protocol === 'file:' || (window.location.port && window.location.port !== '5000')) {
+            const loc = window.location;
+            // When opened directly via file:/// protocol
+            if (loc.protocol === 'file:') {
+                return 'http://127.0.0.1:5000/api';
+            }
+            // If running locally on separate front-end dev servers (e.g. Live Server on port 5500, 3000)
+            const isLocal = loc.hostname === 'localhost' || loc.hostname === '127.0.0.1';
+            if (isLocal && loc.port && loc.port !== '5000' && loc.port !== '8080') {
                 return 'http://127.0.0.1:5000/api';
             }
         }

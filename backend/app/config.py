@@ -23,11 +23,17 @@ class Config:
     MONGO_URI = os.getenv('MONGO_URI', 'mongodb://localhost:27017/civil_infrastructure')
     DB_NAME = os.getenv('DB_NAME', 'civil_infrastructure')
 
-    # File uploads
+    # File uploads & Persistent Storage Backend
     _raw_upload = os.getenv('UPLOAD_FOLDER', 'uploads').strip()
     UPLOAD_FOLDER = str((BASE_DIR / _raw_upload).resolve()) if not os.path.isabs(_raw_upload) else _raw_upload
     MAX_CONTENT_LENGTH = int(os.getenv('MAX_CONTENT_LENGTH', 16 * 1024 * 1024))  # 16 MB
     ALLOWED_EXTENSIONS = {'png', 'jpg', 'jpeg', 'webp'}
+    STORAGE_BACKEND = os.getenv('STORAGE_BACKEND', 'local').strip().lower()  # 'local' or 'gcs'
+    GCS_BUCKET_NAME = os.getenv('GCS_BUCKET_NAME', '').strip()
+    GCS_PROJECT_ID = os.getenv('GCS_PROJECT_ID', os.getenv('GOOGLE_CLOUD_PROJECT', '')).strip()
+
+    # CORS configuration
+    CORS_ORIGINS = os.getenv('CORS_ORIGINS', '*').strip()
 
     # Machine Learning / AI Model
     MODEL_PATH = os.getenv('MODEL_PATH', str(BASE_DIR / 'models' / 'structural_defect_detector'))

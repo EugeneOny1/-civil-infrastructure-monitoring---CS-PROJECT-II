@@ -16,7 +16,17 @@ def create_app(config_name=None):
 
     base_dir = Path(__file__).resolve().parent.parent
     root_dir = base_dir.parent
-    frontend_dir = root_dir / 'frontend'
+
+    # Robust frontend directory resolution for local dev & container runtimes
+    env_frontend = os.getenv('FRONTEND_DIR')
+    if env_frontend and Path(env_frontend).exists():
+        frontend_dir = Path(env_frontend).resolve()
+    elif (root_dir / 'frontend').exists():
+        frontend_dir = (root_dir / 'frontend').resolve()
+    elif (base_dir / 'frontend').exists():
+        frontend_dir = (base_dir / 'frontend').resolve()
+    else:
+        frontend_dir = (root_dir / 'frontend').resolve()
 
     app = Flask(
         __name__,
@@ -34,8 +44,16 @@ def create_app(config_name=None):
     # Ensure upload directory exists
     os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
 
-    # Enable Cross-Origin Resource Sharing
-    CORS(app, resources={r"/api/*": {"origins": "*"}})
+    # Configure Cross-Origin Resource Sharing (CORS)
+    cors_config = app.config.get('CORS_ORIGINS', '*')
+    if cors_config == '*' or not cors_config:
+        cors_origins = '*'
+    elif isinstance(cors_config, str):
+        cors_origins = [o.strip() for o in cors_config.split(',') if o.strip()]
+    else:
+        cors_origins = cors_config
+
+    CORS(app, resources={r"/api/*": {"origins": cors_origins}})
 
     # Register Blueprints
     app.register_blueprint(auth_bp)
@@ -46,7 +64,16 @@ def create_app(config_name=None):
     app.register_blueprint(analytics_bp)
     app.register_blueprint(admin_bp)
 
-    # Health check endpoint
+    # Lightweight Liveness Probe for Cloud Run / Kubernetes Load Balancers
+    @app.route('/health', methods=['GET'])
+    def liveness_probe():
+        """
+        Lightweight health-check endpoint for Google Cloud Run container liveness.
+        Returns immediate HTTP 200 without executing expensive inference or exposing secrets.
+        """
+        return jsonify({'status': 'healthy'}), 200
+
+    # Detailed System Health & Model Telemetry
     @app.route('/api/health', methods=['GET'])
     def health_check():
         from .services.inference import inference_service
@@ -67,7 +94,7 @@ def create_app(config_name=None):
     @app.route('/<path:path>')
     def serve_static(path):
         target_file = frontend_dir / path
-        if target_file.exists():
+        if target_file.exists() and target_file.is_file():
             return send_from_directory(str(frontend_dir), path)
         return send_from_directory(str(frontend_dir), 'index.html')
 

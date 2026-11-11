@@ -1,0 +1,34 @@
+# Git and repository metadata
+.git
+.gitignore
+.gitattributes
+
+# Python virtual environment and bytecode
+.venv
+venv/
+env/
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.pytest_cache/
+
+# Testing and development directories
+tests/
+notebooks/
+docs/
+.vscode/
+
+# Ephemeral uploads and cache
+uploads/
+backend/uploads/
+*.log
+
+# Sensitive environment files (secrets are passed via Cloud Run env or Secret Manager)
+.env
+.env.*
+backend/.env
+backend/.env.*
+
+# Documentation
+*.md

@@ -2,6 +2,7 @@ from .database import db_service, DatabaseService
 from .inference import inference_service, InferenceService
 from .validation import validation_service, ValidationService
 from .severity import severity_service, SeverityService
+from .storage import storage_service, StorageService
 
 # Backwards compatibility aliases
 ai_model = inference_service
@@ -16,6 +17,8 @@ __all__ = [
     'ValidationService',
     'severity_service',
     'SeverityService',
+    'storage_service',
+    'StorageService',
     'ai_model',
     'AIModel'
 ]

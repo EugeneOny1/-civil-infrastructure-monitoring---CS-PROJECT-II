@@ -146,10 +146,11 @@ class InferenceService:
             loaded_model = tf.saved_model.load(resolved_path)
             self.saved_model = loaded_model
 
+            available_signatures = list(loaded_model.signatures.keys())
             if 'serving_default' in loaded_model.signatures:
                 self.serving_fn = loaded_model.signatures['serving_default']
             else:
-                sig_keys = list(loaded_model.signatures.keys())
+                sig_keys = available_signatures
                 if sig_keys:
                     self.serving_fn = loaded_model.signatures[sig_keys[0]]
                 else:
@@ -157,7 +158,7 @@ class InferenceService:
 
             self.is_loaded = True
             self.load_error = None
-            print("[InferenceService] Structural defect SavedModel loaded successfully.")
+            print(f"[InferenceService] Structural defect SavedModel loaded successfully. Serving signature available: {available_signatures}")
             return True
 
         except Exception as e:
