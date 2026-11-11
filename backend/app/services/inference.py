@@ -50,7 +50,7 @@ class InferenceService:
     }
 
     DEFAULT_CONFIDENCE_THRESHOLD = 0.30
-    DEFAULT_MODEL_VERSION = 'ssd_mobilenet_v2_lr00625_step8000_v2'
+    DEFAULT_MODEL_VERSION = 'ssd_mobilenet_v2_lr00015_step1500_v2_1'
     DEFAULT_MODEL_NAME = 'SSD-MobileNetV2'
 
     # Prototype visual severity thresholds (relative bounding box area to image area)
@@ -158,7 +158,7 @@ class InferenceService:
 
             self.is_loaded = True
             self.load_error = None
-            print(f"[InferenceService] Structural defect SavedModel loaded successfully. Serving signature available: {available_signatures}")
+            print(f"[InferenceService] Structural defect SavedModel ({self.model_version}) loaded successfully. Serving signature available: {available_signatures}")
             return True
 
         except Exception as e:

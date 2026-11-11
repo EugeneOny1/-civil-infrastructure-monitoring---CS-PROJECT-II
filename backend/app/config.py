@@ -39,7 +39,7 @@ class Config:
     MODEL_PATH = os.getenv('MODEL_PATH', str(BASE_DIR / 'models' / 'structural_defect_detector'))
     MODEL_DIR = os.getenv('MODEL_DIR', str(BASE_DIR / 'models'))
     MODEL_NAME = 'SSD-MobileNetV2'
-    MODEL_VERSION = os.getenv('MODEL_VERSION', 'ssd_mobilenet_v2_lr00625_step8000_v2')
+    MODEL_VERSION = os.getenv('MODEL_VERSION', 'ssd_mobilenet_v2_lr00015_step1500_v2_1')
     DETECTION_CONFIDENCE_THRESHOLD = float(os.getenv('DETECTION_CONFIDENCE_THRESHOLD', '0.30'))
 
     # Target defect classes defined in project proposal & label_map.pbtxt

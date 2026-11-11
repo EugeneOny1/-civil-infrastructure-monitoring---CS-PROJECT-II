@@ -56,7 +56,7 @@ class TestCloudRunDeploymentReadiness(unittest.TestCase):
         self.assertEqual(resp.status_code, 200)
         data = resp.get_json()
         self.assertEqual(data.get('status'), 'online')
-        self.assertEqual(data.get('model'), 'ssd_mobilenet_v2_lr00625_step8000_v2')
+        self.assertEqual(data.get('model'), 'ssd_mobilenet_v2_lr00015_step1500_v2_1')
         self.assertIn('model_loaded', data)
 
     def test_03_frontend_static_serving(self):
@@ -134,3 +134,4 @@ class TestCloudRunDeploymentReadiness(unittest.TestCase):
 
 if __name__ == '__main__':
     unittest.main()
+

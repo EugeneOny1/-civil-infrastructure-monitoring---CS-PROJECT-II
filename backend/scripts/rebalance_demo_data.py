@@ -405,7 +405,7 @@ def run_rebalancing():
             'relative_area': item['area_pct'] / 100.0,
             'bounding_box': det_box,
             'detections': [detection_entry],
-            'model_version': 'ssd_mobilenet_v2_lr00625_step8000_v2',
+            'model_version': 'ssd_mobilenet_v2_lr00015_step1500_v2_1',
             'inference_timestamp': item['created_at'],
             'validation_status': 'valid',
             'validation_message': f"Defect matches expected profile for {item['asset_type']}."
