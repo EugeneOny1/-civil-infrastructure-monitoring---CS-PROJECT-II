@@ -78,7 +78,11 @@ class NotificationService:
             })
 
         if docs:
-            db_service.db['citizen_notifications'].insert_many(docs)
+            if not db_service.use_mock and db_service.db is not None:
+                db_service.db['citizen_notifications'].insert_many(docs)
+            else:
+                for d in docs:
+                    db_service.insert('citizen_notifications', d)
         return len(docs)
 
     @staticmethod
@@ -155,13 +159,16 @@ class NotificationService:
     def mark_all_as_read(user_id: str) -> int:
         """
         Marks all unread notifications for a user as read.
+        Supports both live MongoDB and in-memory development store cleanly.
         """
         if not user_id:
             return 0
-        res = db_service.db['citizen_notifications'].update_many(
-            {'user_id': str(user_id), 'is_read': False},
-            {'$set': {'is_read': True}}
-        )
-        return res.modified_count
+        query = {'user_id': str(user_id), 'is_read': False}
+        if not db_service.use_mock and db_service.db is not None:
+            res = db_service.update_many('citizen_notifications', query, {'is_read': True})
+            return getattr(res, 'modified_count', 0)
+        unread = db_service.find('citizen_notifications', query)
+        db_service.update_many('citizen_notifications', query, {'is_read': True})
+        return len(unread)
 
 notification_service = NotificationService()

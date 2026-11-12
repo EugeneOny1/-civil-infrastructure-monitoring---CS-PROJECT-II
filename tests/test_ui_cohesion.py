@@ -139,6 +139,22 @@ class TestUICohesionPass(unittest.TestCase):
         self.assertIn('.notebook-drawer', self.css_content)
         self.assertIn('animation: drawerSlideIn', self.css_content)
 
+    def test_06_public_landing_page_and_ebk_workflow_contract(self):
+        """Public landing page, verified incident articles, Boxicons role cards, and EBK register UI must exist."""
+        self.assertIn('id="view-landing"', self.html_content)
+        self.assertIn('How InfraVision Works', self.html_content)
+        self.assertIn('Why Early Reporting Matters', self.html_content)
+        self.assertIn('id="landingRecentReportsGrid"', self.html_content)
+        self.assertIn('https://citizen.digital/article/nca-names-developer-contractor-and-engineers-behind-collapsed-eastleigh-building-n392650', self.html_content)
+        self.assertIn('https://www.kbc.co.ke/sakaja-says-collapsed-eastleigh-building-lacked-construction-approval/', self.html_content)
+        self.assertIn('https://engineers.ebk.go.ke/', self.html_content)
+        self.assertIn('Verify against EBK Register', self.html_content)
+        self.assertIn("bx bx-group", self.html_content)
+        self.assertIn("bx bx-hard-hat", self.html_content)
+        self.assertIn("bx bx-buildings", self.html_content)
+        self.assertIn('Physical Engineering Assessment', self.html_content)
+        self.assertIn('value="in"', self.html_content)
+
 
 if __name__ == '__main__':
     unittest.main()

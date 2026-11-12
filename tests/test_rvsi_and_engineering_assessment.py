@@ -50,12 +50,19 @@ class TestRVSIAndEngineeringAssessment(unittest.TestCase):
             'verification_status': 'verified'
         }
 
+        db_service.delete_one('users', {'_id': 'eng_test_rvsi_01'})
+        db_service.delete_one('users', {'_id': 'cit_test_rvsi_01'})
         db_service.insert('users', cls.engineer_user)
         db_service.insert('users', cls.citizen_user)
 
         with cls.app.app_context():
             cls.engineer_token = create_access_token(cls.engineer_user)
             cls.citizen_token = create_access_token(cls.citizen_user)
+
+    @classmethod
+    def tearDownClass(cls):
+        db_service.delete_one('users', {'_id': 'eng_test_rvsi_01'})
+        db_service.delete_one('users', {'_id': 'cit_test_rvsi_01'})
 
     # ─────────────────────────────────────────────────────────────
     # 1. GEOMETRIC RECTANGLE UNION (NO DOUBLE-COUNTING)
@@ -314,6 +321,121 @@ class TestRVSIAndEngineeringAssessment(unittest.TestCase):
                           "Crack measurements must not invent an automated physical severity category")
         self.assertEqual(data['physical_measurements']['measurements']['crack_width_mm'], 4.5)
         self.assertEqual(data['physical_measurements']['measurements']['crack_length_mm'], 1200.0)
+
+    def test_16_single_image_and_multi_image_report_severity_consistency(self):
+        """Verifies single-image & multi-image severity calculations, inches normalization, and map/list consistency."""
+        # 1. Inches normalization check
+        self.assertAlmostEqual(severity_service.normalize_measurement(2.0, 'in'), 50.8, places=2)
+
+        # 2. Single-image submission with live inference
+        import io
+        seed_path = os.path.abspath(os.path.join(
+            os.path.dirname(__file__), '..', 'backend', 'uploads', 'seed_pothole.jpg'
+        ))
+        with open(seed_path, 'rb') as f:
+            img_bytes = f.read()
+
+        single_res = self.client.post(
+            '/api/reports',
+            data={
+                'images': (io.BytesIO(img_bytes), 'single_view.jpg'),
+                'latitude': '-1.2921',
+                'longitude': '36.8219',
+                'location': 'Uhuru Highway Single View',
+                'asset_type': 'Road / Pavement'
+            },
+            content_type='multipart/form-data',
+            headers={'Authorization': f'Bearer {self.citizen_token}'}
+        )
+        self.assertEqual(single_res.status_code, 201)
+        single_data = single_res.get_json()
+        single_ass = single_data['ai_assessment']
+        expected_single_rvsi = float(single_ass.get('rvsi_score', 0.0))
+        rep_meta_single = single_data.get('report', {}).get('metadata', {})
+        self.assertAlmostEqual(float(rep_meta_single.get('report_rvsi', expected_single_rvsi)), expected_single_rvsi, places=1)
+
+        # 3. Multi-image submission with two photos (0.70*max + 0.30*mean aggregation)
+        multi_res = self.client.post(
+            '/api/reports',
+            data={
+                'images': [
+                    (io.BytesIO(img_bytes), 'view_a.jpg'),
+                    (io.BytesIO(img_bytes), 'view_b.jpg')
+                ],
+                'latitude': '-1.2810',
+                'longitude': '36.8250',
+                'location': 'Mombasa Road Multi View',
+                'asset_type': 'Road / Pavement'
+            },
+            content_type='multipart/form-data',
+            headers={'Authorization': f'Bearer {self.citizen_token}'}
+        )
+        self.assertEqual(multi_res.status_code, 201)
+        multi_data = multi_res.get_json()
+        multi_id = multi_data['report_id']
+        combined = multi_data.get('combined_multi_view_assessment') or {}
+        self.assertEqual(combined.get('total_views'), 2)
+        scores = combined.get('image_rvsi_scores', [])
+        self.assertEqual(len(scores), 2)
+        expected_agg = round(0.70 * max(scores) + 0.30 * (sum(scores) / len(scores)), 1)
+        self.assertAlmostEqual(float(combined.get('report_rvsi')), expected_agg, places=1)
+
+        # 4. Consistency when report-level combined severity differs from primary image assessment
+        rep_mismatch = 'rep_mv_mismatch_test'
+        img_mismatch = 'img_mv_mismatch_test'
+        ass_mismatch = 'ass_mv_mismatch_test'
+        db_service.insert('infrastructure_reports', {
+            '_id': rep_mismatch,
+            'report_id': rep_mismatch,
+            'user_id': self.citizen_user['user_id'],
+            'status': 'Received',
+            'latitude': -1.275,
+            'longitude': 36.835,
+            'date_submitted': '2026-11-12T08:00:00+00:00',
+            'metadata': {
+                'location_name': 'Outer Ring Combined Test',
+                'asset_type': 'Road / Pavement',
+                'defect_class': 'Pothole',
+                'relative_severity': 'Critical',
+                'report_rvsi': 64.5
+            }
+        })
+        db_service.insert('submitted_images', {
+            '_id': img_mismatch,
+            'report_id': rep_mismatch,
+            'image_path': 'seed_pothole.jpg'
+        })
+        db_service.insert('ai_assessments', {
+            '_id': ass_mismatch,
+            'report_id': rep_mismatch,
+            'image_id': img_mismatch,
+            'defect_class': 'Crack',
+            'relative_severity': 'Low',
+            'rvsi_score': 18.0
+        })
+
+        map_resp = self.client.get('/api/reports/map')
+        self.assertEqual(map_resp.status_code, 200)
+        pts = map_resp.get_json().get('points', [])
+        pt = next((p for p in pts if p.get('report_id') == rep_mismatch), None)
+        self.assertIsNotNone(pt)
+        self.assertEqual(pt['relative_severity'], 'Critical')
+        self.assertAlmostEqual(pt['report_rvsi'], 64.5, places=1)
+
+        list_resp = self.client.get(
+            '/api/reports?severity=Critical',
+            headers={'Authorization': f'Bearer {self.engineer_token}'}
+        )
+        self.assertEqual(list_resp.status_code, 200)
+        list_ids = [r['report_id'] for r in list_resp.get_json().get('reports', [])]
+        self.assertIn(rep_mismatch, list_ids)
+
+        # Cleanup synthetic mismatch & multi-view reports
+        db_service.delete_one('infrastructure_reports', {'_id': rep_mismatch})
+        db_service.delete_one('submitted_images', {'_id': img_mismatch})
+        db_service.delete_one('ai_assessments', {'_id': ass_mismatch})
+        db_service.delete_one('infrastructure_reports', {'_id': multi_id})
+        db_service.delete_one('infrastructure_reports', {'_id': single_data['report_id']})
 
 
 if __name__ == '__main__':

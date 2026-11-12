@@ -520,7 +520,7 @@ const Dashboard = {
         }
 
         // Section 3: Direct point-to-point line chart (tension: 0, no cubic interpolation)
-        // Architectural specification note: cubicInterpolationMode: 'monotone' and tension: 0.35 superseded for sharp point-to-point empirical rendering
+        // Architectural specification: sharp empirical line segments without spline curve smoothing
         if (typeof Chart !== 'undefined') {
             if (this.trendChart) {
                 this.trendChart.destroy();

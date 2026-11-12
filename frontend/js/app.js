@@ -19,7 +19,7 @@ const App = {
         this.bindProfileEvents();
         this.bindRejectionModal();
         this.bindAdminNoticeModal();
-        
+
         // Initialize submodules
         if (window.Submission) window.Submission.init();
         if (window.Dashboard) window.Dashboard.init();
@@ -35,7 +35,7 @@ const App = {
     restoreSession() {
         this.currentUser = window.Api.getUser();
         this.updateSessionUI();
-        
+
         const urlParams = new URLSearchParams(window.location.search);
         const reportParam = urlParams.get('report_id');
         const requestedView = urlParams.get('view');
@@ -377,7 +377,7 @@ const App = {
                 const email = document.getElementById('loginEmail').value.trim();
                 const password = document.getElementById('loginPassword').value.trim();
                 const submitBtn = document.getElementById('btnLoginSubmit');
-                
+
                 submitBtn.disabled = true;
                 submitBtn.textContent = 'Authenticating...';
 
@@ -483,7 +483,7 @@ const App = {
                     this.pending2FA = null;
                     this.updateSessionUI();
                     this.showToast("2FA verification successful. Access granted!");
-                    
+
                     twoFactorForm.classList.add('hidden');
                     if (authTabsRow) authTabsRow.classList.remove('hidden');
                     loginForm.classList.remove('hidden');
@@ -1295,13 +1295,13 @@ const App = {
 
             // KPI Overview Tiles
             document.getElementById('dashTotalUsers').textContent = data.overview.total_users || 0;
-            document.getElementById('dashUserRoleBreakdown').textContent = 
+            document.getElementById('dashUserRoleBreakdown').textContent =
                 `${data.overview.citizens_count} Citizens • ${data.overview.engineers_count} Engineers`;
             document.getElementById('dashVerifiedEngineers').textContent = data.overview.verified_engineers_count || 0;
             document.getElementById('dashTotalReports').textContent = data.reports.total_reports || 0;
-            document.getElementById('dashOpenReports').textContent = 
+            document.getElementById('dashOpenReports').textContent =
                 `${data.reports.open_reports} Open / Under Review`;
-            document.getElementById('dashResolutionRate').textContent = 
+            document.getElementById('dashResolutionRate').textContent =
                 `${data.reports.resolution_rate_percent}%`;
 
             // Pending Engineer Alert Banner
@@ -1369,7 +1369,7 @@ const App = {
             setPill('healthMongo', isMongoConnected, 'Connected', 'Disconnected');
             setPill('healthAiModel', isAiLoaded, 'Loaded', 'Offline');
             setPill('healthEmail', isEmailHealthy, 'Operational', 'Demo Fallback');
-            
+
             // Distinguish Google Identity Configured vs Operational (Section 5)
             const googleStatus = health.google_auth?.status;
             const googleEl = document.getElementById('healthGoogle');
@@ -1548,7 +1548,7 @@ const App = {
                     closeModal();
                     await this.loadAdminData();
                     if (typeof this.loadAdminDashboard === 'function') {
-                        this.loadAdminDashboard().catch(() => {});
+                        this.loadAdminDashboard().catch(() => { });
                     }
                 } catch (err) {
                     console.error("Rejection error:", err);
@@ -1755,7 +1755,7 @@ const App = {
             await this.loadAdminData();
             // Refresh Admin Dashboard stats if loaded
             if (typeof this.loadAdminDashboard === 'function') {
-                this.loadAdminDashboard().catch(() => {});
+                this.loadAdminDashboard().catch(() => { });
             }
         } catch (err) {
             console.error("Admin verification error:", err);
@@ -2196,8 +2196,8 @@ const App = {
                     <div class="landing-recent-card glass-card" tabindex="0" role="button" data-view-map="true">
                         <div class="recent-card-thumb ${thumbUrl ? '' : 'no-thumb'}">
                             ${thumbUrl
-                                ? `<img src="${thumbUrl}" alt="${rep.defect_class || 'Infrastructure defect'}" onerror="this.style.display='none'; this.parentElement.classList.add('no-thumb');">`
-                                : ''}
+                        ? `<img src="${thumbUrl}" alt="${rep.defect_class || 'Infrastructure defect'}" onerror="this.style.display='none'; this.parentElement.classList.add('no-thumb');">`
+                        : ''}
                             <span class="recent-thumb-fallback"><i class='bx bx-map-pin'></i></span>
                         </div>
                         <div class="recent-card-body">

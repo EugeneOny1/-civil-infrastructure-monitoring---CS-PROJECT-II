@@ -205,6 +205,43 @@ class TestFinalIntelligenceAndPrivacy(unittest.TestCase):
         self.assertIn('months', data)
         self.assertIn('total_critical_reports', data)
 
+    def test_09_public_recent_reports_endpoint_strips_pii(self):
+        """Public recent defects endpoint must expose location/severity summaries without PII or internal notes."""
+        rep_id = 'test_rep_public_recent_privacy'
+        db_service.delete_one('infrastructure_reports', {'_id': rep_id})
+        db_service.insert('infrastructure_reports', {
+            '_id': rep_id,
+            'report_id': rep_id,
+            'user_id': self.citizen_a_id,
+            'status': 'Verified',
+            'date_submitted': datetime.now(timezone.utc).isoformat(),
+            'metadata': {
+                'location_name': 'Thika Road Exit 4',
+                'asset_type': 'Road / Pavement',
+                'defect_class': 'Pothole',
+                'relative_severity': 'Critical',
+                'report_rvsi': 58.2,
+                'submitted_by_name': 'Private Citizen Name',
+                'engineer_notes': 'Internal confidential note'
+            }
+        })
+
+        try:
+            resp = self.client.get('/api/reports/public/recent?limit=5')
+            self.assertEqual(resp.status_code, 200)
+            payload = resp.get_json()
+            self.assertIn('reports', payload)
+            matched = next((r for r in payload['reports'] if r.get('report_id') == rep_id), None)
+            self.assertIsNotNone(matched)
+            self.assertEqual(matched.get('location_name'), 'Thika Road Exit 4')
+            self.assertEqual(matched.get('relative_severity'), 'Critical')
+            self.assertNotIn('user_id', matched)
+            self.assertNotIn('submitted_by_name', matched)
+            self.assertNotIn('engineer_notes', matched)
+            self.assertNotIn('inspection_notebook', matched)
+        finally:
+            db_service.delete_one('infrastructure_reports', {'_id': rep_id})
+
 
 if __name__ == '__main__':
     unittest.main()

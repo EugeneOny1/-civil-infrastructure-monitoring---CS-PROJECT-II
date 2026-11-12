@@ -102,6 +102,7 @@ def verify_professional_user(current_user, user_id):
             'verified_at': now_iso,
             'verified_by': admin_id,
             'verified_by_name': admin_name,
+            'ebk_reg_no': ebk_number,
             'rejection_reason': None,
             'rejection_notes': None
         }

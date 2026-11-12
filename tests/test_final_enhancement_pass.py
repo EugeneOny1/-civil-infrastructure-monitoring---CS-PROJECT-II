@@ -135,12 +135,32 @@ class TestFinalEnhancementPass(unittest.TestCase):
         )
         self.assertEqual(res_back.status_code, 400)
         data_back = res_back.get_json()
-        self.assertIn('Forward-only', data_back.get('error', ''))
+        self.assertIn('forward lifecycle', data_back.get('error', '').lower())
 
-        # Valid forward transition Verified -> Resolved must succeed
+        # Valid forward transition Verified -> Under Review -> Resolved must succeed
+        res_ur = self.client.patch(
+            f'/api/reports/{rep_id}/status',
+            json={'status': 'Under Review'},
+            headers=self.auth_headers
+        )
+        self.assertEqual(res_ur.status_code, 200)
+
+        # Populate completed inspection notebook objectives so resolution guard passes
+        rep_fresh = db_service.find_one('infrastructure_reports', {'_id': rep_id})
+        meta_fresh = rep_fresh.get('metadata') or {}
+        nb = meta_fresh.get('inspection_notebook') or {}
+        cl = nb.get('checklist') or [{'id': 'chk_1', 'text': 'Site verified', 'completed': True, 'status': 'completed'}]
+        for item in cl:
+            item['completed'] = True
+            item['status'] = 'completed'
+        nb['checklist'] = cl
+        nb['summary_notes'] = 'Confirmed structural rehabilitation completed.'
+        meta_fresh['inspection_notebook'] = nb
+        db_service.update_one('infrastructure_reports', {'_id': rep_id}, {'metadata': meta_fresh})
+
         res_fwd = self.client.patch(
             f'/api/reports/{rep_id}/status',
-            json={'status': 'Resolved'},
+            json={'status': 'Resolved', 'notes': 'Repairs inspected and closed.'},
             headers=self.auth_headers
         )
         self.assertEqual(res_fwd.status_code, 200)

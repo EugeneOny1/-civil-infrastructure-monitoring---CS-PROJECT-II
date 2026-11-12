@@ -188,15 +188,16 @@ class TestTargetedRefinementPass(unittest.TestCase):
         self.assertIn("points.length <= CLUSTER_THRESHOLD", js, "map.js must check visible reports against CLUSTER_THRESHOLD")
 
     def test_05_safety_advisory_dedicated_pane_and_navy_styling(self):
-        """Verifies safetyAdvisoryPane with z-index 675, navy/indigo styling, and unified opening logic."""
+        """Verifies safetyAdvisoryPane with z-index 675, warning triangle styling, and unified opening logic."""
         map_js_path = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', 'frontend', 'js', 'map.js'))
         with open(map_js_path, 'r', encoding='utf-8') as f:
             js = f.read()
 
         self.assertIn("safetyAdvisoryPane", js, "map.js must create dedicated safetyAdvisoryPane")
         self.assertIn("675", js, "safetyAdvisoryPane z-index must be 675")
-        self.assertIn("#1e1b4b", js, "Safety advisory marker must use dark navy/indigo styling (#1e1b4b)")
-        self.assertIn("bx-shield-quarter", js, "Safety advisory marker must use white shield icon bx-shield-quarter")
+        self.assertIn("safety-advisory-triangle-icon", js, "Safety advisory marker must use triangular hazard styling")
+        self.assertIn("#b91c1c", js, "Safety advisory marker must use hazard red border (#b91c1c)")
+        self.assertIn("bx-error-alt", js, "Safety advisory marker must use hazard warning icon bx-error-alt")
         self.assertIn("openSafetyAdvisory", js, "map.js must define unified openSafetyAdvisory callback")
 
     # =========================================================================
@@ -286,14 +287,13 @@ class TestTargetedRefinementPass(unittest.TestCase):
         self.assertIn("temporal concentration", cal['note'].lower())
 
     def test_09_dashboard_chartjs_integration_and_calendar_grid(self):
-        """Verifies dashboard.js configures Chart.js line chart with smooth cubic interpolation and destroys prior instances."""
+        """Verifies dashboard.js configures Chart.js line chart cleanly and destroys prior instances."""
         dash_js_path = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', 'frontend', 'js', 'dashboard.js'))
         with open(dash_js_path, 'r', encoding='utf-8') as f:
             js = f.read()
 
         self.assertIn("new Chart(", js, "dashboard.js must instantiate Chart.js")
-        self.assertIn("cubicInterpolationMode: 'monotone'", js, "Chart must use monotone cubic interpolation")
-        self.assertIn("tension: 0.35", js, "Chart line tension must be approx 0.35")
+        self.assertIn("tension: 0", js, "Chart must render direct point-to-point line segments (tension: 0)")
         self.assertIn("this.trendChart.destroy()", js, "dashboard.js must destroy previous Chart instance on reload")
         self.assertIn("renderCriticalCalendarGrid", js, "dashboard.js must define renderCriticalCalendarGrid")
         self.assertIn("loadCriticalCalendar", js, "dashboard.js must define loadCriticalCalendar")

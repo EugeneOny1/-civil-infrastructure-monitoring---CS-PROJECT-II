@@ -254,31 +254,41 @@ class TestAuthAndMaps(unittest.TestCase):
     def test_09_engineer_report_review_and_lifecycle_controls(self):
         """Verifies engineer can review, add evaluation notes, and transition report lifecycle."""
         from app.utils.auth_helpers import create_access_token
+        eng_id = 'usr_eng_01_t09'
+        db_service.delete_one('users', {'_id': eng_id})
+        db_service.insert('users', {
+            '_id': eng_id, 'user_id': eng_id, 'name': 'Eng. Jane Doe',
+            'email': 'janedoe_t09@infravision.ke', 'role': 'engineer', 'verification_status': 'verified'
+        })
         with self.app.app_context():
-            eng_token = create_access_token({'user_id': 'usr_eng_01', 'role': 'engineer', 'name': 'Eng. Jane Doe'})
+            eng_token = create_access_token({'user_id': eng_id, 'role': 'engineer', 'name': 'Eng. Jane Doe'})
 
-        # Fetch an existing report
-        report = db_service.find_one('infrastructure_reports', {})
-        self.assertIsNotNone(report)
-        report_id = str(report['_id'])
+        report_id = db_service.insert('infrastructure_reports', {
+            'status': 'Received',
+            'description': 'Test carriageway pothole for lifecycle validation.',
+            'metadata': {'location_name': 'Kenyatta Avenue, Nairobi', 'asset_type': 'Road / Pavement'}
+        })
 
-        # Engineer transitions to Under Review
-        res_review = self.client.post(
-            f'/api/reviews/report/{report_id}',
-            json={'decision': 'Under Investigation', 'target_status': 'Under Review', 'notes': 'Site inspection scheduled.'},
-            headers={'Authorization': f'Bearer {eng_token}'}
-        )
-        self.assertEqual(res_review.status_code, 200)
-        self.assertEqual(res_review.get_json()['status'], 'Under Review')
+        try:
+            # Engineer transitions canonical forward lifecycle: Received -> Verified -> Under Review
+            res_verify = self.client.post(
+                f'/api/reviews/report/{report_id}',
+                json={'decision': 'Confirmed', 'target_status': 'Verified', 'notes': 'Structural defect verified by professional engineer.'},
+                headers={'Authorization': f'Bearer {eng_token}'}
+            )
+            self.assertEqual(res_verify.status_code, 200)
+            self.assertEqual(res_verify.get_json()['status'], 'Verified')
 
-        # Engineer transitions to Verified
-        res_verify = self.client.post(
-            f'/api/reviews/report/{report_id}',
-            json={'decision': 'Confirmed', 'target_status': 'Verified', 'notes': 'Structural defect verified by professional engineer.'},
-            headers={'Authorization': f'Bearer {eng_token}'}
-        )
-        self.assertEqual(res_verify.status_code, 200)
-        self.assertEqual(res_verify.get_json()['status'], 'Verified')
+            res_review = self.client.post(
+                f'/api/reviews/report/{report_id}',
+                json={'decision': 'Under Investigation', 'target_status': 'Under Review', 'notes': 'Site inspection scheduled.'},
+                headers={'Authorization': f'Bearer {eng_token}'}
+            )
+            self.assertEqual(res_review.status_code, 200)
+            self.assertEqual(res_review.get_json()['status'], 'Under Review')
+        finally:
+            db_service.delete_one('infrastructure_reports', {'_id': report_id})
+            db_service.delete_one('users', {'_id': eng_id})
 
     def test_10_map_config_nairobi_defaults(self):
         """Verifies GET /api/reports/map/config defaults strictly to Nairobi, Kenya with Leaflet provider."""
@@ -427,18 +437,34 @@ class TestAuthAndMaps(unittest.TestCase):
         self.assertEqual(last_entry.get('submitter_id'), author_user_id)
         self.assertFalse(last_entry.get('is_self_review', True))
 
-        # Test self-review flag when author reviews their own report
+        # Test self-review flag when author verifies their own newly submitted report
+        res_submit_self = self.client.post(
+            '/api/reports',
+            data={
+                'image': (io.BytesIO(img_bytes), 'self_recon.jpg'),
+                'latitude': '-1.2901',
+                'longitude': '36.8201',
+                'location': 'Kenyatta Avenue, Nairobi',
+                'asset_type': 'Road / Pavement',
+                'description': 'Self-submitted follow-up defect check.'
+            },
+            content_type='multipart/form-data',
+            headers={'Authorization': f'Bearer {eng_author_token}'}
+        )
+        self.assertEqual(res_submit_self.status_code, 201)
+        self_rep_id = res_submit_self.get_json()['report_id']
+
         res_self_review = self.client.post(
-            f'/api/reviews/report/{report_id}',
+            f'/api/reviews/report/{self_rep_id}',
             json={
-                'decision': 'Site Cleared',
-                'target_status': 'Resolved',
-                'notes': 'Field repair confirmed completed during follow-up inspection.'
+                'decision': 'Confirmed',
+                'target_status': 'Verified',
+                'notes': 'Self-submitted reconnaissance finding verified.'
             },
             headers={'Authorization': f'Bearer {eng_author_token}'}
         )
         self.assertEqual(res_self_review.status_code, 200)
-        self_doc = db_service.find_one('infrastructure_reports', {'_id': report_id})
+        self_doc = db_service.find_one('infrastructure_reports', {'_id': self_rep_id})
         self_meta = self_doc.get('metadata', {})
         self.assertTrue(self_meta.get('is_self_review'))
         self.assertEqual(self_meta.get('reviewer_id'), author_user_id)
@@ -953,6 +979,65 @@ class TestAuthAndMaps(unittest.TestCase):
 
         # Cleanup
         db_service.delete_one('users', {'_id': user_id})
+
+    def test_15_production_auth_cleanup_and_resend_guard(self):
+        """Verifies quick test accounts removal, password autocomplete semantics, resend-otp guard, and EBK audit fields."""
+        res_home = self.client.get('/')
+        self.assertEqual(res_home.status_code, 200)
+        html = res_home.get_data(as_text=True)
+        self.assertNotIn('Quick test accounts', html)
+        self.assertNotIn('Fill Demo Code', html)
+        self.assertNotIn('Development Demo Mode active', html)
+        self.assertIn('autocomplete="username"', html)
+        self.assertIn('autocomplete="current-password"', html)
+        self.assertIn('autocomplete="new-password"', html)
+
+        # Resend OTP without an active pending session must not invent a new OTP
+        res_missing = self.client.post('/api/auth/resend-otp', json={'email': 'nonexistent@infravision.ke'})
+        self.assertEqual(res_missing.status_code, 404)
+
+        inactive_email = f"no_otp_session_{int(datetime.now().timestamp())}@infravision.ke"
+        inactive_id = db_service.insert('users', {
+            'name': 'No Session Engineer',
+            'email': inactive_email,
+            'role': 'engineer',
+            'verification_status': 'verified',
+            'two_factor_enabled': True
+        })
+        res_guard = self.client.post('/api/auth/resend-otp', json={'email': inactive_email})
+        self.assertEqual(res_guard.status_code, 400)
+        db_service.delete_one('users', {'_id': inactive_id})
+
+        # Engineer registration persists engineering_category & admin verify logs auditor fields
+        eng_email = f"ebk_audit_{int(datetime.now().timestamp())}@infravision.ke"
+        res_reg = self.client.post('/api/auth/register', json={
+            'name': 'Eng. Audit Tester',
+            'email': eng_email,
+            'password': 'StrongPassword#2026',
+            'role': 'engineer',
+            'engineering_category': 'Professional Engineer',
+            'professional_reg_no': 'A7719'
+        })
+        self.assertEqual(res_reg.status_code, 201)
+        eng_user = res_reg.get_json().get('user', {})
+        eng_id = eng_user.get('user_id')
+        self.assertEqual(eng_user.get('engineering_category'), 'Professional Engineer')
+
+        from app.utils.auth_helpers import create_access_token
+        admin_id = 'usr_admin_ebk_audit'
+        db_service.insert('users', {'_id': admin_id, 'user_id': admin_id, 'name': 'Chief Admin', 'email': 'chiefadmin@infravision.ke', 'role': 'admin'})
+        with self.app.app_context():
+            admin_tok = create_access_token({'user_id': admin_id, 'role': 'admin', 'name': 'Chief Admin'})
+
+        res_ver = self.client.put(f'/api/admin/users/{eng_id}/verify', json={'status': 'verified'}, headers={'Authorization': f'Bearer {admin_tok}'})
+        self.assertEqual(res_ver.status_code, 200)
+        verified_doc = db_service.find_one('users', {'_id': eng_id})
+        self.assertEqual(verified_doc.get('verified_by'), admin_id)
+        self.assertEqual(verified_doc.get('verified_by_name'), 'Chief Admin')
+        self.assertEqual(verified_doc.get('ebk_reg_no'), 'A7719')
+
+        db_service.delete_one('users', {'_id': eng_id})
+        db_service.delete_one('users', {'_id': admin_id})
 
 
 if __name__ == '__main__':

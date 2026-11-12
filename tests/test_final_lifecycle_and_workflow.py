@@ -351,6 +351,85 @@ class TestFinalLifecycleAndWorkflow(unittest.TestCase):
             # Cleanup
             db_service.delete_one('infrastructure_reports', {'_id': report_id})
 
+    def test_06_verified_only_collaboration_invitations_and_notebook_conflict(self):
+        """Verify invitations reject Citizens/unverified Engineers, support Accept/Reject, and enforce 409 conflicts."""
+        import time
+        ts = int(time.time())
+        lead_id = f"eng_lead_c6_{ts}"
+        peer_id = f"eng_peer_c6_{ts}"
+        unverified_eng_id = f"eng_pend_c6_{ts}"
+        cit_id = f"cit_c6_{ts}"
+        rep_id = f"rep_c6_{ts}"
+
+        db_service.insert('users', {
+            '_id': lead_id, 'user_id': lead_id, 'name': 'Eng. Lead C6',
+            'email': f'{lead_id}@kenha.ke', 'role': 'engineer', 'verification_status': 'verified'
+        })
+        db_service.insert('users', {
+            '_id': peer_id, 'user_id': peer_id, 'name': 'Eng. Peer C6',
+            'email': f'{peer_id}@kenha.ke', 'role': 'engineer', 'verification_status': 'verified'
+        })
+        db_service.insert('users', {
+            '_id': unverified_eng_id, 'user_id': unverified_eng_id, 'name': 'Pending Eng',
+            'email': f'{unverified_eng_id}@kenha.ke', 'role': 'engineer', 'verification_status': 'pending'
+        })
+        db_service.insert('users', {
+            '_id': cit_id, 'user_id': cit_id, 'name': 'Citizen User',
+            'email': f'{cit_id}@gmail.com', 'role': 'citizen', 'verification_status': 'verified'
+        })
+        db_service.insert('infrastructure_reports', {
+            '_id': rep_id,
+            'report_id': rep_id,
+            'status': 'Verified',
+            'metadata': {
+                'assigned_engineer_id': lead_id,
+                'current_lead_engineer': {'user_id': lead_id, 'name': 'Eng. Lead C6'},
+                'collaborators': [],
+                'inspection_notebook': {'checklist': [], 'note_cards': [], 'last_updated_at': '2026-11-12T07:00:00+00:00'}
+            }
+        })
+
+        with self.app.app_context():
+            lead_tok = create_access_token({'user_id': lead_id, 'role': 'engineer', 'name': 'Eng. Lead C6'})
+            peer_tok = create_access_token({'user_id': peer_id, 'role': 'engineer', 'name': 'Eng. Peer C6'})
+
+        try:
+            # 1. Citizen and unverified engineer excluded from available list & rejected by invite endpoint
+            avail = self.client.get('/api/reviews/engineers/available', headers={'Authorization': f'Bearer {lead_tok}'})
+            self.assertEqual(avail.status_code, 200)
+            avail_ids = {e['user_id'] for e in avail.get_json().get('engineers', [])}
+            self.assertIn(peer_id, avail_ids)
+            self.assertNotIn(unverified_eng_id, avail_ids)
+            self.assertNotIn(cit_id, avail_ids)
+
+            res_cit = self.client.post(f'/api/reviews/report/{rep_id}/collaborators', json={'engineer_id': cit_id}, headers={'Authorization': f'Bearer {lead_tok}'})
+            self.assertEqual(res_cit.status_code, 400)
+
+            res_unv = self.client.post(f'/api/reviews/report/{rep_id}/collaborators', json={'engineer_id': unverified_eng_id}, headers={'Authorization': f'Bearer {lead_tok}'})
+            self.assertEqual(res_unv.status_code, 400)
+
+            # 2. Verified peer invite starts with 'pending' status, then accepted
+            res_inv = self.client.post(f'/api/reviews/report/{rep_id}/collaborators', json={'engineer_id': peer_id, 'role': 'Structural Engineer'}, headers={'Authorization': f'Bearer {lead_tok}'})
+            self.assertEqual(res_inv.status_code, 201)
+            self.assertEqual(res_inv.get_json()['collaborator']['invitation_status'], 'pending')
+
+            res_acc = self.client.post(f'/api/reviews/report/{rep_id}/collaborators/respond', json={'response': 'accepted'}, headers={'Authorization': f'Bearer {peer_tok}'})
+            self.assertEqual(res_acc.status_code, 200)
+            self.assertEqual(res_acc.get_json()['collaborator']['invitation_status'], 'accepted')
+
+            # 3. Notebook stale timestamp triggers 409 Conflict
+            res_conf = self.client.post(
+                f'/api/reviews/report/{rep_id}/inspection-notebook',
+                json={'summary_notes': 'Stale edit', 'expected_updated_at': '2020-01-01T00:00:00+00:00'},
+                headers={'Authorization': f'Bearer {peer_tok}'}
+            )
+            self.assertEqual(res_conf.status_code, 409)
+            self.assertTrue(res_conf.get_json().get('conflict'))
+        finally:
+            db_service.delete_one('infrastructure_reports', {'_id': rep_id})
+            for uid in (lead_id, peer_id, unverified_eng_id, cit_id):
+                db_service.delete_one('users', {'_id': uid})
+
 
 if __name__ == '__main__':
     unittest.main()

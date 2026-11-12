@@ -17,11 +17,11 @@ class TestFinalAcceptancePass(unittest.TestCase):
 
     def tearDown(self):
         for uid in self.created_users:
-            db_service.db['users'].delete_one({'_id': uid})
-            db_service.db['citizen_notifications'].delete_many({'user_id': uid})
+            db_service.delete_one('users', {'_id': uid})
+            db_service.delete_many('citizen_notifications', {'user_id': uid})
         for rid in self.created_reports:
-            db_service.db['infrastructure_reports'].delete_one({'_id': rid})
-            db_service.db['safety_advisories'].delete_many({'report_id': rid})
+            db_service.delete_one('infrastructure_reports', {'_id': rid})
+            db_service.delete_many('safety_advisories', {'report_id': rid})
 
     # =========================================================================
     # 1. GOOGLE SIGN-IN TESTS
@@ -344,7 +344,7 @@ class TestFinalAcceptancePass(unittest.TestCase):
         ass_id = f"ass_na_{int(datetime.now().timestamp())}"
 
         eng_doc = {'_id': eng_id, 'email': f"{eng_id}@kenha.go.ke", 'name': 'Eng. Reviewer', 'role': 'engineer', 'verification_status': 'verified'}
-        rep_doc = {'_id': rep_id, 'report_id': rep_id, 'status': 'Under Review', 'metadata': {}}
+        rep_doc = {'_id': rep_id, 'report_id': rep_id, 'status': 'Received', 'metadata': {}}
         img_doc = {'_id': img_id, 'report_id': rep_id, 'image_path': 'seed_pothole.jpg'}
         ass_doc = {'_id': ass_id, 'image_id': img_id, 'defect_class': 'Pothole', 'relative_severity': 'Critical'}
 
@@ -559,7 +559,8 @@ class TestFinalAcceptancePass(unittest.TestCase):
         self.created_reports.extend([rep_id_1, rep_id_2])
 
         # Verify querying by batch_id retrieves both independent reports
-        batch_reports = list(db_service.db['infrastructure_reports'].find({'metadata.submission_batch_id': batch_id}))
+        all_reps = db_service.find('infrastructure_reports', {})
+        batch_reports = [r for r in all_reps if (r.get('metadata') or {}).get('submission_batch_id') == batch_id]
         self.assertEqual(len(batch_reports), 2)
         self.assertNotEqual(batch_reports[0]['_id'], batch_reports[1]['_id'])
         self.assertNotEqual(batch_reports[0]['latitude'], batch_reports[1]['latitude'])
@@ -569,15 +570,28 @@ class TestFinalAcceptancePass(unittest.TestCase):
         rep_id = f"rep_adv_{int(datetime.now().timestamp())}"
         adv_id = f"adv_{int(datetime.now().timestamp())}"
 
+        eng_id = f"eng_adv_{int(datetime.now().timestamp())}"
+        eng_doc = {'_id': eng_id, 'email': f"{eng_id}@infravision.ke", 'name': 'Eng. Adv Close', 'role': 'engineer', 'verification_status': 'verified', 'is_active': True}
+        db_service.insert('users', eng_doc)
+        self.created_users.append(eng_id)
+
         rep_doc = {
             '_id': rep_id,
             'report_id': rep_id,
             'display_id': 'REP-2026-0105',
-            'status': 'Verified',
+            'status': 'Under Review',
             'latitude': -1.2833,
             'longitude': 36.8167,
             'date_submitted': datetime.now(timezone.utc).isoformat(),
-            'metadata': {'location_name': 'Uhuru Highway / University Way'}
+            'metadata': {
+                'location_name': 'Uhuru Highway / University Way',
+                'assigned_engineer_id': eng_id,
+                'current_lead_engineer': {'user_id': eng_id, 'name': 'Eng. Adv Close'},
+                'inspection_notebook': {
+                    'checklist': [{'id': 'c1', 'text': 'Repair audited', 'completed': True, 'status': 'completed'}],
+                    'summary_notes': 'Repairs verified.'
+                }
+            }
         }
         adv_doc = {
             '_id': adv_id,
@@ -603,11 +617,6 @@ class TestFinalAcceptancePass(unittest.TestCase):
         self.assertTrue(any(a.get('advisory_id') == adv_id or a.get('report_id') == rep_id for a in active_advisories))
 
         # 2. Update report status to Resolved
-        eng_id = f"eng_adv_{int(datetime.now().timestamp())}"
-        eng_doc = {'_id': eng_id, 'email': f"{eng_id}@infravision.ke", 'role': 'engineer', 'verification_status': 'verified', 'is_active': True}
-        db_service.insert('users', eng_doc)
-        self.created_users.append(eng_id)
-
         with self.app.app_context():
             token = create_access_token({'user_id': eng_id, 'email': eng_doc['email'], 'role': 'engineer'})
         headers = {'Authorization': f'Bearer {token}', 'Content-Type': 'application/json'}

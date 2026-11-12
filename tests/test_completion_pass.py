@@ -373,7 +373,8 @@ class TestCompletionPass(unittest.TestCase):
 
     def test_10_admin_verify_reject_user_endpoint(self):
         """Verifies PUT /api/admin/users/<user_id>/verify for status transitions."""
-        target_eng_id = f"test_eng_{int(datetime.now().timestamp())}"
+        import uuid
+        target_eng_id = f"test_eng_t10_{uuid.uuid4().hex[:8]}"
         target_eng = {
             '_id': target_eng_id,
             'name': 'Eng. Test Subject',
@@ -389,7 +390,7 @@ class TestCompletionPass(unittest.TestCase):
         self.created_users.append(target_eng_id)
 
         # Admin token
-        admin_id = f"admin_test_{int(datetime.now().timestamp())}"
+        admin_id = f"admin_t10_{uuid.uuid4().hex[:8]}"
         admin_doc = {
             '_id': admin_id,
             'name': 'Admin Test',

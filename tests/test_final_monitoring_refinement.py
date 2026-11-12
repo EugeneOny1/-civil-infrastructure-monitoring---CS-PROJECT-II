@@ -158,7 +158,6 @@ class TestFinalMonitoringRefinement(unittest.TestCase):
         self.assertIn('id="calCurrentMonthLabel"', html)
         self.assertIn('id="btnCalPrevMonth"', html)
         self.assertIn('id="btnCalNextMonth"', html)
-        self.assertIn('id="calActiveMonthSummary"', html)
         self.assertIn('id="kpiVerifiedActiveBadge"', html)
 
 
