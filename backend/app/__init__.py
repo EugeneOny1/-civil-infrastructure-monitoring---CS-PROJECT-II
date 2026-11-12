@@ -2,6 +2,7 @@ import os
 from pathlib import Path
 from flask import Flask, jsonify, send_from_directory
 from flask_cors import CORS
+from werkzeug.middleware.proxy_fix import ProxyFix
 from .config import config_by_name
 from .services.database import db_service
 from .routes import auth_bp, users_bp, reports_bp, assets_bp, reviews_bp, analytics_bp, admin_bp
@@ -38,6 +39,9 @@ def create_app(config_name=None):
     cfg = config_by_name.get(config_name, config_by_name['default'])
     app.config.from_object(cfg)
 
+    if config_name == 'production':
+        app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1, x_prefix=1)
+
     # Initialize database service with app config
     db_service.init_app(app)
 
@@ -46,14 +50,15 @@ def create_app(config_name=None):
 
     # Configure Cross-Origin Resource Sharing (CORS)
     cors_config = app.config.get('CORS_ORIGINS', '*')
-    if cors_config == '*' or not cors_config:
+    if cors_config == '*':
         cors_origins = '*'
     elif isinstance(cors_config, str):
         cors_origins = [o.strip() for o in cors_config.split(',') if o.strip()]
     else:
-        cors_origins = cors_config
+        cors_origins = list(cors_config or [])
 
-    CORS(app, resources={r"/api/*": {"origins": cors_origins}})
+    if cors_origins:
+        CORS(app, resources={r"/api/*": {"origins": cors_origins}})
 
     # Register Blueprints
     app.register_blueprint(auth_bp)
@@ -64,14 +69,33 @@ def create_app(config_name=None):
     app.register_blueprint(analytics_bp)
     app.register_blueprint(admin_bp)
 
-    # Lightweight Liveness Probe for Cloud Run / Kubernetes Load Balancers
+    # Lightweight Liveness Probe for Azure Container Apps / Cloud Run / Kubernetes
     @app.route('/health', methods=['GET'])
     def liveness_probe():
         """
-        Lightweight health-check endpoint for Google Cloud Run container liveness.
-        Returns immediate HTTP 200 without executing expensive inference or exposing secrets.
+        Lightweight liveness probe returning immediate HTTP 200 without running inference or exposing secrets.
         """
         return jsonify({'status': 'healthy'}), 200
+
+    # Genuine Readiness Probe verifying TensorFlow SavedModel initialization
+    @app.route('/ready', methods=['GET'])
+    @app.route('/api/ready', methods=['GET'])
+    def readiness_probe():
+        """
+        Readiness probe for Azure Container Apps: returns HTTP 200 only once
+        the V2.1 SavedModel is loaded and ready to serve predictions, else HTTP 503.
+        """
+        from .services.inference import inference_service
+        if not inference_service.is_loaded:
+            return jsonify({
+                'status': 'initializing',
+                'model_loaded': False
+            }), 503
+        return jsonify({
+            'status': 'ready',
+            'model_loaded': True,
+            'model': app.config.get('MODEL_VERSION', 'ssd_mobilenet_v2_lr00015_step1500_v2_1')
+        }), 200
 
     # Detailed System Health & Model Telemetry
     @app.route('/api/health', methods=['GET'])

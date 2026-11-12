@@ -19,20 +19,25 @@ class Config:
     JWT_SECRET_KEY = os.getenv('JWT_SECRET_KEY', SECRET_KEY)
     JWT_EXPIRATION_HOURS = int(os.getenv('JWT_EXPIRATION_HOURS', '24'))
     
-    # MongoDB Configuration
+    # MongoDB Configuration & Connection Pooling
     MONGO_URI = os.getenv('MONGO_URI', 'mongodb://localhost:27017/civil_infrastructure')
     DB_NAME = os.getenv('DB_NAME', 'civil_infrastructure')
+    MONGO_MAX_POOL_SIZE = int(os.getenv('MONGO_MAX_POOL_SIZE', '20'))
 
     # File uploads & Persistent Storage Backend
     _raw_upload = os.getenv('UPLOAD_FOLDER', 'uploads').strip()
     UPLOAD_FOLDER = str((BASE_DIR / _raw_upload).resolve()) if not os.path.isabs(_raw_upload) else _raw_upload
     MAX_CONTENT_LENGTH = int(os.getenv('MAX_CONTENT_LENGTH', 16 * 1024 * 1024))  # 16 MB
     ALLOWED_EXTENSIONS = {'png', 'jpg', 'jpeg', 'webp'}
-    STORAGE_BACKEND = os.getenv('STORAGE_BACKEND', 'local').strip().lower()  # 'local' or 'gcs'
+    STORAGE_BACKEND = os.getenv('STORAGE_BACKEND', 'local').strip().lower()  # 'local', 'gcs', or 'azure'
     GCS_BUCKET_NAME = os.getenv('GCS_BUCKET_NAME', '').strip()
     GCS_PROJECT_ID = os.getenv('GCS_PROJECT_ID', os.getenv('GOOGLE_CLOUD_PROJECT', '')).strip()
+    AZURE_STORAGE_ACCOUNT_URL = os.getenv('AZURE_STORAGE_ACCOUNT_URL', '').strip()
+    AZURE_STORAGE_CONTAINER = os.getenv('AZURE_STORAGE_CONTAINER', 'defect-images').strip()
+    AZURE_CLIENT_ID = os.getenv('AZURE_CLIENT_ID', '').strip()
+    AZURE_STORAGE_CONNECTION_STRING = os.getenv('AZURE_STORAGE_CONNECTION_STRING', '').strip()
 
-    # CORS configuration
+    # CORS configuration (same-origin by default in ProductionConfig)
     CORS_ORIGINS = os.getenv('CORS_ORIGINS', '*').strip()
 
     # Machine Learning / AI Model
@@ -97,6 +102,9 @@ class ProductionConfig(Config):
     # Never inherit development ENABLE_DEMO_OTP silently in production;
     # controlled evaluation fallback requires explicit ENABLE_PRODUCTION_OTP_FALLBACK=true
     ENABLE_DEMO_OTP = os.getenv('ENABLE_PRODUCTION_OTP_FALLBACK', 'False').lower() in ('true', '1', 't')
+    # Same-origin by default in production unless explicit allowed origins are supplied
+    _prod_cors = os.getenv('CORS_ORIGINS', '').strip()
+    CORS_ORIGINS = [] if _prod_cors in ('', '*') else [o.strip() for o in _prod_cors.split(',') if o.strip()]
 
 class TestingConfig(Config):
     TESTING = True

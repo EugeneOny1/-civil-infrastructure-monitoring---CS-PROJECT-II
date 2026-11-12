@@ -22,6 +22,8 @@ class DatabaseService:
     def __init__(self, uri=None, db_name=None):
         self.uri = uri or os.getenv('MONGO_URI', 'mongodb://localhost:27017/civil_infrastructure')
         self.db_name = db_name or os.getenv('DB_NAME', 'civil_infrastructure')
+        self.max_pool_size = int(os.getenv('MONGO_MAX_POOL_SIZE', '20'))
+        self.is_testing = False
         self.client = None
         self.db = None
         self.use_mock = False
@@ -43,6 +45,8 @@ class DatabaseService:
         """Initializes database connection from Flask application configuration."""
         self.uri = app.config.get('MONGO_URI', self.uri)
         self.db_name = app.config.get('DB_NAME', self.db_name)
+        self.max_pool_size = int(app.config.get('MONGO_MAX_POOL_SIZE', self.max_pool_size))
+        self.is_testing = bool(app.config.get('TESTING', False))
         self.connect()
 
     def connect(self):
@@ -53,7 +57,14 @@ class DatabaseService:
                     self.client.close()
                 except Exception:
                     pass
-            self.client = MongoClient(self.uri, serverSelectionTimeoutMS=2000)
+            selection_ms = 2000 if self.is_testing else 5000
+            self.client = MongoClient(
+                self.uri,
+                maxPoolSize=self.max_pool_size,
+                connectTimeoutMS=10000,
+                serverSelectionTimeoutMS=selection_ms,
+                retryWrites=True,
+            )
             self.client.admin.command('ping')
             self.db = self.client[self.db_name]
             self.use_mock = False

@@ -121,6 +121,9 @@ def submit_report(current_user):
             except Exception as e:
                 current_app.logger.error(f"[Inference Error] Failed executing SavedModel inference on {unique_filename}: {e}")
                 return jsonify({'error': 'Automated defect analysis service failed. Please contact system administrator.'}), 500
+            finally:
+                if storage_service.backend == 'azure':
+                    storage_service.cleanup_local_temp_file(dest_path)
 
             # Extract observation-specific location & optional note
             obs_location = (request.form.get(f'location_{idx}') or request.form.get(f'obs_location_{idx}') or location).strip()
@@ -301,6 +304,9 @@ def submit_report(current_user):
         except Exception as e:
             current_app.logger.error(f"[Inference Error] Failed executing SavedModel inference on {unique_filename}: {e}")
             return jsonify({'error': 'Automated defect analysis service failed. Please contact system administrator.'}), 500
+        finally:
+            if storage_service.backend == 'azure':
+                storage_service.cleanup_local_temp_file(dest_path)
 
         processed_images.append({
             'unique_filename': unique_filename,
