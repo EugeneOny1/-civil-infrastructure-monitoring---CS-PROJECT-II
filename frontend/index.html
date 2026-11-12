@@ -177,21 +177,13 @@
 
                         <div class="form-group">
                             <label for="loginEmail" class="field-label">Email Address</label>
-                            <input type="email" id="loginEmail" class="field-input"
-                                placeholder="e.g., user@strathmore.edu" required>
+                            <input type="email" id="loginEmail" name="username" class="field-input"
+                                autocomplete="username" placeholder="e.g., user@strathmore.edu" required>
                         </div>
                         <div class="form-group">
                             <label for="loginPassword" class="field-label">Password</label>
-                            <input type="password" id="loginPassword" class="field-input" placeholder="••••••••"
-                                required>
-                        </div>
-                        <div class="quick-login-hints">
-                            <span class="hint-label">Quick test accounts:</span>
-                            <div class="hint-chips">
-                                <button type="button" class="chip-btn" id="chipCitizen">Citizen</button>
-                                <button type="button" class="chip-btn" id="chipEngineer">Engineer</button>
-                                <button type="button" class="chip-btn" id="chipAdmin">Admin</button>
-                            </div>
+                            <input type="password" id="loginPassword" name="password" class="field-input"
+                                autocomplete="current-password" placeholder="••••••••" required>
                         </div>
                         <button type="submit" class="btn-primary btn-block" id="btnLoginSubmit">
                             Sign In to InfraVision
@@ -214,10 +206,10 @@
                                 digits)</label>
                             <div class="input-with-button">
                                 <input type="text" id="twoFactorOtpInput" class="field-input text-center font-mono"
-                                    maxlength="6" placeholder="000000" required>
-                                <button type="button" class="btn-secondary btn-sm" id="btnFillDemoOtp"
-                                    title="Autofill active security code">
-                                    Fill Demo Code
+                                    maxlength="6" autocomplete="one-time-code" inputmode="numeric" placeholder="000000" required>
+                                <button type="button" class="btn-secondary btn-sm hidden" id="btnFillDemoOtp"
+                                    title="Enter active verification code">
+                                    Enter Verification Code
                                 </button>
                             </div>
                             <!-- Live Expiry Countdown Display (Section 12) -->
@@ -258,22 +250,22 @@
                             <select id="regRole" class="field-input" required>
                                 <option value="citizen" selected>Citizen / Field Reporter (Immediate Access)</option>
                                 <option value="engineer">Civil Engineer / Inspector (Awaits Verification)</option>
-                                <option value="admin">System Administrator</option>
                             </select>
                         </div>
                         <div class="form-group">
                             <label for="regName" class="field-label">Full Name *</label>
-                            <input type="text" id="regName" class="field-input" placeholder="Full name" required>
+                            <input type="text" id="regName" name="name" class="field-input" autocomplete="name"
+                                placeholder="Full name" required>
                         </div>
                         <div class="form-group">
                             <label for="regEmail" class="field-label">Email Address *</label>
-                            <input type="email" id="regEmail" class="field-input" placeholder="e.g., user@domain.com"
-                                required>
+                            <input type="email" id="regEmail" name="email" class="field-input" autocomplete="email"
+                                placeholder="e.g., user@domain.com" required>
                         </div>
                         <div class="form-group">
                             <label for="regPassword" class="field-label">Password *</label>
-                            <input type="password" id="regPassword" class="field-input" placeholder="••••••••"
-                                minlength="8" required>
+                            <input type="password" id="regPassword" name="new-password" class="field-input"
+                                autocomplete="new-password" placeholder="••••••••" minlength="8" required>
 
                             <!-- Live Password Requirement Feedback -->
                             <div class="password-strength-box" id="passwordStrengthBox">
@@ -984,13 +976,13 @@
                             <form id="formChangePassword" class="settings-form">
                                 <div class="form-group">
                                     <label for="pwdCurrent" class="field-label">Current Password *</label>
-                                    <input type="password" id="pwdCurrent" class="field-input" placeholder="••••••••"
-                                        required>
+                                    <input type="password" id="pwdCurrent" class="field-input"
+                                        autocomplete="current-password" placeholder="••••••••" required>
                                 </div>
                                 <div class="form-group">
                                     <label for="pwdNew" class="field-label">New Password *</label>
-                                    <input type="password" id="pwdNew" class="field-input" placeholder="••••••••"
-                                        minlength="8" required>
+                                    <input type="password" id="pwdNew" class="field-input"
+                                        autocomplete="new-password" placeholder="••••••••" minlength="8" required>
                                 </div>
 
                                 <!-- Live Validation Checklist (Section 10) -->
@@ -1008,8 +1000,8 @@
 
                                 <div class="form-group">
                                     <label for="pwdConfirm" class="field-label">Confirm New Password *</label>
-                                    <input type="password" id="pwdConfirm" class="field-input" placeholder="••••••••"
-                                        minlength="8" required>
+                                    <input type="password" id="pwdConfirm" class="field-input"
+                                        autocomplete="new-password" placeholder="••••••••" minlength="8" required>
                                 </div>
 
                                 <div class="form-actions" style="margin-top: 1.25rem;">

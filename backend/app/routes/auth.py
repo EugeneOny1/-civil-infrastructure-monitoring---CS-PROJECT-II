@@ -198,6 +198,7 @@ def login():
             'otp_dispatched_at': now_utc.isoformat()
         })
 
+        can_fallback = email_service.should_expose_fallback_otp(email, dispatch_result)
         resp_payload = {
             'require_2fa': True,
             'user_id': str(user_data['_id']),
@@ -207,12 +208,12 @@ def login():
             'expires_at': expiry_utc.isoformat(),
             'expires_in_seconds': expiry_seconds,
             'cooldown_seconds': email_service.get_cooldown_seconds(),
-            'enable_demo_otp': email_service.is_demo_mode(),
+            'enable_demo_otp': can_fallback,
             'message': f"A 6-digit verification code has been dispatched to {email}."
         }
 
-        # Include demo OTP only when ENABLE_DEMO_OTP=true
-        if email_service.is_demo_mode():
+        # Include controlled OTP fallback only when environment-gated and eligible
+        if can_fallback:
             resp_payload['demo_otp'] = otp
 
         return jsonify(resp_payload), 200
@@ -310,6 +311,12 @@ def resend_otp():
     if not user_data:
         return jsonify({'error': 'Account not found.'}), 404
 
+    # Security guard: require an active pending 2FA challenge initiated by credential/Google login
+    if not user_data.get('two_factor_otp') or not user_data.get('two_factor_exp'):
+        return jsonify({
+            'error': 'No active two-factor authentication session found. Please sign in first.'
+        }), 400
+
     # Enforce cooldown period
     can_send, remaining = email_service.can_resend(user_data.get('otp_dispatched_at'))
     if not can_send:
@@ -344,16 +351,17 @@ def resend_otp():
         'otp_send_history': recent_sends
     })
 
+    can_fallback = email_service.should_expose_fallback_otp(email, dispatch_result)
     res_payload = {
         'message': f'A fresh verification code has been dispatched to {email}.',
         'expires_at': expiry_utc.isoformat(),
         'expires_in_seconds': expiry_seconds,
         'cooldown_seconds': email_service.get_cooldown_seconds(),
-        'enable_demo_otp': email_service.is_demo_mode(),
+        'enable_demo_otp': can_fallback,
         'smtp_delivered': dispatch_result.get('delivered', False)
     }
 
-    if email_service.is_demo_mode():
+    if can_fallback:
         res_payload['demo_otp'] = otp
 
     return jsonify(res_payload), 200
@@ -556,6 +564,7 @@ def google_auth():
             'otp_send_history': send_history
         })
 
+        can_fallback = email_service.should_expose_fallback_otp(user.email, dispatch_result)
         res_payload = {
             'require_2fa': True,
             'email': user.email,
@@ -563,10 +572,10 @@ def google_auth():
             'message': f'Two-Factor Authentication required. Verification code dispatched to {user.email}.',
             'expires_in_seconds': expiry_seconds,
             'cooldown_seconds': email_service.get_cooldown_seconds(),
-            'enable_demo_otp': email_service.is_demo_mode(),
+            'enable_demo_otp': can_fallback,
             'smtp_delivered': dispatch_result.get('delivered', False)
         }
-        if email_service.is_demo_mode():
+        if can_fallback:
             res_payload['demo_otp'] = otp
         return jsonify(res_payload), 200
 

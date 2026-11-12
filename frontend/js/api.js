@@ -257,7 +257,7 @@ const Api = {
         } catch (e) {
             // Ignore network errors in offline test mode
         }
-        return { enable_demo_otp: true, google_client_id: '', otp_expiry_seconds: 300, otp_cooldown_seconds: 60 };
+        return { enable_demo_otp: false, google_client_id: '', otp_expiry_seconds: 300, otp_cooldown_seconds: 60 };
     },
 
     // Defect Reports (FR-02, FR-03, FR-04)

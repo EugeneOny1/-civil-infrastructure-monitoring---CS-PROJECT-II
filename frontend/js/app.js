@@ -237,6 +237,7 @@ const App = {
                 if (wrapper) wrapper.classList.remove('open');
 
                 window.Api.clearSession();
+                this.clearPasswordFields();
                 this.currentUser = null;
                 this.pending2FA = null;
                 this.updateSessionUI();
@@ -261,6 +262,7 @@ const App = {
                 registerForm.classList.add('hidden');
                 if (twoFactorForm) twoFactorForm.classList.add('hidden');
                 if (authTabsRow) authTabsRow.classList.remove('hidden');
+                this.clearPasswordFields();
             });
             tabRegister.addEventListener('click', () => {
                 tabRegister.classList.add('active');
@@ -269,30 +271,7 @@ const App = {
                 loginForm.classList.add('hidden');
                 if (twoFactorForm) twoFactorForm.classList.add('hidden');
                 if (authTabsRow) authTabsRow.classList.remove('hidden');
-            });
-        }
-
-        // Quick test account autofill chips
-        const chipCitizen = document.getElementById('chipCitizen');
-        const chipEngineer = document.getElementById('chipEngineer');
-        const chipAdmin = document.getElementById('chipAdmin');
-
-        if (chipCitizen) {
-            chipCitizen.addEventListener('click', () => {
-                document.getElementById('loginEmail').value = 'citizen@strathmore.edu';
-                document.getElementById('loginPassword').value = 'Citizen@123';
-            });
-        }
-        if (chipEngineer) {
-            chipEngineer.addEventListener('click', () => {
-                document.getElementById('loginEmail').value = 'engineer@kenha.go.ke';
-                document.getElementById('loginPassword').value = 'Engineer@123';
-            });
-        }
-        if (chipAdmin) {
-            chipAdmin.addEventListener('click', () => {
-                document.getElementById('loginEmail').value = 'admin@infravision.ke';
-                document.getElementById('loginPassword').value = 'Admin@123';
+                this.clearPasswordFields();
             });
         }
 
@@ -395,11 +374,13 @@ const App = {
 
                     // Check if 2FA challenge is returned
                     if (data.require_2fa) {
+                        this.clearPasswordFields();
                         this.show2FAChallenge(data);
                         return;
                     }
 
                     // Direct login
+                    this.clearPasswordFields();
                     this.currentUser = data.user;
                     this.updateSessionUI();
                     this.showToast(`Welcome, ${data.user.name || data.user.email}!`);
@@ -420,9 +401,9 @@ const App = {
                 btnFillDemo.addEventListener('click', () => {
                     if (this.pending2FA && this.pending2FA.demo_otp) {
                         document.getElementById('twoFactorOtpInput').value = this.pending2FA.demo_otp;
-                        this.showToast("Current active security code filled.");
+                        this.showToast("Verification code entered.");
                     } else {
-                        this.showToast("Demo code autofill is not available in production mode.", true);
+                        this.showToast("Automatic code entry is unavailable. Please check your email inbox.", true);
                     }
                 });
             }
@@ -434,10 +415,17 @@ const App = {
                     btnResend.disabled = true;
                     try {
                         const res = await window.Api.resendOtp(this.pending2FA.email);
-                        if (res.demo_otp) {
+                        const btnFillEl = document.getElementById('btnFillDemoOtp');
+                        if (res.enable_demo_otp && res.demo_otp) {
                             this.pending2FA.demo_otp = res.demo_otp;
-                            const helpEl = document.getElementById('twoFactorHelpText');
-                            if (helpEl) helpEl.textContent = "Development Demo Mode active. Use 'Fill Demo Code' to auto-populate the security code or check your registered email inbox.";
+                            if (btnFillEl) btnFillEl.classList.remove('hidden');
+                        } else {
+                            this.pending2FA.demo_otp = null;
+                            if (btnFillEl) btnFillEl.classList.add('hidden');
+                        }
+                        const helpEl = document.getElementById('twoFactorHelpText');
+                        if (helpEl) {
+                            helpEl.textContent = "Enter the 6-digit verification code sent to your registered email address.";
                         }
                         // Clear input so stale code is never left behind
                         document.getElementById('twoFactorOtpInput').value = '';
@@ -530,6 +518,7 @@ const App = {
                         two_factor_enabled
                     });
 
+                    this.clearPasswordFields();
                     this.currentUser = data.user;
                     this.updateSessionUI();
                     this.showToast(data.message || 'Account created successfully!');
@@ -607,6 +596,13 @@ const App = {
         });
     },
 
+    clearPasswordFields() {
+        ['loginPassword', 'regPassword', 'pwdCurrent', 'pwdNew', 'pwdConfirm'].forEach(id => {
+            const el = document.getElementById(id);
+            if (el) el.value = '';
+        });
+    },
+
     show2FAChallenge(data) {
         this.pending2FA = {
             email: data.email,
@@ -631,16 +627,12 @@ const App = {
             const helpEl = document.getElementById('twoFactorHelpText');
             const btnFill = document.getElementById('btnFillDemoOtp');
 
-            const isDemo = data.enable_demo_otp !== false && Boolean(data.demo_otp);
+            const hasFallback = data.enable_demo_otp === true && Boolean(data.demo_otp);
             if (btnFill) {
-                btnFill.classList.toggle('hidden', !isDemo);
+                btnFill.classList.toggle('hidden', !hasFallback);
             }
             if (helpEl) {
-                if (isDemo) {
-                    helpEl.textContent = "Development Demo Mode active. Use 'Fill Demo Code' to auto-populate the security code or check your registered email inbox.";
-                } else {
-                    helpEl.textContent = "Enter the 6-digit verification code sent to your registered email address.";
-                }
+                helpEl.textContent = "Enter the 6-digit verification code sent to your registered email address.";
             }
 
             this.startOtpCountdown(data.expires_in_seconds || 300);

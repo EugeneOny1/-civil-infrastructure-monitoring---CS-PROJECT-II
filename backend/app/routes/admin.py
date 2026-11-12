@@ -368,7 +368,7 @@ def get_admin_dashboard(current_user):
 
     smtp_configured = email_service.is_configured()
     smtp_healthy = False
-    smtp_status_desc = "Demo Fallback"
+    smtp_status_desc = "Controlled Fallback" if email_service.is_demo_mode() else "SMTP Delivery Inactive"
     if smtp_configured:
         smtp_healthy, smtp_status_desc = email_service.verify_smtp_health()
 
@@ -396,15 +396,15 @@ def get_admin_dashboard(current_user):
         },
         'email_service': {
             'configured': smtp_healthy,
-            'status': 'operational' if smtp_healthy else 'demo_mode',
-            'provider': 'Gmail / SMTP Server' if smtp_healthy else 'Local Cryptographic Generator'
+            'status': 'operational' if smtp_healthy else 'fallback_configured',
+            'provider': 'Gmail / SMTP Server' if smtp_healthy else 'Environment Verification Fallback'
         },
         'email_otp': {
-            'status': 'operational' if smtp_healthy else 'demo_mode',
+            'status': 'operational' if smtp_healthy else 'fallback_configured',
             'configured': smtp_healthy,
-            'provider': 'Gmail / SMTP Server' if smtp_healthy else 'Local Cryptographic Generator (Demo Fallback)',
+            'provider': 'Gmail / SMTP Server' if smtp_healthy else 'Cryptographic OTP Generator',
             'status_desc': smtp_status_desc,
-            'demo_mode_enabled': current_app.config.get('ENABLE_DEMO_OTP', True),
+            'demo_mode_enabled': bool(current_app.config.get('ENABLE_DEMO_OTP', False)),
             'expiry_seconds': current_app.config.get('OTP_EXPIRY_SECONDS', 300),
             'cooldown_seconds': current_app.config.get('OTP_RESEND_COOLDOWN_SECONDS', 60)
         },

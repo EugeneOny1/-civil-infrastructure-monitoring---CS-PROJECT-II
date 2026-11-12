@@ -66,16 +66,64 @@ class EmailService:
         return int(os.getenv('OTP_MAX_SENDS_PER_HOUR', '5'))
 
     def is_demo_mode(self) -> bool:
+        """
+        Environment-gated check for controlled OTP verification fallback.
+        Never silently enabled in production: ProductionConfig disables this unless
+        ENABLE_PRODUCTION_OTP_FALLBACK is explicitly set in the environment.
+        """
         try:
             from flask import current_app
             if current_app:
-                return bool(current_app.config.get('ENABLE_DEMO_OTP', True))
+                return bool(current_app.config.get('ENABLE_DEMO_OTP', False))
         except Exception:
             pass
-        return os.getenv('ENABLE_DEMO_OTP', 'True').lower() in ('true', '1', 't')
+        if os.getenv('FLASK_ENV', 'development').strip().lower() == 'production':
+            return os.getenv('ENABLE_PRODUCTION_OTP_FALLBACK', 'False').lower() in ('true', '1', 't')
+        return os.getenv('ENABLE_DEMO_OTP', 'False').lower() in ('true', '1', 't')
+
+    def should_expose_fallback_otp(self, to_email: str, dispatch_result: Optional[Dict[str, Any]] = None) -> bool:
+        """
+        Determines whether a controlled OTP fallback may be exposed for this challenge:
+        - Requires environment fallback flag to be enabled (`is_demo_mode()`).
+        - If real SMTP delivered the email for a normal user account in non-testing mode,
+          the code is delivered strictly via email (never returned in API JSON).
+        - Controlled project evaluation accounts (`OTP_FALLBACK_ACCOUNTS`) or failed/unconfigured
+          SMTP fallback in enabled environments retain fallback access.
+        """
+        if not self.is_demo_mode():
+            return False
+
+        is_testing = False
+        fallback_accounts = []
+        try:
+            from flask import current_app
+            if current_app:
+                is_testing = bool(current_app.config.get('TESTING', False))
+                fallback_accounts = current_app.config.get('OTP_FALLBACK_ACCOUNTS', [])
+        except Exception:
+            pass
+
+        if is_testing:
+            return True
+
+        norm_email = (to_email or '').strip().lower()
+        if norm_email in fallback_accounts:
+            return True
+
+        # If SMTP succeeded for a normal account, deliver strictly via email
+        if dispatch_result and dispatch_result.get('method') == 'smtp' and dispatch_result.get('delivered'):
+            return False
+
+        return True
 
     def is_configured(self) -> bool:
         """Checks if real SMTP transport credentials are configured in the environment."""
+        try:
+            from flask import current_app
+            if current_app and current_app.config.get('TESTING'):
+                return False
+        except Exception:
+            pass
         host = os.getenv('SMTP_HOST', '').strip()
         user = os.getenv('SMTP_USER', '').strip()
         password = os.getenv('SMTP_PASSWORD', '').strip()
@@ -154,7 +202,14 @@ class EmailService:
         smtp_sender = os.getenv('SMTP_SENDER', 'infravision-alerts@strathmore.edu').strip()
         use_tls = os.getenv('SMTP_USE_TLS', 'True').lower() in ('true', '1', 't')
 
-        allow_demo_exposure = self.is_demo_mode()
+        allow_demo_exposure = False
+        is_testing = False
+        try:
+            from flask import current_app
+            if current_app:
+                is_testing = bool(current_app.config.get('TESTING', False))
+        except Exception:
+            pass
 
         if self.is_configured():
             try:
@@ -211,7 +266,7 @@ class EmailService:
                     'expires_in_seconds': expiry_seconds,
                     'error': None
                 }
-                if allow_demo_exposure:
+                if self.should_expose_fallback_otp(to_email, res):
                     res['demo_code'] = otp_code
                 return res
 
@@ -219,32 +274,33 @@ class EmailService:
                 # Mask sensitive info and avoid logging raw OTP
                 res_fail: Dict[str, Any] = {
                     'delivered': False,
-                    'method': 'smtp_failed_fallback_demo',
+                    'method': 'smtp_failed_fallback',
                     'email': to_email,
                     'expires_at': expiry_utc.isoformat(),
                     'expires_in_seconds': expiry_seconds,
-                    'error': str(e)
+                    'error': type(e).__name__
                 }
-                if allow_demo_exposure:
+                if self.should_expose_fallback_otp(to_email, res_fail):
                     res_fail['demo_code'] = otp_code
                 return res_fail
         else:
-            # Demo/Development mode
-            self._demo_last_dispatched[to_email] = {
-                'otp': otp_code,
-                'expires_at': expiry_utc.isoformat()
-            }
-            res_demo: Dict[str, Any] = {
-                'delivered': True,
-                'method': 'demo',
+            # Controlled evaluation / test dispatch mode
+            if is_testing:
+                self._demo_last_dispatched[to_email] = {
+                    'otp': otp_code,
+                    'expires_at': expiry_utc.isoformat()
+                }
+            res_fallback: Dict[str, Any] = {
+                'delivered': self.is_demo_mode(),
+                'method': 'controlled_fallback' if self.is_demo_mode() else 'smtp_unconfigured',
                 'email': to_email,
                 'expires_at': expiry_utc.isoformat(),
                 'expires_in_seconds': expiry_seconds,
-                'note': 'SMTP is not configured. Running in development/demo mode.'
+                'note': 'SMTP transport unconfigured.'
             }
-            if allow_demo_exposure:
-                res_demo['demo_code'] = otp_code
-            return res_demo
+            if self.should_expose_fallback_otp(to_email, res_fallback):
+                res_fallback['demo_code'] = otp_code
+            return res_fallback
 
 
 # Global singleton instance

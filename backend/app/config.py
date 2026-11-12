@@ -70,6 +70,14 @@ class Config:
     OTP_MAX_ATTEMPTS = int(os.getenv('OTP_MAX_ATTEMPTS', '5'))  # 5 attempts max
     OTP_MAX_SENDS_PER_HOUR = int(os.getenv('OTP_MAX_SENDS_PER_HOUR', '5'))  # 5 sends per hour max
     ENABLE_DEMO_OTP = os.getenv('ENABLE_DEMO_OTP', 'True').lower() in ('true', '1', 't')
+    OTP_FALLBACK_ACCOUNTS = [
+        e.strip().lower()
+        for e in os.getenv(
+            'OTP_FALLBACK_ACCOUNTS',
+            'citizen@strathmore.edu,engineer@kenha.go.ke,admin@infravision.ke'
+        ).split(',')
+        if e.strip()
+    ]
 
     # Google Authentication (OAuth2 / GIS)
     GOOGLE_CLIENT_ID = os.getenv('GOOGLE_CLIENT_ID', '').strip()
@@ -86,10 +94,14 @@ class DevelopmentConfig(Config):
 
 class ProductionConfig(Config):
     DEBUG = False
+    # Never inherit development ENABLE_DEMO_OTP silently in production;
+    # controlled evaluation fallback requires explicit ENABLE_PRODUCTION_OTP_FALLBACK=true
+    ENABLE_DEMO_OTP = os.getenv('ENABLE_PRODUCTION_OTP_FALLBACK', 'False').lower() in ('true', '1', 't')
 
 class TestingConfig(Config):
     TESTING = True
     DEBUG = True
+    ENABLE_DEMO_OTP = True
     DB_NAME = os.getenv('TEST_DB_NAME', 'civil_infrastructure_test')
     MONGO_URI = os.getenv('TEST_MONGO_URI', 'mongodb://localhost:27017/civil_infrastructure_test')
 
