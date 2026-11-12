@@ -276,10 +276,11 @@ jobs:
           RESOURCE_GROUP: ${{ vars.AZURE_RESOURCE_GROUP || 'infravision-rg' }}
           CONTAINER_APPS_ENV: ${{ vars.AZURE_CONTAINER_APPS_ENV || 'infravision-env' }}
           CONTAINER_APP_NAME: ${{ vars.AZURE_CONTAINER_APP_NAME || 'infravision' }}
-          LOCATION: ${{ vars.AZURE_LOCATION || 'southafricanorth' }}
+          LOCATION: ${{ vars.AZURE_LOCATION || 'uaenorth' }}
           STORAGE_ACCOUNT_URL: ${{ vars.AZURE_STORAGE_ACCOUNT_URL }}
           BLOB_CONTAINER_NAME: ${{ vars.AZURE_STORAGE_CONTAINER || 'defect-images' }}
-          IDENTITY_NAME: ${{ vars.AZURE_MANAGED_IDENTITY_NAME || 'infravision-identity' }}
+          RUNTIME_IDENTITY_NAME: ${{ vars.AZURE_RUNTIME_IDENTITY_NAME || vars.AZURE_MANAGED_IDENTITY_NAME || 'infravision-identity' }}
+          RUNTIME_CLIENT_ID_VAR: ${{ vars.AZURE_RUNTIME_CLIENT_ID || vars.AZURE_IDENTITY_CLIENT_ID || '' }}
           MONGO_URI: ${{ secrets.MONGO_URI }}
           SECRET_KEY: ${{ secrets.SECRET_KEY }}
           JWT_SECRET_KEY: ${{ secrets.JWT_SECRET_KEY }}
@@ -295,6 +296,14 @@ jobs:
         run: |
           set -euo pipefail
           az extension add --name containerapp --upgrade --only-show-errors >/dev/null
+
+          # Always resolve the application runtime identity's ARM ID and Client ID (infravision-identity)
+          RUNTIME_IDENTITY_ID="$(az identity show --name "${RUNTIME_IDENTITY_NAME}" --resource-group "${RESOURCE_GROUP}" --query "id" -o tsv | tr -d '\r')"
+          RUNTIME_CLIENT_ID="${RUNTIME_CLIENT_ID_VAR}"
+          if [[ -z "${RUNTIME_CLIENT_ID}" ]]; then
+            RUNTIME_CLIENT_ID="$(az identity show --name "${RUNTIME_IDENTITY_NAME}" --resource-group "${RESOURCE_GROUP}" --query "clientId" -o tsv | tr -d '\r')"
+          fi
+          echo "Using Runtime Managed Identity '${RUNTIME_IDENTITY_NAME}' (${RUNTIME_CLIENT_ID}) for ACA container Blob access."
 
           if az containerapp show --name "${CONTAINER_APP_NAME}" --resource-group "${RESOURCE_GROUP}" >/dev/null 2>&1; then
             echo "Updating existing Azure Container App '${CONTAINER_APP_NAME}' to ${SHA_IMAGE}..."
@@ -323,7 +332,7 @@ jobs:
               --name "${CONTAINER_APP_NAME}" \
               --resource-group "${RESOURCE_GROUP}" \
               --image "${SHA_IMAGE}" \
-              --set-env-vars "MODEL_VERSION=${EXPECTED_MODEL_VERSION}" "REQUIRE_PERSISTENT_DB=True" \
+              --set-env-vars "MODEL_VERSION=${EXPECTED_MODEL_VERSION}" "REQUIRE_PERSISTENT_DB=True" "AZURE_CLIENT_ID=${RUNTIME_CLIENT_ID}" \
               --only-show-errors >/dev/null
           else
             echo "Creating Azure Container App '${CONTAINER_APP_NAME}' on Consumption environment '${CONTAINER_APPS_ENV}'..."
@@ -341,15 +350,13 @@ jobs:
             fi
 
             ENV_ID="$(az containerapp env show --name "${CONTAINER_APPS_ENV}" --resource-group "${RESOURCE_GROUP}" --query "id" -o tsv)"
-            IDENTITY_ID="$(az identity show --name "${IDENTITY_NAME}" --resource-group "${RESOURCE_GROUP}" --query "id" -o tsv)"
-            IDENTITY_CLIENT_ID="$(az identity show --name "${IDENTITY_NAME}" --resource-group "${RESOURCE_GROUP}" --query "clientId" -o tsv)"
             APP_SECRET_KEY="${SECRET_KEY:-$(python3 -c 'import secrets; print(secrets.token_urlsafe(32))')}"
             APP_JWT_SECRET="${JWT_SECRET_KEY:-${APP_SECRET_KEY}}"
 
             YAML_FILE="$(mktemp /tmp/infravision-aca-XXXXXX.yaml)"
             trap 'rm -f "${YAML_FILE}"' EXIT
 
-            python3 - "${YAML_FILE}" "${ENV_ID}" "${IDENTITY_ID}" "${IDENTITY_CLIENT_ID}" "${APP_SECRET_KEY}" "${APP_JWT_SECRET}" <<'PYEOF'
+            python3 - "${YAML_FILE}" "${ENV_ID}" "${RUNTIME_IDENTITY_ID}" "${RUNTIME_CLIENT_ID}" "${APP_SECRET_KEY}" "${APP_JWT_SECRET}" <<'PYEOF'
           import json, os, sys
           yaml_path, env_id, identity_id, client_id, skey, jkey = sys.argv[1:7]
           smtp_pass = os.environ.get("SMTP_PASSWORD", "")

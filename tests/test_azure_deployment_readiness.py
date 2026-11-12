@@ -276,6 +276,9 @@ class TestAzureDeploymentReadiness(unittest.TestCase):
             'ghcr.io',
             'sha-${GITHUB_SHA}',
             'REQUIRE_PERSISTENT_DB',
+            'infravision-identity',
+            'uaenorth',
+            'AZURE_RUNTIME_CLIENT_ID',
             '/ready',
             '/health',
             '/api/health',
@@ -287,8 +290,13 @@ class TestAzureDeploymentReadiness(unittest.TestCase):
             '--allow-blob-public-access false',
             '--public-access off',
             'Storage Blob Data Contributor',
+            'infravision-identity',
+            'infravision-github-deploy',
+            'az identity federated-credential',
             'api://AzureADTokenExchange',
             'AZURE_CLIENT_ID',
+            'AZURE_RUNTIME_CLIENT_ID',
+            'uaenorth',
         ):
             self.assertIn(expected, cs)
 

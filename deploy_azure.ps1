@@ -265,16 +265,21 @@ $googleClientId = if ($envMap.ContainsKey('GOOGLE_CLIENT_ID')) { $envMap['GOOGLE
 # 5. Determine Supported Region & Deterministic Resource Names
 $state = Get-OrInitDeploymentState -SubscriptionId $subId
 if (-not $Location) {
-    $availableLocs = az account list-locations --query "[].name" -o tsv 2>$null
-    $preferredRegions = @('southafricanorth', 'westeurope', 'northeurope', 'francecentral', 'eastus', 'eastus2')
-    foreach ($candidate in $preferredRegions) {
-        if ($availableLocs -contains $candidate) {
-            $Location = $candidate
-            break
+    $rgLoc = (az group show --name $ResourceGroup --query "location" -o tsv 2>$null)
+    if ($rgLoc) {
+        $Location = $rgLoc.Trim()
+    } else {
+        $availableLocs = az account list-locations --query "[].name" -o tsv 2>$null
+        $preferredRegions = @('uaenorth', 'southafricanorth', 'westeurope', 'northeurope', 'francecentral', 'eastus', 'eastus2')
+        foreach ($candidate in $preferredRegions) {
+            if ($availableLocs -contains $candidate) {
+                $Location = $candidate
+                break
+            }
         }
-    }
-    if (-not $Location) {
-        $Location = 'eastus'
+        if (-not $Location) {
+            $Location = 'uaenorth'
+        }
     }
 }
 
