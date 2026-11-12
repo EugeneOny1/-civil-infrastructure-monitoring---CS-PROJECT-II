@@ -539,15 +539,16 @@ def get_available_engineers(current_user):
     all_users = db_service.find('users')
     engineers = []
     for u in all_users:
-        if u.get('role') in ['engineer', 'admin']:
+        if u.get('role') == 'engineer' and u.get('verification_status') == 'verified':
             u_id = str(u.get('_id') or u.get('user_id'))
             engineers.append({
                 'user_id': u_id,
                 'name': u.get('name', 'Certified Engineer'),
                 'email': u.get('email', ''),
                 'role': u.get('role', 'engineer'),
-                'ebk_reg_no': u.get('ebk_reg_no', 'EBK-VERIFIED'),
-                'organization': u.get('organization', 'KeNHA / Public Infrastructure'),
+                'engineering_category': u.get('engineering_category', ''),
+                'ebk_reg_no': u.get('ebk_reg_no') or u.get('professional_reg_no') or 'EBK-VERIFIED',
+                'organization': u.get('organization', 'Public Infrastructure'),
                 'is_current_lead': bool(lead_id and u_id == lead_id),
                 'is_collaborator': bool(u_id in collaborator_ids)
             })
@@ -594,6 +595,12 @@ def add_collaborator(current_user, report_id):
     if not target_user:
         return jsonify({'error': 'Target engineer not found.'}), 404
 
+    if target_user.get('role') != 'engineer' or target_user.get('verification_status') != 'verified':
+        return jsonify({'error': 'Only verified civil engineers can be invited as collaborators.'}), 400
+
+    if lead_id and engineer_id == lead_id:
+        return jsonify({'error': 'Engineer is already the assigned Lead Engineer on this case.'}), 400
+
     collaborators = meta.get('collaborators', [])
     if any(str(c.get('user_id')) == engineer_id for c in collaborators):
         return jsonify({'error': 'Engineer is already a collaborator on this case.'}), 400
@@ -604,9 +611,11 @@ def add_collaborator(current_user, report_id):
         'name': target_user.get('name', 'Certified Engineer'),
         'email': target_user.get('email', ''),
         'role': role,
+        'invitation_status': 'pending',
         'invited_by': current_user.get('name', 'Lead Engineer'),
         'invited_by_id': current_user_id,
         'invited_at': now_iso,
+        'added_at': now_iso,
         'invite_note': invite_note
     }
     collaborators.append(new_collab)
@@ -642,6 +651,82 @@ def add_collaborator(current_user, report_id):
         'collaborator': new_collab,
         'collaborators': collaborators
     }), 201
+
+
+@reviews_bp.route('/report/<report_id>/collaborators/respond', methods=['POST'])
+@role_required('engineer', 'admin')
+def respond_collaborator_invitation(current_user, report_id):
+    """
+    Allows an invited verified engineer to accept or reject a case collaboration invitation.
+    """
+    report = db_service.find_one('infrastructure_reports', {'_id': report_id})
+    if not report:
+        return jsonify({'error': 'Report not found.'}), 404
+
+    data = request.get_json() or {}
+    raw_resp = str(
+        data.get('response') or data.get('invitation_status') or data.get('status') or data.get('action') or ''
+    ).strip().lower()
+    if raw_resp in ('accept', 'accepted'):
+        normalized_status = 'accepted'
+    elif raw_resp in ('reject', 'rejected', 'decline', 'declined'):
+        normalized_status = 'rejected'
+    else:
+        return jsonify({'error': "Response must be 'accepted' or 'rejected'."}), 400
+
+    current_user_id = str(current_user.get('_id') or current_user.get('user_id'))
+    target_id = str(data.get('engineer_id') or current_user_id).strip()
+    if target_id != current_user_id and current_user.get('role') != 'admin':
+        return jsonify({'error': 'Forbidden: You may only respond to your own collaboration invitations.'}), 403
+
+    meta = report.get('metadata') or {}
+    collaborators = meta.get('collaborators', [])
+    matched = None
+    for c in collaborators:
+        if str(c.get('user_id')) == target_id:
+            matched = c
+            break
+
+    if not matched:
+        return jsonify({'error': 'Collaboration invitation not found for this engineer.'}), 404
+
+    now_iso = datetime.now(timezone.utc).isoformat()
+    matched['invitation_status'] = normalized_status
+    matched['responded_at'] = now_iso
+    meta['collaborators'] = collaborators
+
+    history = meta.get('status_history', [])
+    history.append({
+        'status': report.get('status'),
+        'timestamp': now_iso,
+        'updated_by': current_user.get('name', 'Verified Engineer'),
+        'user_id': current_user_id,
+        'note': f"Collaboration invitation {normalized_status} by {matched.get('name', current_user.get('name'))}."
+    })
+    meta['status_history'] = history
+
+    db_service.update_one('infrastructure_reports', {'_id': report_id}, {
+        'metadata': meta,
+        'last_updated_at': now_iso
+    })
+
+    inviter_id = matched.get('invited_by_id')
+    if inviter_id and str(inviter_id) != current_user_id:
+        from ..services.notification_service import notification_service
+        loc = meta.get('location_name') or report.get('location_name') or 'Monitored defect'
+        notification_service.create_notification(
+            str(inviter_id),
+            report_id,
+            'assignment',
+            f"Collaboration {normalized_status.title()}",
+            f"{matched.get('name', 'Engineer')} has {normalized_status} the collaboration invite for {loc}."
+        )
+
+    return jsonify({
+        'message': f"Collaboration invitation {normalized_status}.",
+        'collaborator': matched,
+        'collaborators': collaborators
+    }), 200
 
 
 @reviews_bp.route('/report/<report_id>/collaborators/<engineer_id>', methods=['DELETE'])
@@ -718,6 +803,9 @@ def transfer_lead_engineer(current_user, report_id):
     if not target_user:
         return jsonify({'error': 'Target engineer not found.'}), 404
 
+    if target_user.get('role') != 'engineer' or target_user.get('verification_status') != 'verified':
+        return jsonify({'error': 'Lead responsibility can only be transferred to a verified civil engineer.'}), 400
+
     now_iso = datetime.now(timezone.utc).isoformat()
     old_lead_name = lead.get('name') or meta.get('assigned_engineer_name', current_user.get('name', 'Certified Engineer'))
 
@@ -753,6 +841,7 @@ def transfer_lead_engineer(current_user, report_id):
             'name': old_lead_name,
             'email': meta.get('assigned_engineer_email', ''),
             'role': 'Former Lead Engineer',
+            'invitation_status': 'accepted',
             'invited_at': now_iso,
             'invited_by': current_user.get('name', 'Certified Engineer')
         })
@@ -920,11 +1009,36 @@ def update_inspection_notebook(current_user, report_id):
                 'conflict': True
             }), 409
 
+    author_name = current_user.get('name', 'Civil Engineer')
+    author_id = str(current_user.get('_id') or current_user.get('user_id'))
+
     cl = data.get('checklist') or data.get('inspection_checklist')
     if cl is not None:
-        notebook['checklist'] = cl
+        enriched_cl = []
+        for item in cl:
+            if isinstance(item, dict):
+                copy_item = dict(item)
+                is_done = bool(copy_item.get('completed') or copy_item.get('status') in ('completed', 'not_applicable') or copy_item.get('is_na'))
+                if is_done and not copy_item.get('completed_by'):
+                    copy_item['completed_by'] = author_name
+                    copy_item['completed_by_id'] = author_id
+                    copy_item['completed_at'] = copy_item.get('completed_at') or now_iso
+                enriched_cl.append(copy_item)
+            else:
+                enriched_cl.append(item)
+        notebook['checklist'] = enriched_cl
     if 'note_cards' in data:
-        notebook['note_cards'] = data['note_cards']
+        enriched_cards = []
+        for card in (data.get('note_cards') or []):
+            if isinstance(card, dict):
+                copy_card = dict(card)
+                if not copy_card.get('author_name'):
+                    copy_card['author_name'] = author_name
+                    copy_card['author_id'] = author_id
+                enriched_cards.append(copy_card)
+            else:
+                enriched_cards.append(card)
+        notebook['note_cards'] = enriched_cards
     if 'evidence' in data:
         notebook['evidence'] = data['evidence']
     if 'compliance_context' in data:

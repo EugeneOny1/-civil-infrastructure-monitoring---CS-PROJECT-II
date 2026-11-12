@@ -423,6 +423,17 @@ const Api = {
         return data;
     },
 
+    async respondToCollaboratorInvite(reportId, response) {
+        const res = await this.safeFetch(`${API_BASE}/reviews/report/${reportId}/collaborators/respond`, {
+            method: 'POST',
+            headers: this.getHeaders(),
+            body: JSON.stringify({ response })
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || 'Failed to update invitation status.');
+        return data;
+    },
+
     async removeCollaborator(reportId, engineerId) {
         const res = await this.safeFetch(`${API_BASE}/reviews/report/${reportId}/collaborators/${engineerId}`, {
             method: 'DELETE',

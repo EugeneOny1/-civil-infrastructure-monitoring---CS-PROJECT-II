@@ -581,12 +581,30 @@ const Review = {
                 lifecycleEl.innerHTML = `<span class="status-chip ${statusSlug}">${status}</span>`;
             }
 
-            // Assigned Engineer & Header Status (Sections 25 & 28)
-            const assignedEng = data.report.assigned_engineer_name || data.report.metadata?.assigned_engineer_name || data.report.metadata?.reviewed_by || 'Unassigned';
+            // Lead Engineer & Collaborating Engineers Responsibility (Sections 25 & 28)
+            const repMeta = data.report.metadata || {};
+            const leadObj = repMeta.current_lead_engineer || repMeta.lead_engineer || {};
+            const assignedEng = leadObj.name || data.report.assigned_engineer_name || repMeta.assigned_engineer_name || repMeta.reviewed_by || 'Unassigned';
             const assignedEl = document.getElementById('reviewAssignedEngineer');
             if (assignedEl) assignedEl.textContent = assignedEng;
+            const collabList = repMeta.collaborators || [];
+            const activeCollabs = collabList.filter(c => (c.invitation_status || 'pending') !== 'rejected');
+            const collabSummaryEl = document.getElementById('reviewCollaboratorsSummary');
+            if (collabSummaryEl) {
+                const parts = [];
+                if (activeCollabs.length > 0) {
+                    const names = activeCollabs.map(c => `${c.name}${c.invitation_status === 'pending' ? ' (pending)' : ''}`).join(', ');
+                    parts.push(`Collaborators: ${names}`);
+                }
+                if (repMeta.assigned_team) {
+                    parts.push(`Team: ${repMeta.assigned_team}`);
+                }
+                collabSummaryEl.textContent = parts.join(' • ');
+            }
             const topOwnerBadge = document.getElementById('reviewTopOwnerBadge');
-            if (topOwnerBadge) topOwnerBadge.textContent = assignedEng;
+            if (topOwnerBadge) {
+                topOwnerBadge.textContent = activeCollabs.length > 0 ? `Lead: ${assignedEng} (+${activeCollabs.length})` : assignedEng;
+            }
 
             const topStatusBadge = document.getElementById('reviewTopStatusBadge');
             if (topStatusBadge) {
@@ -1298,7 +1316,7 @@ const Review = {
         const user = window.Auth?.getUser() || window.App?.currentUser;
         const currentUserId = String(user?.id || user?.user_id || user?._id || '');
         const isEngAdmin = (user?.role === 'admin');
-        const leadEng = meta.lead_engineer || {};
+        const leadEng = meta.current_lead_engineer || meta.lead_engineer || {};
         const leadEngId = String(leadEng.user_id || this.currentReport.assigned_engineer_id || meta.assigned_engineer_id || '');
 
         if (!isEngAdmin && leadEngId && currentUserId && currentUserId !== leadEngId) {
@@ -2088,11 +2106,13 @@ const Review = {
         if (!this.currentReport) return;
         const reportId = this.currentReport.report_id || this.currentReport._id;
         const meta = this.currentReport.metadata || {};
+        const curUser = window.Auth?.getUser() || window.App?.currentUser || {};
+        const curUserId = String(curUser._id || curUser.user_id || curUser.id || '');
 
         // Lead Engineer info
-        const leadEng = meta.lead_engineer || {};
-        const leadName = leadEng.name || meta.assigned_engineer_name || 'Eng. Regina';
-        const leadEmail = leadEng.email || meta.assigned_engineer_email || 'regina@kenha.co.ke';
+        const leadEng = meta.current_lead_engineer || meta.lead_engineer || {};
+        const leadName = leadEng.name || meta.assigned_engineer_name || 'Unassigned';
+        const leadEmail = leadEng.email || meta.assigned_engineer_email || (leadName === 'Unassigned' ? 'Assign Lead during verification' : '');
         const leadNameEl = document.getElementById('drawerLeadEngineerName');
         const leadEmailEl = document.getElementById('drawerLeadEngineerEmail');
         if (leadNameEl) leadNameEl.textContent = leadName;
@@ -2113,24 +2133,53 @@ const Review = {
                 `;
             } else {
                 listEl.innerHTML = collabs.map((c, idx) => {
-                    const addedDate = c.added_at ? new Date(c.added_at).toLocaleDateString('en-KE', { dateStyle: 'short' }) : '';
+                    const collabId = String(c.user_id || c.engineer_id || idx);
+                    const invStatus = (c.invitation_status || 'pending').toLowerCase();
+                    const addedDate = (c.added_at || c.invited_at) ? new Date(c.added_at || c.invited_at).toLocaleDateString('en-KE', { dateStyle: 'short' }) : '';
+                    const badgeStyle = invStatus === 'accepted'
+                        ? 'background:#ecfdf5; color:#047857;'
+                        : (invStatus === 'rejected' ? 'background:#fef2f2; color:#b91c1c;' : 'background:#fef3c7; color:#b45309;');
+                    const isSelfPending = curUserId && collabId === curUserId && invStatus === 'pending';
                     return `
-                        <div style="display:flex; justify-content:space-between; align-items:center; background:#ffffff; border:1px solid #e2e8f0; border-radius:6px; padding:0.5rem 0.65rem;">
+                        <div style="display:flex; justify-content:space-between; align-items:center; gap:0.5rem; background:#ffffff; border:1px solid #e2e8f0; border-radius:6px; padding:0.5rem 0.65rem; flex-wrap:wrap;">
                             <div style="display:flex; align-items:center; gap:0.5rem;">
                                 <div style="width:28px; height:28px; border-radius:50%; background:#e0f2fe; color:#0369a1; display:flex; align-items:center; justify-content:center; font-weight:700; font-size:0.75rem;">
                                     ${(c.name || 'E').charAt(0).toUpperCase()}
                                 </div>
                                 <div>
-                                    <span style="font-size:0.8rem; font-weight:600; color:#0f172a; display:block;">${c.name || 'Engineer'}</span>
+                                    <div style="display:flex; align-items:center; gap:0.35rem; flex-wrap:wrap;">
+                                        <span style="font-size:0.8rem; font-weight:600; color:#0f172a;">${c.name || 'Engineer'}</span>
+                                        <span style="font-size:0.64rem; font-weight:700; padding:1px 5px; border-radius:4px; text-transform:uppercase; ${badgeStyle}">${invStatus}</span>
+                                    </div>
                                     <span style="font-size:0.7rem; color:#64748b;">${c.role || 'Collaborating Engineer'}${addedDate ? ` • ${addedDate}` : ''}</span>
                                 </div>
                             </div>
-                            <button type="button" class="btn-remove-collab" data-collab-id="${c.user_id || c.engineer_id || idx}" style="background:none; border:none; color:#ef4444; font-size:0.72rem; cursor:pointer; padding:2px 6px; border-radius:4px;" title="Remove collaborator">
-                                Remove
-                            </button>
+                            <div style="display:flex; align-items:center; gap:0.25rem;">
+                                ${isSelfPending ? `
+                                    <button type="button" class="btn-respond-collab" data-resp="accepted" style="background:#10b981; border:none; color:#ffffff; font-size:0.7rem; font-weight:600; cursor:pointer; padding:2px 7px; border-radius:4px;">Accept</button>
+                                    <button type="button" class="btn-respond-collab" data-resp="rejected" style="background:#f1f5f9; border:1px solid #cbd5e1; color:#475569; font-size:0.7rem; font-weight:600; cursor:pointer; padding:2px 7px; border-radius:4px;">Decline</button>
+                                ` : ''}
+                                <button type="button" class="btn-remove-collab" data-collab-id="${collabId}" style="background:none; border:none; color:#ef4444; font-size:0.72rem; cursor:pointer; padding:2px 6px; border-radius:4px;" title="Remove collaborator">
+                                    Remove
+                                </button>
+                            </div>
                         </div>
                     `;
                 }).join('');
+
+                listEl.querySelectorAll('.btn-respond-collab').forEach(btn => {
+                    btn.addEventListener('click', async (e) => {
+                        const respVal = e.currentTarget.getAttribute('data-resp');
+                        try {
+                            await window.Api.respondToCollaboratorInvite(reportId, respVal);
+                            window.App?.showToast(`Collaboration invitation ${respVal}.`);
+                            await this.loadReportForReview(reportId);
+                            this.loadDrawerTeam();
+                        } catch (err) {
+                            window.App?.showToast(err.message || "Failed to update invitation status.", true);
+                        }
+                    });
+                });
 
                 listEl.querySelectorAll('.btn-remove-collab').forEach(btn => {
                     btn.addEventListener('click', async (e) => {
@@ -2153,24 +2202,26 @@ const Review = {
         try {
             const availData = await window.Api.getAvailableEngineers(reportId);
             const engineers = availData.engineers || availData.available_engineers || [];
-            
+            const invitable = engineers.filter(e => !e.is_current_lead && !e.is_collaborator);
+            const transferCandidates = engineers.filter(e => !e.is_current_lead);
+
             const inviteSelect = document.getElementById('inviteEngineerSelect');
             if (inviteSelect) {
-                if (engineers.length === 0) {
-                    inviteSelect.innerHTML = `<option value="">No other engineers available</option>`;
+                if (invitable.length === 0) {
+                    inviteSelect.innerHTML = `<option value="">No other verified engineers available</option>`;
                 } else {
-                    inviteSelect.innerHTML = `<option value="">Select available engineer...</option>` +
-                        engineers.map(e => `<option value="${e.user_id || e._id}">${e.name} (${e.email || 'Accredited'})</option>`).join('');
+                    inviteSelect.innerHTML = `<option value="">Select verified engineer...</option>` +
+                        invitable.map(e => `<option value="${e.user_id || e._id}">${e.name} (${e.ebk_reg_no || e.email || 'EBK Verified'})</option>`).join('');
                 }
             }
 
             const transferSelect = document.getElementById('transferLeadSelect');
             if (transferSelect) {
-                if (engineers.length === 0) {
-                    transferSelect.innerHTML = `<option value="">No available engineers</option>`;
+                if (transferCandidates.length === 0) {
+                    transferSelect.innerHTML = `<option value="">No verified engineers available</option>`;
                 } else {
                     transferSelect.innerHTML = `<option value="">Select new Lead Engineer...</option>` +
-                        engineers.map(e => `<option value="${e.user_id || e._id}">${e.name} (${e.email || 'Accredited'})</option>`).join('');
+                        transferCandidates.map(e => `<option value="${e.user_id || e._id}">${e.name} (${e.ebk_reg_no || e.email || 'EBK Verified'})</option>`).join('');
                 }
             }
         } catch (err) {

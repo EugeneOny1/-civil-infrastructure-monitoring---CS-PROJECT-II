@@ -1205,7 +1205,9 @@
                             <div class="filter-controls">
                                 <select id="filterSeveritySelect" class="filter-select">
                                     <option value="awaiting_verification" selected>Awaiting Verification (Received)</option>
+                                    <option value="my_cases">My Cases (Lead &amp; Collaborating)</option>
                                     <option value="my_lead_cases">My Lead Cases</option>
+                                    <option value="my_collaborating_cases">My Collaborating Cases</option>
                                     <option value="all_unresolved">All Unresolved Cases</option>
                                     <option value="Verified">Verified Inspections</option>
                                     <option value="Critical">Critical Severity (&ge; 15%)</option>
@@ -1398,8 +1400,9 @@
                         <span class="meta-val" id="reviewLifecycleStatus"><span class="badge-dot warning"></span> Received</span>
                     </div>
                     <div class="meta-item">
-                        <span class="meta-label">ASSIGNED REVIEWER</span>
+                        <span class="meta-label">LEAD ENGINEER</span>
                         <span class="meta-val" id="reviewAssignedEngineer" style="color:#0f172a; font-weight:600;">Unassigned</span>
+                        <span class="meta-subval" id="reviewCollaboratorsSummary" style="display:block; font-size:0.72rem; color:#64748b; margin-top:2px;"></span>
                     </div>
                     <div class="meta-item">
                         <span class="meta-label">INFRASTRUCTURE LOCATION</span>

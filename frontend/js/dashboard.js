@@ -1484,6 +1484,24 @@ const Dashboard = {
                     const leadId = String(r.metadata?.current_lead_engineer?.user_id || r.metadata?.assigned_engineer_id || r.assigned_engineer_id || '');
                     return leadId && leadId === curUserId;
                 });
+            } else if (filterVal === 'my_collaborating_cases') {
+                // Cases where logged-in engineer is invited or active collaborator (not rejected), unresolved
+                reports = reports.filter(r => {
+                    const st = (r.status || '').toLowerCase();
+                    if (st === 'resolved') return false;
+                    const collabs = r.metadata?.collaborators || [];
+                    return collabs.some(c => String(c.user_id || c.engineer_id) === curUserId && (c.invitation_status || 'pending') !== 'rejected');
+                });
+            } else if (filterVal === 'my_cases') {
+                // Cases where logged-in engineer is either Lead or Collaborator, unresolved
+                reports = reports.filter(r => {
+                    const st = (r.status || '').toLowerCase();
+                    if (st === 'resolved') return false;
+                    const leadId = String(r.metadata?.current_lead_engineer?.user_id || r.metadata?.assigned_engineer_id || r.assigned_engineer_id || '');
+                    const collabs = r.metadata?.collaborators || [];
+                    const isCollab = collabs.some(c => String(c.user_id || c.engineer_id) === curUserId && (c.invitation_status || 'pending') !== 'rejected');
+                    return (leadId && leadId === curUserId) || isCollab;
+                });
             } else if (filterVal === 'all_unresolved') {
                 reports = reports.filter(r => (r.status || '').toLowerCase() !== 'resolved');
             } else if (filterVal === 'Verified') {
@@ -1592,6 +1610,13 @@ const Dashboard = {
                 const rvsiScore = r.metadata?.report_rvsi ?? r.metadata?.rvsi_score ?? assessment.rvsi_score;
                 const hasAdv = (r.metadata?.safety_advisory?.active === true || r.metadata?.next_action === 'Issue Safety Advisory');
                 const fhwa = r.metadata?.physical_engineering_assessment;
+                const leadEngId = String(r.metadata?.current_lead_engineer?.user_id || r.metadata?.assigned_engineer_id || r.assigned_engineer_id || '');
+                const myCollab = (r.metadata?.collaborators || []).find(c => String(c.user_id || c.engineer_id) === curUserId);
+                const teamRoleBadge = (curUserId && leadEngId === curUserId)
+                    ? `<span class="badge-tag" style="background: #eff6ff; color: #1d4ed8; font-size: 0.7rem; padding: 2px 6px; border-radius: 4px; font-weight: 600;">Lead</span>`
+                    : (myCollab && (myCollab.invitation_status || 'pending') !== 'rejected'
+                        ? `<span class="badge-tag" style="background: ${myCollab.invitation_status === 'accepted' ? '#ecfdf5' : '#fef3c7'}; color: ${myCollab.invitation_status === 'accepted' ? '#047857' : '#b45309'}; font-size: 0.7rem; padding: 2px 6px; border-radius: 4px; font-weight: 600;">${myCollab.invitation_status === 'accepted' ? 'Collaborating' : 'Invite Pending'}</span>`
+                        : '');
 
                 let actionBtnLabel = 'Review & Sign Off';
                 if (status === 'Received') {
@@ -1610,6 +1635,7 @@ const Dashboard = {
                             <div style="display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap;">
                                 <span class="queue-item-title">${location}</span>
                                 <span class="status-chip ${statusSlug}">${status}</span>
+                                ${teamRoleBadge}
                                 ${hasAdv ? `<span class="badge-tag advisory" style="background: #fee2e2; color: #b91c1c; font-size: 0.72rem; padding: 2px 6px; border-radius: 4px; display: inline-flex; align-items: center; gap: 3px;"><i class='bx bx-error-alt'></i> Safety Advisory</span>` : ''}
                                 ${fhwa ? `<span class="badge-tag fhwa" style="background: #e0f2fe; color: #0369a1; font-size: 0.72rem; padding: 2px 6px; border-radius: 4px; display: inline-flex; align-items: center; gap: 3px;"><i class='bx bx-ruler'></i> ${fhwa.category} (${fhwa.measured_depth_mm}mm)</span>` : ''}
                                 ${ageStr ? `<span class="queue-age-pill" style="font-size: 0.72rem; color: #64748b; background: #f1f5f9; padding: 2px 6px; border-radius: 4px; display: inline-flex; align-items: center; gap: 3px;"><i class='bx bx-time'></i> ${ageStr}</span>` : ''}
