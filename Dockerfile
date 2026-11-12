@@ -1,7 +1,7 @@
 # ==============================================================================
 # InfraVision: Civil Infrastructure Defect Monitoring System
-# Production Dockerfile for Google Cloud Run (Single-Service Architecture)
-# Serving: Static Frontend + Flask REST API + SSD-MobileNetV2 TensorFlow SavedModel
+# Production Dockerfile for Azure Container Apps & Google Cloud Run
+# Serving: Static Frontend + Flask REST API + V2.1 SSD-MobileNetV2 SavedModel
 # ==============================================================================
 
 FROM python:3.11-slim
@@ -12,6 +12,7 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     FLASK_ENV=production \
     PORT=8080 \
     MODEL_PATH=/app/backend/models/structural_defect_detector \
+    MODEL_VERSION=ssd_mobilenet_v2_lr00015_step1500_v2_1 \
     UPLOAD_FOLDER=/tmp/uploads
 
 # Install minimal OS runtime packages for OpenCV, PIL, and SSL
@@ -39,12 +40,12 @@ COPY wsgi.py /app/wsgi.py
 # Ensure ephemeral upload directory exists with proper permissions
 RUN mkdir -p /tmp/uploads && chmod 777 /tmp/uploads
 
-# Expose Cloud Run default port
+# Expose container default port
 EXPOSE 8080
 
 # Health check probe for container runtime liveness
-HEALTHCHECK --interval=30s --timeout=10s --start-period=45s --retries=3 \
-    CMD curl -f http://localhost:${PORT}/health || exit 1
+HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=3 \
+    CMD curl -f http://localhost:${PORT}/ready || exit 1
 
 # Production startup using Gunicorn:
 # - workers 1: Prevents duplicate loading of the TensorFlow SavedModel in memory

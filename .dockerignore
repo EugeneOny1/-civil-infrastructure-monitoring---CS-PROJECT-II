@@ -19,10 +19,15 @@ notebooks/
 docs/
 .vscode/
 
-# Ephemeral uploads and cache
+# Ephemeral uploads, deployment scripts, state, and cache
 uploads/
 backend/uploads/
 *.log
+*.ps1
+.azure/
+.azure-deploy-state.json
+deploy_cloud_run.*
+cloudbuild.yaml
 
 # Sensitive environment files (secrets are passed via Cloud Run env or Secret Manager)
 .env

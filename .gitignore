@@ -39,6 +39,12 @@ htmlcov/
 # IDE
 .vscode/
 
+# Deployment state and Azure credentials (never commit)
+.azure/
+.azure-deploy-state.json
+*.pfx
+*.publishsettings
+
 # Operating system
 .DS_Store
 Thumbs.db
