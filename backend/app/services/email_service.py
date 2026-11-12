@@ -83,38 +83,12 @@ class EmailService:
 
     def should_expose_fallback_otp(self, to_email: str, dispatch_result: Optional[Dict[str, Any]] = None) -> bool:
         """
-        Determines whether a controlled OTP fallback may be exposed for this challenge:
-        - Requires environment fallback flag to be enabled (`is_demo_mode()`).
-        - If real SMTP delivered the email for a normal user account in non-testing mode,
-          the code is delivered strictly via email (never returned in API JSON).
-        - Controlled project evaluation accounts (`OTP_FALLBACK_ACCOUNTS`) or failed/unconfigured
-          SMTP fallback in enabled environments retain fallback access.
+        Determines whether controlled in-app OTP autofill is available for this challenge:
+        - Strictly disabled in production unless ENABLE_PRODUCTION_OTP_FALLBACK=True.
+        - Enabled across local development / evaluation environments when ENABLE_DEMO_OTP=True
+          so reviewers and demo accounts without accessible inboxes can complete 2FA.
         """
-        if not self.is_demo_mode():
-            return False
-
-        is_testing = False
-        fallback_accounts = []
-        try:
-            from flask import current_app
-            if current_app:
-                is_testing = bool(current_app.config.get('TESTING', False))
-                fallback_accounts = current_app.config.get('OTP_FALLBACK_ACCOUNTS', [])
-        except Exception:
-            pass
-
-        if is_testing:
-            return True
-
-        norm_email = (to_email or '').strip().lower()
-        if norm_email in fallback_accounts:
-            return True
-
-        # If SMTP succeeded for a normal account, deliver strictly via email
-        if dispatch_result and dispatch_result.get('method') == 'smtp' and dispatch_result.get('delivered'):
-            return False
-
-        return True
+        return self.is_demo_mode()
 
     def is_configured(self) -> bool:
         """Checks if real SMTP transport credentials are configured in the environment."""
