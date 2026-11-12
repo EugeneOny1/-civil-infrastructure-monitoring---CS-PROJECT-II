@@ -1,0 +1,526 @@
+name: Deploy InfraVision to Azure
+
+on:
+  workflow_dispatch:
+    inputs:
+      run_tests:
+        description: "Run automated regression tests before building and deploying"
+        required: true
+        type: boolean
+        default: true
+      deploy_to_azure:
+        description: "Push image to GHCR and deploy to Azure Container Apps"
+        required: true
+        type: boolean
+        default: true
+      image_tag:
+        description: "Optional extra tag alias (primary tag is always sha-<commit>)"
+        required: false
+        type: string
+        default: ""
+
+permissions:
+  contents: read
+  packages: write
+  id-token: write
+
+concurrency:
+  group: azure-production-deploy
+  cancel-in-progress: false
+
+env:
+  PYTHON_VERSION: "3.11"
+  EXPECTED_MODEL_VERSION: "ssd_mobilenet_v2_lr00015_step1500_v2_1"
+  EXPECTED_SAVED_MODEL_SHA256: "384977d303af3e293dfbff4ae922cd0e7fd8a72b9a9713bb08b9378fc2f205a9"
+  EXPECTED_FINGERPRINT_SHA256: "e8536ffb467db6879a7d0207a272cd0c9c10c19381c4224e3d9cbb253b69f4ee"
+  EXPECTED_VARIABLES_DATA_SHA256: "48c9c32dc59d15f281e69a18125489210693e1fe1fa5c4c2e8971630322efa7e"
+  EXPECTED_VARIABLES_INDEX_SHA256: "1e4861f42b9fafc321fe8dba62bf8aa66513c6744df5cb720e51d99d109ea42"
+
+jobs:
+  regression-tests:
+    name: Verify SavedModel & Run Regression Tests
+    if: ${{ inputs.run_tests }}
+    runs-on: ubuntu-latest
+    services:
+      mongodb:
+        image: mongo:7
+        ports:
+          - 27017:27017
+        options: >-
+          --health-cmd "mongosh --eval 'db.adminCommand({ ping: 1 })' --quiet"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    steps:
+      - name: Check out repository and V2.1 SavedModel
+        uses: actions/checkout@v4
+
+      - name: Verify V2.1 SavedModel checksums
+        run: |
+          set -euo pipefail
+          MODEL_DIR="backend/models/structural_defect_detector"
+          echo "${EXPECTED_SAVED_MODEL_SHA256}  ${MODEL_DIR}/saved_model.pb" | sha256sum -c -
+          echo "${EXPECTED_FINGERPRINT_SHA256}  ${MODEL_DIR}/fingerprint.pb" | sha256sum -c -
+          echo "${EXPECTED_VARIABLES_DATA_SHA256}  ${MODEL_DIR}/variables/variables.data-00000-of-00001" | sha256sum -c -
+          echo "${EXPECTED_VARIABLES_INDEX_SHA256}  ${MODEL_DIR}/variables/variables.index" | sha256sum -c -
+
+      - name: Set up Python ${{ env.PYTHON_VERSION }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: "pip"
+          cache-dependency-path: requirements.txt
+
+      - name: Install Python dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Run full InfraVision test suite
+        env:
+          MONGO_URI: "mongodb://127.0.0.1:27017/civil_infrastructure"
+          TEST_MONGO_URI: "mongodb://127.0.0.1:27017/civil_infrastructure_test"
+          DB_NAME: "civil_infrastructure"
+          TEST_DB_NAME: "civil_infrastructure_test"
+        run: |
+          python -m unittest discover -s tests -v
+
+  build-smoke-deploy:
+    name: Build Container, Smoke Test, Push GHCR & Deploy to Azure
+    needs: [regression-tests]
+    if: ${{ !cancelled() && (needs.regression-tests.result == 'success' || needs.regression-tests.result == 'skipped') }}
+    runs-on: ubuntu-latest
+    outputs:
+      image_ref: ${{ steps.meta.outputs.sha_image }}
+      app_url: ${{ steps.deploy.outputs.app_url }}
+      revision: ${{ steps.deploy.outputs.revision }}
+    steps:
+      - name: Check out repository and V2.1 SavedModel
+        uses: actions/checkout@v4
+
+      - name: Verify V2.1 SavedModel checksums
+        run: |
+          set -euo pipefail
+          MODEL_DIR="backend/models/structural_defect_detector"
+          echo "${EXPECTED_SAVED_MODEL_SHA256}  ${MODEL_DIR}/saved_model.pb" | sha256sum -c -
+          echo "${EXPECTED_FINGERPRINT_SHA256}  ${MODEL_DIR}/fingerprint.pb" | sha256sum -c -
+          echo "${EXPECTED_VARIABLES_DATA_SHA256}  ${MODEL_DIR}/variables/variables.data-00000-of-00001" | sha256sum -c -
+          echo "${EXPECTED_VARIABLES_INDEX_SHA256}  ${MODEL_DIR}/variables/variables.index" | sha256sum -c -
+
+      - name: Compute immutable image tags
+        id: meta
+        run: |
+          OWNER_LOWER="$(echo "${{ github.repository_owner }}" | tr '[:upper:]' '[:lower:]')"
+          SHORT_SHA="${GITHUB_SHA::7}"
+          IMAGE_NAME="ghcr.io/${OWNER_LOWER}/infravision"
+          SHA_TAG="sha-${GITHUB_SHA}"
+          V21_TAG="v2.1-${SHORT_SHA}"
+          echo "owner_lower=${OWNER_LOWER}" >> "$GITHUB_OUTPUT"
+          echo "image_name=${IMAGE_NAME}" >> "$GITHUB_OUTPUT"
+          echo "sha_image=${IMAGE_NAME}:${SHA_TAG}" >> "$GITHUB_OUTPUT"
+          echo "v21_image=${IMAGE_NAME}:${V21_TAG}" >> "$GITHUB_OUTPUT"
+          EXTRA_TAG=""
+          INPUT_TAG="${{ inputs.image_tag }}"
+          if [[ -n "${INPUT_TAG}" ]]; then
+            EXTRA_TAG="${IMAGE_NAME}:${INPUT_TAG}"
+          fi
+          echo "extra_image=${EXTRA_TAG}" >> "$GITHUB_OUTPUT"
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build production Docker image (linux/amd64)
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ./Dockerfile
+          platforms: linux/amd64
+          load: true
+          push: false
+          tags: |
+            ${{ steps.meta.outputs.sha_image }}
+            ${{ steps.meta.outputs.v21_image }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Verify image contents, secrets exclusion, and production smoke test
+        run: |
+          set -euo pipefail
+          IMAGE="${{ steps.meta.outputs.sha_image }}"
+
+          # 1. Confirm V2.1 SavedModel checksum inside built container
+          CONTAINER_SHA="$(docker run --rm --entrypoint python "${IMAGE}" -c "import hashlib; print(hashlib.sha256(open('/app/backend/models/structural_defect_detector/saved_model.pb','rb').read()).hexdigest())")"
+          if [[ "${CONTAINER_SHA}" != "${EXPECTED_SAVED_MODEL_SHA256}" ]]; then
+            echo "Container SavedModel SHA-256 mismatch: ${CONTAINER_SHA}"
+            exit 1
+          fi
+
+          # 2. Confirm .env, state files, and local uploads are excluded from image
+          docker run --rm --entrypoint python "${IMAGE}" -c "
+          import os, sys
+          forbidden = ['/app/.env', '/app/backend/.env', '/app/.azure-deploy-state.json', '/app/backend/uploads', '/app/uploads']
+          found = [p for p in forbidden if os.path.exists(p)]
+          if found:
+              print('Forbidden files found in image:', found)
+              sys.exit(1)
+          print('Docker context exclusion check passed.')
+          "
+
+          # 3. Verify production app fails explicitly when MongoDB is unreachable
+          if docker run --rm \
+            -e FLASK_ENV=production \
+            -e MONGO_URI="mongodb://127.0.0.1:27999/civil_infrastructure?serverSelectionTimeoutMS=1000" \
+            -e SECRET_KEY="ci-smoke-secret" \
+            -e JWT_SECRET_KEY="ci-smoke-jwt" \
+            --entrypoint python "${IMAGE}" -c "from wsgi import app" >/dev/null 2>&1; then
+            echo "ERROR: Production startup should fail explicitly when MongoDB is unavailable."
+            exit 1
+          fi
+          echo "Verified explicit production failure when MongoDB is unavailable."
+
+          # 4. Run full production container smoke test with disposable MongoDB container
+          NET_NAME="infravision-smoke-${GITHUB_RUN_ID}"
+          MONGO_NAME="infravision-smoke-mongo-${GITHUB_RUN_ID}"
+          APP_NAME="infravision-smoke-app-${GITHUB_RUN_ID}"
+
+          cleanup() {
+            docker rm -f "${APP_NAME}" "${MONGO_NAME}" >/dev/null 2>&1 || true
+            docker network rm "${NET_NAME}" >/dev/null 2>&1 || true
+          }
+          trap cleanup EXIT
+
+          docker network create "${NET_NAME}" >/dev/null
+          docker run -d --name "${MONGO_NAME}" --network "${NET_NAME}" mongo:7 >/dev/null
+
+          for _ in $(seq 1 20); do
+            if docker exec "${MONGO_NAME}" mongosh --eval "db.adminCommand({ ping: 1 })" --quiet >/dev/null 2>&1; then
+              break
+            fi
+            sleep 1
+          done
+
+          docker run -d --name "${APP_NAME}" --network "${NET_NAME}" -p 18080:8080 \
+            -e FLASK_ENV=production \
+            -e PORT=8080 \
+            -e MONGO_URI="mongodb://${MONGO_NAME}:27017/civil_infrastructure" \
+            -e DB_NAME=civil_infrastructure \
+            -e STORAGE_BACKEND=local \
+            -e SECRET_KEY="ci-smoke-secret" \
+            -e JWT_SECRET_KEY="ci-smoke-jwt" \
+            "${IMAGE}" >/dev/null
+
+          READY=0
+          for i in $(seq 1 30); do
+            if curl -fsS "http://127.0.0.1:18080/ready" | grep -q "${EXPECTED_MODEL_VERSION}"; then
+              READY=1
+              break
+            fi
+            sleep 2
+          done
+
+          if [[ "${READY}" -ne 1 ]]; then
+            echo "Container /ready probe did not become ready in time:"
+            docker logs "${APP_NAME}" || true
+            exit 1
+          fi
+
+          curl -fsS "http://127.0.0.1:18080/health" | grep -q "healthy"
+          curl -fsS "http://127.0.0.1:18080/api/health" | grep -q "${EXPECTED_MODEL_VERSION}"
+          curl -fsS "http://127.0.0.1:18080/api/reports/public/recent?limit=3" >/dev/null
+          curl -fsS "http://127.0.0.1:18080/" | grep -q "InfraVision"
+          echo "Production container smoke tests passed."
+
+      - name: Log in to GitHub Container Registry
+        if: ${{ inputs.deploy_to_azure }}
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Push verified immutable image to GHCR
+        if: ${{ inputs.deploy_to_azure }}
+        run: |
+          set -euo pipefail
+          docker push "${{ steps.meta.outputs.sha_image }}"
+          docker push "${{ steps.meta.outputs.v21_image }}"
+          if [[ -n "${{ steps.meta.outputs.extra_image }}" ]]; then
+            docker tag "${{ steps.meta.outputs.sha_image }}" "${{ steps.meta.outputs.extra_image }}"
+            docker push "${{ steps.meta.outputs.extra_image }}"
+          fi
+
+      - name: Validate Azure OIDC configuration
+        if: ${{ inputs.deploy_to_azure }}
+        env:
+          AZURE_CLIENT_ID: ${{ vars.AZURE_CLIENT_ID }}
+          AZURE_TENANT_ID: ${{ vars.AZURE_TENANT_ID }}
+          AZURE_SUBSCRIPTION_ID: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+        run: |
+          if [[ -z "${AZURE_CLIENT_ID}" || -z "${AZURE_TENANT_ID}" || -z "${AZURE_SUBSCRIPTION_ID}" ]]; then
+            echo "::error::Missing GitHub Repository Variables AZURE_CLIENT_ID, AZURE_TENANT_ID, or AZURE_SUBSCRIPTION_ID. Run scripts/provision_azure_infra.sh in Azure Cloud Shell first and add those variables to GitHub."
+            exit 1
+          fi
+
+      - name: Azure Login (OpenID Connect)
+        if: ${{ inputs.deploy_to_azure }}
+        uses: azure/login@v2
+        with:
+          client-id: ${{ vars.AZURE_CLIENT_ID }}
+          tenant-id: ${{ vars.AZURE_TENANT_ID }}
+          subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Deploy immutable image to Azure Container Apps
+        id: deploy
+        if: ${{ inputs.deploy_to_azure }}
+        env:
+          RESOURCE_GROUP: ${{ vars.AZURE_RESOURCE_GROUP || 'infravision-rg' }}
+          CONTAINER_APPS_ENV: ${{ vars.AZURE_CONTAINER_APPS_ENV || 'infravision-env' }}
+          CONTAINER_APP_NAME: ${{ vars.AZURE_CONTAINER_APP_NAME || 'infravision' }}
+          LOCATION: ${{ vars.AZURE_LOCATION || 'southafricanorth' }}
+          STORAGE_ACCOUNT_URL: ${{ vars.AZURE_STORAGE_ACCOUNT_URL }}
+          BLOB_CONTAINER_NAME: ${{ vars.AZURE_STORAGE_CONTAINER || 'defect-images' }}
+          IDENTITY_NAME: ${{ vars.AZURE_MANAGED_IDENTITY_NAME || 'infravision-identity' }}
+          MONGO_URI: ${{ secrets.MONGO_URI }}
+          SECRET_KEY: ${{ secrets.SECRET_KEY }}
+          JWT_SECRET_KEY: ${{ secrets.JWT_SECRET_KEY }}
+          GHCR_PULL_TOKEN: ${{ secrets.GHCR_PULL_TOKEN }}
+          SMTP_HOST: ${{ vars.SMTP_HOST }}
+          SMTP_PORT: ${{ vars.SMTP_PORT || '587' }}
+          SMTP_USER: ${{ vars.SMTP_USER }}
+          SMTP_SENDER: ${{ vars.SMTP_SENDER }}
+          SMTP_PASSWORD: ${{ secrets.SMTP_PASSWORD }}
+          GOOGLE_CLIENT_ID: ${{ vars.GOOGLE_CLIENT_ID }}
+          IMAGE_OWNER: ${{ steps.meta.outputs.owner_lower }}
+          SHA_IMAGE: ${{ steps.meta.outputs.sha_image }}
+        run: |
+          set -euo pipefail
+          az extension add --name containerapp --upgrade --only-show-errors >/dev/null
+
+          if az containerapp show --name "${CONTAINER_APP_NAME}" --resource-group "${RESOURCE_GROUP}" >/dev/null 2>&1; then
+            echo "Updating existing Azure Container App '${CONTAINER_APP_NAME}' to ${SHA_IMAGE}..."
+            if [[ -n "${GHCR_PULL_TOKEN}" ]]; then
+              az containerapp secret set \
+                --name "${CONTAINER_APP_NAME}" \
+                --resource-group "${RESOURCE_GROUP}" \
+                --secrets "ghcr-token=${GHCR_PULL_TOKEN}" \
+                --only-show-errors >/dev/null
+              az containerapp registry set \
+                --name "${CONTAINER_APP_NAME}" \
+                --resource-group "${RESOURCE_GROUP}" \
+                --server "ghcr.io" \
+                --username "${IMAGE_OWNER}" \
+                --password "ghcr-token" \
+                --only-show-errors >/dev/null
+            fi
+            if [[ -n "${MONGO_URI}" ]]; then
+              az containerapp secret set \
+                --name "${CONTAINER_APP_NAME}" \
+                --resource-group "${RESOURCE_GROUP}" \
+                --secrets "mongo-uri=${MONGO_URI}" \
+                --only-show-errors >/dev/null
+            fi
+            az containerapp update \
+              --name "${CONTAINER_APP_NAME}" \
+              --resource-group "${RESOURCE_GROUP}" \
+              --image "${SHA_IMAGE}" \
+              --set-env-vars "MODEL_VERSION=${EXPECTED_MODEL_VERSION}" "REQUIRE_PERSISTENT_DB=True" \
+              --only-show-errors >/dev/null
+          else
+            echo "Creating Azure Container App '${CONTAINER_APP_NAME}' on Consumption environment '${CONTAINER_APPS_ENV}'..."
+            if [[ -z "${MONGO_URI}" ]]; then
+              echo "::error::secrets.MONGO_URI (MongoDB Atlas URI) is required on initial Container App creation."
+              exit 1
+            fi
+            if [[ -z "${STORAGE_ACCOUNT_URL}" ]]; then
+              echo "::error::vars.AZURE_STORAGE_ACCOUNT_URL is required on initial Container App creation."
+              exit 1
+            fi
+            if [[ -z "${GHCR_PULL_TOKEN}" ]]; then
+              echo "::error::secrets.GHCR_PULL_TOKEN (read:packages PAT) is required so Azure Container Apps can pull private ghcr.io images without exposing the image publicly."
+              exit 1
+            fi
+
+            ENV_ID="$(az containerapp env show --name "${CONTAINER_APPS_ENV}" --resource-group "${RESOURCE_GROUP}" --query "id" -o tsv)"
+            IDENTITY_ID="$(az identity show --name "${IDENTITY_NAME}" --resource-group "${RESOURCE_GROUP}" --query "id" -o tsv)"
+            IDENTITY_CLIENT_ID="$(az identity show --name "${IDENTITY_NAME}" --resource-group "${RESOURCE_GROUP}" --query "clientId" -o tsv)"
+            APP_SECRET_KEY="${SECRET_KEY:-$(python3 -c 'import secrets; print(secrets.token_urlsafe(32))')}"
+            APP_JWT_SECRET="${JWT_SECRET_KEY:-${APP_SECRET_KEY}}"
+
+            YAML_FILE="$(mktemp /tmp/infravision-aca-XXXXXX.yaml)"
+            trap 'rm -f "${YAML_FILE}"' EXIT
+
+            python3 - "${YAML_FILE}" "${ENV_ID}" "${IDENTITY_ID}" "${IDENTITY_CLIENT_ID}" "${APP_SECRET_KEY}" "${APP_JWT_SECRET}" <<'PYEOF'
+          import json, os, sys
+          yaml_path, env_id, identity_id, client_id, skey, jkey = sys.argv[1:7]
+          smtp_pass = os.environ.get("SMTP_PASSWORD", "")
+          lines = [
+              f"location: {os.environ['LOCATION']}",
+              "identity:",
+              "  type: UserAssigned",
+              "  userAssignedIdentities:",
+              f"    {json.dumps(identity_id)}: {{}}",
+              "properties:",
+              f"  managedEnvironmentId: {env_id}",
+              "  configuration:",
+              "    activeRevisionsMode: Single",
+              "    ingress:",
+              "      external: true",
+              "      targetPort: 8080",
+              "      allowInsecure: false",
+              "      transport: auto",
+              "    registries:",
+              "      - server: ghcr.io",
+              f"        username: {os.environ['IMAGE_OWNER']}",
+              "        passwordSecretRef: ghcr-token",
+              "    secrets:",
+              "      - name: secret-key",
+              f"        value: {json.dumps(skey)}",
+              "      - name: jwt-secret-key",
+              f"        value: {json.dumps(jkey)}",
+              "      - name: mongo-uri",
+              f"        value: {json.dumps(os.environ['MONGO_URI'])}",
+              "      - name: ghcr-token",
+              f"        value: {json.dumps(os.environ['GHCR_PULL_TOKEN'])}",
+          ]
+          if smtp_pass:
+              lines += ["      - name: smtp-password", f"        value: {json.dumps(smtp_pass)}"]
+          lines += [
+              "  template:",
+              "    containers:",
+              f"      - name: {os.environ['CONTAINER_APP_NAME']}",
+              f"        image: {os.environ['SHA_IMAGE']}",
+              "        resources:",
+              "          cpu: 2.0",
+              "          memory: 4Gi",
+              "        env:",
+              "          - name: FLASK_ENV",
+              "            value: production",
+              "          - name: DEBUG",
+              '            value: "False"',
+              "          - name: PORT",
+              '            value: "8080"',
+              "          - name: DB_NAME",
+              "            value: civil_infrastructure",
+              "          - name: REQUIRE_PERSISTENT_DB",
+              '            value: "True"',
+              "          - name: MONGO_URI",
+              "            secretRef: mongo-uri",
+              "          - name: SECRET_KEY",
+              "            secretRef: secret-key",
+              "          - name: JWT_SECRET_KEY",
+              "            secretRef: jwt-secret-key",
+              "          - name: STORAGE_BACKEND",
+              "            value: azure",
+              "          - name: AZURE_STORAGE_ACCOUNT_URL",
+              f"            value: {os.environ['STORAGE_ACCOUNT_URL']}",
+              "          - name: AZURE_STORAGE_CONTAINER",
+              f"            value: {os.environ['BLOB_CONTAINER_NAME']}",
+              "          - name: AZURE_CLIENT_ID",
+              f"            value: {client_id}",
+              "          - name: UPLOAD_FOLDER",
+              "            value: /tmp/uploads",
+              "          - name: MODEL_PATH",
+              "            value: /app/backend/models/structural_defect_detector",
+              "          - name: MODEL_VERSION",
+              f"            value: {os.environ['EXPECTED_MODEL_VERSION']}",
+              "          - name: ENABLE_PRODUCTION_OTP_FALLBACK",
+              '            value: "False"',
+              "          - name: SMTP_HOST",
+              f"            value: {json.dumps(os.environ.get('SMTP_HOST', ''))}",
+              "          - name: SMTP_PORT",
+              f"            value: {json.dumps(os.environ.get('SMTP_PORT', '587'))}",
+              "          - name: SMTP_USER",
+              f"            value: {json.dumps(os.environ.get('SMTP_USER', ''))}",
+              "          - name: SMTP_SENDER",
+              f"            value: {json.dumps(os.environ.get('SMTP_SENDER', ''))}",
+              "          - name: GOOGLE_CLIENT_ID",
+              f"            value: {json.dumps(os.environ.get('GOOGLE_CLIENT_ID', ''))}",
+          ]
+          if smtp_pass:
+              lines += ["          - name: SMTP_PASSWORD", "            secretRef: smtp-password"]
+          lines += [
+              "        probes:",
+              "          - type: Startup",
+              "            httpGet:",
+              "              path: /ready",
+              "              port: 8080",
+              "            initialDelaySeconds: 10",
+              "            periodSeconds: 10",
+              "            timeoutSeconds: 5",
+              "            failureThreshold: 18",
+              "          - type: Readiness",
+              "            httpGet:",
+              "              path: /ready",
+              "              port: 8080",
+              "            periodSeconds: 15",
+              "            timeoutSeconds: 5",
+              "            failureThreshold: 3",
+              "          - type: Liveness",
+              "            httpGet:",
+              "              path: /health",
+              "              port: 8080",
+              "            periodSeconds: 30",
+              "            timeoutSeconds: 5",
+              "            failureThreshold: 3",
+              "    scale:",
+              "      minReplicas: 0",
+              "      maxReplicas: 2",
+              "      rules:",
+              "        - name: http-scaling-rule",
+              "          http:",
+              "            metadata:",
+              '              concurrentRequests: "4"',
+          ]
+          with open(yaml_path, "w", encoding="utf-8") as fh:
+              fh.write("\n".join(lines) + "\n")
+          PYEOF
+
+            az containerapp create \
+              --name "${CONTAINER_APP_NAME}" \
+              --resource-group "${RESOURCE_GROUP}" \
+              --yaml "${YAML_FILE}" \
+              --only-show-errors >/dev/null
+          fi
+
+          FQDN="$(az containerapp show --name "${CONTAINER_APP_NAME}" --resource-group "${RESOURCE_GROUP}" --query "properties.configuration.ingress.fqdn" -o tsv)"
+          REVISION="$(az containerapp show --name "${CONTAINER_APP_NAME}" --resource-group "${RESOURCE_GROUP}" --query "properties.latestRevisionName" -o tsv)"
+          APP_URL="https://${FQDN}"
+
+          echo "app_url=${APP_URL}" >> "$GITHUB_OUTPUT"
+          echo "revision=${REVISION}" >> "$GITHUB_OUTPUT"
+
+      - name: Verify live Azure Container App endpoints
+        if: ${{ inputs.deploy_to_azure }}
+        run: |
+          set -euo pipefail
+          APP_URL="${{ steps.deploy.outputs.app_url }}"
+          REVISION="${{ steps.deploy.outputs.revision }}"
+
+          READY=0
+          for i in $(seq 1 30); do
+            if curl -fsS --max-time 20 "${APP_URL}/ready" | grep -q "${EXPECTED_MODEL_VERSION}"; then
+              READY=1
+              break
+            fi
+            sleep 5
+          done
+
+          if [[ "${READY}" -ne 1 ]]; then
+            echo "::error::Deployed Azure Container App failed readiness check at ${APP_URL}/ready"
+            exit 1
+          fi
+
+          curl -fsS --max-time 20 "${APP_URL}/health" | grep -q "healthy"
+          curl -fsS --max-time 20 "${APP_URL}/api/health" | grep -q "${EXPECTED_MODEL_VERSION}"
+          curl -fsS --max-time 20 "${APP_URL}/api/reports/public/recent?limit=3" >/dev/null
+          curl -fsS --max-time 20 "${APP_URL}/" | grep -q "InfraVision"
+
+          {
+            echo "### InfraVision Azure Deployment Summary"
+            echo "- **Production URL:** ${APP_URL}"
+            echo "- **Active Revision:** \`${REVISION}\`"
+            echo "- **Immutable Image:** \`${{ steps.meta.outputs.sha_image }}\`"
+            echo "- **SavedModel Version:** \`${EXPECTED_MODEL_VERSION}\`"
+            echo "- **Verified Endpoints:** \`/health\`, \`/ready\`, \`/api/health\`, \`/api/reports/public/recent\`, \`/\`"
+          } >> "$GITHUB_STEP_SUMMARY"
+

@@ -239,6 +239,135 @@ class TestAzureDeploymentReadiness(unittest.TestCase):
             proc = subprocess.run(cmd, capture_output=True, text=True, timeout=15)
             self.assertEqual(proc.returncode, 0, f"PowerShell syntax errors in deploy_azure.ps1: {proc.stderr}")
 
+    def test_09_production_db_unavailable_fails_explicitly(self):
+        """ProductionConfig requires persistent MongoDB and fails loudly rather than using mock store."""
+        from backend.app.services.database import DatabaseService, db_service
+
+        self.assertTrue(ProductionConfig.REQUIRE_PERSISTENT_DB)
+        with self.assertRaises(RuntimeError) as ctx:
+            DatabaseService(
+                uri='mongodb://127.0.0.1:27999/civil_infrastructure?serverSelectionTimeoutMS=500',
+                db_name='civil_infrastructure',
+                require_persistent_db=True,
+            )
+        self.assertIn('Persistent MongoDB connection is required in production', str(ctx.exception))
+
+        # Restore /ready probe check when REQUIRE_PERSISTENT_DB is enabled but db_service is disconnected
+        with patch.dict(self.app.config, {'REQUIRE_PERSISTENT_DB': True}), \
+             patch.object(db_service, 'is_connected', return_value=False):
+            resp = self.client.get('/ready')
+            self.assertEqual(resp.status_code, 503)
+            self.assertFalse(resp.get_json().get('database_ready'))
+
+    def test_10_github_actions_workflow_and_cloudshell_contracts(self):
+        """Validates GitHub Actions workflow and Azure Cloud Shell provisioner definitions."""
+        wf_path = REPO_ROOT / '.github' / 'workflows' / 'deploy-azure.yml'
+        cs_path = REPO_ROOT / 'scripts' / 'provision_azure_infra.sh'
+        self.assertTrue(wf_path.is_file())
+        self.assertTrue(cs_path.is_file())
+
+        wf = wf_path.read_text(encoding='utf-8')
+        for expected in (
+            'workflow_dispatch',
+            'id-token: write',
+            'azure/login@v2',
+            '384977d303af3e293dfbff4ae922cd0e7fd8a72b9a9713bb08b9378fc2f205a9',
+            'ssd_mobilenet_v2_lr00015_step1500_v2_1',
+            'ghcr.io',
+            'sha-${GITHUB_SHA}',
+            'REQUIRE_PERSISTENT_DB',
+            '/ready',
+            '/health',
+            '/api/health',
+        ):
+            self.assertIn(expected, wf)
+
+        cs = cs_path.read_text(encoding='utf-8')
+        for expected in (
+            '--allow-blob-public-access false',
+            '--public-access off',
+            'Storage Blob Data Contributor',
+            'api://AzureADTokenExchange',
+            'AZURE_CLIENT_ID',
+        ):
+            self.assertIn(expected, cs)
+
+    def test_11_historical_upload_classifier_and_non_destructive_migration(self):
+        """Historical image audit excludes unreferenced test files and skips existing blobs."""
+        import tempfile
+        from backend.scripts.migrate_uploads_to_azure_blob import (
+            classify_local_uploads,
+            upload_files_to_azure,
+        )
+
+        with tempfile.TemporaryDirectory() as tmp:
+            primary = Path(tmp) / 'backend_uploads'
+            secondary = Path(tmp) / 'uploads'
+            primary.mkdir()
+            secondary.mkdir()
+
+            (primary / 'infra_real_1.jpg').write_bytes(b'real1')
+            (primary / 'infra_orphan_test.jpg').write_bytes(b'orphan')
+            (primary / 'seed_pothole.jpg').write_bytes(b'seed')
+            (secondary / 'infra_real_1.jpg').write_bytes(b'dup')
+            (secondary / 'infra_orphan_sec.jpg').write_bytes(b'orphan2')
+
+            summary = classify_local_uploads(
+                {'infra_real_1.jpg'},
+                primary_dir=primary,
+                secondary_dir=secondary,
+            )
+            self.assertEqual(list(summary['migration_candidates'].keys()), ['infra_real_1.jpg'])
+            self.assertEqual(list(summary['seed_files'].keys()), ['seed_pothole.jpg'])
+            self.assertEqual(summary['unreferenced_primary'], ['infra_orphan_test.jpg'])
+            self.assertEqual(summary['missing_from_disk'], [])
+
+            # Verify mocked upload skips already existing blobs cleanly and preserves local files
+            existing_blob = MagicMock()
+            existing_blob.exists.return_value = True
+            new_blob = MagicMock()
+            new_blob.exists.return_value = False
+            container_client = MagicMock()
+            container_client.get_blob_client.side_effect = lambda name: (
+                existing_blob if name == 'reports/infra_real_1.jpg' else new_blob
+            )
+
+            stats = upload_files_to_azure(
+                {
+                    'infra_real_1.jpg': primary / 'infra_real_1.jpg',
+                    'seed_pothole.jpg': primary / 'seed_pothole.jpg',
+                },
+                container_client,
+                overwrite=False,
+            )
+            self.assertEqual(stats, {'uploaded': 1, 'skipped_existing': 1, 'failed': 0})
+            existing_blob.upload_blob.assert_not_called()
+            new_blob.upload_blob.assert_called_once()
+            self.assertTrue((primary / 'infra_real_1.jpg').is_file())
+
+    def test_12_atlas_migration_redaction_and_non_destructive_upsert(self):
+        """Atlas migration utility redacts credentials and preserves existing Atlas documents."""
+        from pymongo import UpdateOne
+        from backend.scripts.migrate_mongo_to_atlas import migrate_collection, redact_uri
+
+        redacted = redact_uri('mongodb+srv://admin:SuperSecretPass@cluster0.xyz.mongodb.net/civil_infrastructure')
+        self.assertNotIn('SuperSecretPass', redacted)
+        self.assertIn('cluster0.xyz.mongodb.net/civil_infrastructure', redacted)
+
+        src_col = MagicMock()
+        src_col.find.return_value = [{'_id': 'doc_1', 'status': 'Verified'}, {'_id': 'doc_2', 'status': 'Received'}]
+        tgt_col = MagicMock()
+        tgt_res = MagicMock()
+        tgt_res.upserted_count = 1
+        tgt_res.modified_count = 0
+        tgt_col.bulk_write.return_value = tgt_res
+
+        stats = migrate_collection(src_col, tgt_col, overwrite=False)
+        self.assertEqual(stats['inserted'], 1)
+        self.assertEqual(stats['skipped_existing'], 1)
+        ops = tgt_col.bulk_write.call_args[0][0]
+        self.assertTrue(all(isinstance(op, UpdateOne) for op in ops))
+
 
 if __name__ == '__main__':
     unittest.main()
