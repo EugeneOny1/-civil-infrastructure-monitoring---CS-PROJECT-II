@@ -23,7 +23,7 @@ class AIAssessment:
 
     def __init__(self, image_id, defect_class, confidence_score, bounding_box, relative_severity,
                  detections=None, assessment_id=None, model_name='SSD-MobileNetV2',
-                 model_version='ssd_mobilenet_v2_lr00625_step8000_v2', class_id=None,
+                 model_version='ssd_mobilenet_v2_lr00015_step1500_v2_1', class_id=None,
                  relative_area=0.0, area_percentage=0.0, bounding_box_pixels=None,
                  validation_status='valid', validation_message='', created_at=None,
                  rvsi_score=None, rvsi=None, rvsi_method=None, rvsi_version=None,
@@ -95,7 +95,7 @@ class AIAssessment:
             relative_severity=data.get('relative_severity') or data.get('severity', cls.SEVERITY_LOW),
             detections=data.get('detections', []),
             model_name=data.get('model_name', 'SSD-MobileNetV2'),
-            model_version=data.get('model_version', 'ssd_mobilenet_v2_lr00625_step8000_v2'),
+            model_version=data.get('model_version', 'ssd_mobilenet_v2_lr00015_step1500_v2_1'),
             class_id=data.get('class_id'),
             relative_area=data.get('relative_area', 0.0),
             area_percentage=data.get('area_percentage', 0.0),

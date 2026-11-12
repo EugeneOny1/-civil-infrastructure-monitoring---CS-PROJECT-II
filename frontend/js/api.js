@@ -465,35 +465,6 @@ const Api = {
         return res.json();
     },
 
-    // Administrator Governance (FR-10)
-    async getUsers(role = '', status = '') {
-        const params = {};
-        if (role) params.role = role;
-        if (status) params.verification_status = status;
-        const query = new URLSearchParams(params).toString();
-        const res = await this.safeFetch(`${API_BASE}/admin/users${query ? '?' + query : ''}`, {
-            headers: this.getHeaders()
-        });
-        if (!res.ok) {
-            const err = await res.json();
-            throw new Error(err.error || 'Admin access denied.');
-        }
-        return res.json();
-    },
-
-    async verifyUser(userId, status) {
-        const res = await this.safeFetch(`${API_BASE}/admin/users/${userId}/verify`, {
-            method: 'PUT',
-            headers: this.getHeaders(false),
-            body: JSON.stringify({ status })
-        });
-        const data = await res.json();
-        if (!res.ok) {
-            throw new Error(data.error || 'Failed to update user verification.');
-        }
-        return data;
-    },
-
     async getAdminStats() {
         const res = await this.safeFetch(`${API_BASE}/admin/stats`, {
             headers: this.getHeaders()
@@ -599,7 +570,16 @@ const Api = {
     },
 
     // Admin User Verification & Governance (FR-10, Sections I, J, K, L)
-    async getUsers(params = {}) {
+    async getUsers(roleOrParams = '', status = '') {
+        const params = (roleOrParams && typeof roleOrParams === 'object')
+            ? { ...roleOrParams }
+            : {};
+        if (typeof roleOrParams === 'string' && roleOrParams.trim()) {
+            params.role = roleOrParams.trim();
+        }
+        if (typeof status === 'string' && status.trim()) {
+            params.verification_status = status.trim();
+        }
         const query = new URLSearchParams(params).toString();
         const res = await this.safeFetch(`${API_BASE}/admin/users${query ? '?' + query : ''}`, {
             headers: this.getHeaders()

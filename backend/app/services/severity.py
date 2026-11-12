@@ -445,6 +445,21 @@ class SeverityService:
 
         rvsi_res = cls.calculate_rvsi(detections)
         union_area = rvsi_res['area_extent']
+        if union_area == 0.0 and detections:
+            has_bbox = any(
+                isinstance(d, dict) and any(k in d for k in ('bbox', 'bounding_box', 'box', 'detection_boxes'))
+                for d in detections
+            )
+            if not has_bbox:
+                fallback_area = min(
+                    1.0,
+                    sum(
+                        float(d.get('relative_area', d.get('area_ratio', 0.0)) or 0.0)
+                        for d in detections if isinstance(d, dict)
+                    )
+                )
+                if fallback_area > 0.0:
+                    union_area = round(fallback_area, 6)
         severity = cls.calculate_severity_for_area(union_area, low_thresh=low_t, critical_thresh=crit_t)
 
         return {

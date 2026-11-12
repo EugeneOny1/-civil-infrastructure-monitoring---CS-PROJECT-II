@@ -1579,8 +1579,8 @@ const Dashboard = {
 
             queueContainer.innerHTML = reports.map(r => {
                 const assessment = r.assessment || {};
-                const severity = assessment.relative_severity || r.metadata?.relative_severity || 'Low';
-                const defectClass = assessment.defect_class || 'Surface Defect';
+                const severity = r.metadata?.relative_severity || assessment.relative_severity || 'Low';
+                const defectClass = r.metadata?.defect_class || assessment.defect_class || 'Surface Defect';
                 const location = r.asset?.location || r.metadata?.location_name || 'Infrastructure Corridor';
                 const assetType = r.asset?.asset_type || r.metadata?.asset_type || 'Civil Asset';
                 const frameId = r.display_id || (r.report_id ? `#REP-${r.report_id.slice(-6).toUpperCase()}` : `#REP-${String(r._id).slice(-6).toUpperCase()}`);

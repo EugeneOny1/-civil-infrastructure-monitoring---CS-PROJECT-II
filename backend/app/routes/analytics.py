@@ -131,7 +131,7 @@ def get_summary(current_user):
     surface_count = sum(1 for a in all_assessments if 'surface' in str(a.get('defect_class')).lower())
 
     from flask import current_app
-    model_version = current_app.config.get('MODEL_VERSION', 'ssd_mobilenet_v2_lr00625_step8000_v2')
+    model_version = current_app.config.get('MODEL_VERSION', 'ssd_mobilenet_v2_lr00015_step1500_v2_1')
 
     resp = make_response(jsonify({
         'active_defect_queue': active_count,

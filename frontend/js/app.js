@@ -1424,10 +1424,20 @@ const App = {
                 const isVerified = u.verification_status === 'verified';
                 const isEngineer = u.role === 'engineer';
                 const uid = u.user_id || u._id;
-                const orgInfo = u.organization ? `${u.organization} ${u.professional_reg_no ? '(' + u.professional_reg_no + ')' : ''}` : (u.professional_reg_no || '—');
+                const ebkCat = u.engineering_category || '';
+                const regNo = u.professional_reg_no || u.ebk_reg_no || '';
+                const orgLine = u.organization || '';
+                const detailParts = [orgLine, ebkCat, regNo ? `EBK: ${regNo}` : ''].filter(Boolean);
+                const orgInfo = detailParts.length > 0 ? detailParts.join(' • ') : '—';
                 const has2fa = u.two_factor_enabled ? '<span style="color:#16a34a; font-weight:600;"><i class=\'bx bx-shield-quarter\'></i> Enabled</span>' : '<span style="color:#86868b;">Disabled</span>';
                 const verifClass = isVerified ? 'verified' : (u.verification_status === 'rejected' ? 'rejected' : 'pending');
                 const reasonTooltip = u.rejection_reason ? `title="Rejection Reason: ${u.rejection_reason}"` : '';
+                const auditActor = isVerified
+                    ? (u.verified_by_name ? `Verified by ${u.verified_by_name}` : '')
+                    : (u.verification_status === 'rejected' && u.rejected_by_name ? `Rejected by ${u.rejected_by_name}` : '');
+                const auditTime = isVerified ? u.verified_at : (u.verification_status === 'rejected' ? u.rejected_at : '');
+                const auditDateStr = auditTime ? new Date(auditTime).toLocaleDateString('en-KE', { dateStyle: 'medium' }) : '';
+                const auditLine = auditActor ? `<div style="font-size:0.7rem; color:#64748b; margin-top:2px;">${auditActor}${auditDateStr ? ` • ${auditDateStr}` : ''}</div>` : '';
 
                 return `
                     <tr>
@@ -1440,9 +1450,15 @@ const App = {
                             <span class="verification-badge ${verifClass}" ${reasonTooltip}>
                                 ${u.verification_status.toUpperCase()}
                             </span>
+                            ${auditLine}
                         </td>
                         <td>
                             <div style="display:flex; align-items:center; gap:4px; flex-wrap:wrap;">
+                                ${isEngineer ? `
+                                    <a href="https://engineers.ebk.go.ke/" target="_blank" rel="noopener noreferrer" class="btn-micro" style="padding: 2px 6px; font-size: 0.74rem; text-decoration: none;" title="Open official EBK Register to verify ${regNo || u.name}">
+                                        <i class='bx bx-link-external'></i> EBK Register
+                                    </a>
+                                ` : ''}
                                 ${isEngineer && !isVerified ? `
                                     <button type="button" class="btn-action-verify" onclick="App.handleVerifyUser('${uid}', 'verified')">
                                         <i class='bx bx-user-check'></i> Verify
@@ -1451,7 +1467,7 @@ const App = {
                                     <button type="button" class="btn-action-reject" onclick="App.openRejectionModal('${uid}', '${(u.name || 'Engineer').replace(/'/g, "\\'")}', '${u.email}')">
                                         <i class='bx bx-user-x'></i> Reject
                                     </button>` : ''}
-                                ` : `<span style="color: #86868b; font-size: 0.8rem;">Active</span>`}
+                                ` : (!isEngineer ? `<span style="color: #86868b; font-size: 0.8rem;">Active</span>` : '')}
                                 <button type="button" class="btn-micro" style="padding: 2px 6px; font-size: 0.75rem;" title="Send targeted notice to ${u.name}" onclick="App.openTargetedNotice('${uid}', '${(u.name || 'User').replace(/'/g, "\\'")}', '${u.email}')">
                                     <i class='bx bx-envelope'></i> Notice
                                 </button>

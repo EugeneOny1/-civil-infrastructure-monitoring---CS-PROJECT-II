@@ -29,7 +29,7 @@ def register():
     password = data.get('password', '').strip()
     role = data.get('role', 'citizen').strip().lower()
     organization = data.get('organization', '').strip()
-    engineering_category = data.get('engineering_category', 'Professional Engineer').strip()
+    engineering_category = (data.get('engineering_category') or data.get('professional_category') or 'Professional Engineer').strip()
     professional_reg_no = data.get('professional_reg_no', '').strip()
     phone = data.get('phone', '').strip()
     two_factor_enabled = bool(data.get('two_factor_enabled', False))
@@ -75,6 +75,7 @@ def register():
         role=role,
         organization=organization,
         professional_reg_no=normalized_ebk or professional_reg_no,
+        engineering_category=engineering_category if role == 'engineer' else None,
         phone=phone,
         two_factor_enabled=two_factor_enabled,
         verification_status=verification_status

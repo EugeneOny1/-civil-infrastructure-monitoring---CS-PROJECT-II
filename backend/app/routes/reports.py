@@ -770,14 +770,16 @@ def list_reports(current_user):
         if assessment:
             review = db_service.find_one('professional_reviews', {'assessment_id': assessment['_id']})
 
-        # Apply client filters on assessment fields
-        if severity_filter and assessment and assessment.get('relative_severity') != severity_filter:
+        meta = rep.get('metadata', {})
+        # Apply client filters on assessment fields (prefer combined report-level metadata for multi-image reports)
+        effective_sev = meta.get('relative_severity') or (assessment.get('relative_severity') if assessment else None)
+        effective_class = meta.get('defect_class') or (assessment.get('defect_class') if assessment else None)
+        if severity_filter and (not effective_sev or effective_sev.lower() != severity_filter.lower()):
             continue
-        if defect_class_filter and assessment and assessment.get('defect_class') != defect_class_filter:
+        if defect_class_filter and (not effective_class or effective_class.lower() != defect_class_filter.lower()):
             continue
 
-        display_id = rep.get('display_id') or rep.get('metadata', {}).get('display_id') or f"REP-{datetime.now(timezone.utc).year}-{str(report_id)[-4:].upper()}"
-        meta = rep.get('metadata', {})
+        display_id = rep.get('display_id') or meta.get('display_id') or f"REP-{datetime.now(timezone.utc).year}-{str(report_id)[-4:].upper()}"
         enriched_reports.append({
             'report_id': report_id,
             'display_id': display_id,
@@ -1001,8 +1003,8 @@ def get_map_reports():
         if image:
             assessment = db_service.find_one('ai_assessments', {'image_id': image['_id']})
 
-        rel_sev = (assessment.get('relative_severity') if assessment else None) or meta.get('relative_severity', 'Low')
-        defect_c = (assessment.get('defect_class') if assessment else None) or meta.get('defect_class', 'Crack')
+        rel_sev = meta.get('relative_severity') or (assessment.get('relative_severity') if assessment else None) or 'Low'
+        defect_c = meta.get('defect_class') or (assessment.get('defect_class') if assessment else None) or 'Crack'
         asset_t = meta.get('asset_type', 'Road / Pavement')
 
         # Apply optional filters
@@ -1018,7 +1020,16 @@ def get_map_reports():
         rep_user_id = str(rep.get('user_id') or meta.get('submitted_by_id') or '')
         is_owner = bool(user_sub and rep_user_id and user_sub == rep_user_id)
 
-        rep_rvsi = meta.get('report_rvsi') or meta.get('rvsi_score') or (assessment.get('rvsi_score') if assessment else None) or 0.0
+        combined_mv = meta.get('combined_multi_view_assessment') or {}
+        rep_rvsi = meta.get('report_rvsi')
+        if rep_rvsi is None:
+            rep_rvsi = combined_mv.get('report_rvsi')
+        if rep_rvsi is None:
+            rep_rvsi = meta.get('rvsi_score')
+        if rep_rvsi is None and assessment:
+            rep_rvsi = assessment.get('rvsi_score')
+        if rep_rvsi is None:
+            rep_rvsi = 0.0
 
         point = {
             'report_id': rep['_id'],

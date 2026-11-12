@@ -211,7 +211,7 @@ class DatabaseService:
                 }
             ],
             'model_name': 'SSD-MobileNetV2',
-            'model_version': 'ssd_mobilenet_v2_lr00625_step8000_v2',
+            'model_version': 'ssd_mobilenet_v2_lr00015_step1500_v2_1',
             'class_id': 2,
             'class_name': 'Pothole',
             'validation_status': 'valid',

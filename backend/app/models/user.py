@@ -7,7 +7,7 @@ class User:
     Roles: 'citizen', 'engineer', 'admin'
     Verification status: 'pending', 'verified', 'rejected'
     """
-    def __init__(self, name, email, password=None, password_hash=None, role='citizen', verification_status=None, user_id=None, created_at=None, organization=None, professional_reg_no=None, phone=None, two_factor_enabled=False, rejection_reason=None, rejection_notes=None, rejected_at=None, verified_at=None):
+    def __init__(self, name, email, password=None, password_hash=None, role='citizen', verification_status=None, user_id=None, created_at=None, organization=None, professional_reg_no=None, phone=None, two_factor_enabled=False, rejection_reason=None, rejection_notes=None, rejected_at=None, verified_at=None, engineering_category=None, verified_by=None, verified_by_name=None, rejected_by=None, rejected_by_name=None):
         self.user_id = str(user_id) if user_id else None
         self.name = name
         self.email = email.lower().strip() if email else ''
@@ -21,6 +21,7 @@ class User:
         self.role = role  # 'citizen', 'engineer', 'admin'
         self.organization = organization or ''
         self.professional_reg_no = professional_reg_no or ''
+        self.engineering_category = engineering_category
         self.phone = phone or ''
         self.two_factor_enabled = bool(two_factor_enabled)
         
@@ -35,6 +36,10 @@ class User:
         self.rejection_notes = rejection_notes
         self.rejected_at = rejected_at
         self.verified_at = verified_at
+        self.verified_by = verified_by
+        self.verified_by_name = verified_by_name
+        self.rejected_by = rejected_by
+        self.rejected_by_name = rejected_by_name
 
     def check_password(self, password):
         return check_password_hash(self.password_hash, password)
@@ -47,6 +52,7 @@ class User:
             'role': self.role,
             'organization': self.organization,
             'professional_reg_no': self.professional_reg_no,
+            'engineering_category': self.engineering_category,
             'phone': self.phone,
             'two_factor_enabled': self.two_factor_enabled,
             'verification_status': self.verification_status,
@@ -56,8 +62,14 @@ class User:
             data['rejection_reason'] = self.rejection_reason
             data['rejection_notes'] = self.rejection_notes
             data['rejected_at'] = self.rejected_at
+            data['rejected_by'] = self.rejected_by
+            data['rejected_by_name'] = self.rejected_by_name
         elif self.verification_status == 'verified':
             data['verified_at'] = self.verified_at
+            if self.verified_by:
+                data['verified_by'] = self.verified_by
+            if self.verified_by_name:
+                data['verified_by_name'] = self.verified_by_name
         if include_sensitive:
             data['password_hash'] = self.password_hash
         return data
@@ -73,7 +85,8 @@ class User:
             password_hash=data.get('password_hash', ''),
             role=data.get('role', 'citizen'),
             organization=data.get('organization', ''),
-            professional_reg_no=data.get('professional_reg_no', ''),
+            professional_reg_no=data.get('professional_reg_no', '') or data.get('ebk_reg_no', ''),
+            engineering_category=data.get('engineering_category') or data.get('professional_category'),
             phone=data.get('phone', ''),
             two_factor_enabled=data.get('two_factor_enabled', False),
             verification_status=data.get('verification_status', 'verified'),
@@ -81,7 +94,11 @@ class User:
             rejection_reason=data.get('rejection_reason'),
             rejection_notes=data.get('rejection_notes'),
             rejected_at=data.get('rejected_at'),
-            verified_at=data.get('verified_at')
+            verified_at=data.get('verified_at'),
+            verified_by=data.get('verified_by'),
+            verified_by_name=data.get('verified_by_name'),
+            rejected_by=data.get('rejected_by'),
+            rejected_by_name=data.get('rejected_by_name')
         )
 
 

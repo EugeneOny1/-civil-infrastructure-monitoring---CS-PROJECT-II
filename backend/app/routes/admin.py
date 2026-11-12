@@ -50,6 +50,8 @@ def verify_professional_user(current_user, user_id):
     target_id = str(target['_id'])
     now_iso = datetime.now(timezone.utc).isoformat()
     admin_id = str(current_user.get('_id') or current_user.get('user_id') or 'admin')
+    admin_name = current_user.get('name', 'System Administrator')
+    ebk_number = target.get('professional_reg_no') or target.get('ebk_reg_no') or ''
 
     if new_status == 'rejected':
         rejection_reason = data.get('rejection_reason', '').strip() or 'Unable to verify submitted EBK registration'
@@ -60,7 +62,8 @@ def verify_professional_user(current_user, user_id):
             'rejection_reason': rejection_reason,
             'rejection_notes': rejection_notes,
             'rejected_at': now_iso,
-            'rejected_by': admin_id
+            'rejected_by': admin_id,
+            'rejected_by_name': admin_name
         }
         db_service.update_one('users', {'_id': target['_id']}, update_fields)
 
@@ -79,14 +82,18 @@ def verify_professional_user(current_user, user_id):
             event_type='engineer_verification_decision',
             title="Engineer verification requires attention",
             message=msg_body,
-            metadata={'status': 'rejected', 'reason': rejection_reason}
+            metadata={'status': 'rejected', 'reason': rejection_reason, 'ebk_reg_no': ebk_number, 'rejected_by': admin_id}
         )
 
         return jsonify({
             'message': "Engineer application rejected and applicant notified.",
             'user_id': target_id,
             'verification_status': 'rejected',
-            'rejection_reason': rejection_reason
+            'rejection_reason': rejection_reason,
+            'rejected_by': admin_id,
+            'rejected_by_name': admin_name,
+            'rejected_at': now_iso,
+            'ebk_reg_no': ebk_number
         }), 200
 
     elif new_status == 'verified':
@@ -94,6 +101,7 @@ def verify_professional_user(current_user, user_id):
             'verification_status': 'verified',
             'verified_at': now_iso,
             'verified_by': admin_id,
+            'verified_by_name': admin_name,
             'rejection_reason': None,
             'rejection_notes': None
         }
@@ -105,13 +113,17 @@ def verify_professional_user(current_user, user_id):
             event_type='engineer_verification_decision',
             title="Engineer Account Verified",
             message="Your professional engineer credentials have been verified by the administrator. You now have full access to defect assessment, validation, and safety advisory tools.",
-            metadata={'status': 'verified'}
+            metadata={'status': 'verified', 'ebk_reg_no': ebk_number, 'verified_by': admin_id}
         )
 
         return jsonify({
             'message': f"Professional account verified successfully.",
             'user_id': target_id,
-            'verification_status': 'verified'
+            'verification_status': 'verified',
+            'verified_by': admin_id,
+            'verified_by_name': admin_name,
+            'verified_at': now_iso,
+            'ebk_reg_no': ebk_number
         }), 200
 
     else:

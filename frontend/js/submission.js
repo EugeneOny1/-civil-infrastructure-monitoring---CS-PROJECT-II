@@ -894,31 +894,47 @@ const Submission = {
         const combinedData = data.combined_multi_view_assessment || data.report?.metadata?.combined_multi_view_assessment;
         const combinedCard = document.getElementById('combinedMultiViewCard');
         if (combinedCard) {
-            if (combinedData && this.resultPhotos.length > 1) {
+            const hasClasses = (combinedData?.class_assessments && combinedData.class_assessments.length > 0)
+                || (combinedData?.combined_classes && combinedData.combined_classes.length > 0)
+                || (combinedData?.detected_classes && combinedData.detected_classes.length > 0);
+            if (combinedData && (this.resultPhotos.length > 1 || hasClasses)) {
                 combinedCard.classList.remove('hidden');
                 const countEl = document.getElementById('combinedMultiViewCount');
                 if (countEl) countEl.textContent = combinedData.total_views || this.resultPhotos.length;
 
                 const pill = document.getElementById('combinedMultiViewSeverityPill');
-                const sev = (combinedData.highest_visual_severity || 'Low').toUpperCase();
+                const sev = (combinedData.combined_visual_severity || combinedData.highest_visual_severity || 'Low').toUpperCase();
                 if (pill) {
-                    pill.textContent = sev;
+                    const rvsiSuffix = combinedData.report_rvsi !== undefined && combinedData.report_rvsi !== null
+                        ? ` (${Number(combinedData.report_rvsi).toFixed(1)})`
+                        : '';
+                    pill.textContent = `${sev}${rvsiSuffix}`;
                     pill.className = `severity-pill ${sev.toLowerCase()}`;
                 }
 
                 const listEl = document.getElementById('combinedMultiViewClassesList');
-                if (listEl && combinedData.detected_classes) {
-                    listEl.innerHTML = combinedData.detected_classes.map(cls => {
-                        const support = combinedData.per_class_view_support?.[cls] || `${this.resultPhotos.length}/${this.resultPhotos.length}`;
-                        const conf = combinedData.strongest_model_confidence?.[cls]
-                            ? `${Math.round(combinedData.strongest_model_confidence[cls] * 100)}%`
-                            : '—';
+                if (listEl) {
+                    const rows = Array.isArray(combinedData.class_assessments) && combinedData.class_assessments.length > 0
+                        ? combinedData.class_assessments
+                        : (combinedData.combined_classes || combinedData.detected_classes || []).map(cls => ({
+                            defect_class: cls,
+                            view_support: combinedData.per_class_view_support?.[cls] || `${this.resultPhotos.length}/${this.resultPhotos.length}`,
+                            strongest_confidence_pct: combinedData.strongest_model_confidence?.[cls]
+                                ? Math.round(combinedData.strongest_model_confidence[cls] * 100)
+                                : null
+                        }));
+                    listEl.innerHTML = rows.map(item => {
+                        const clsName = item.defect_class || item.class || 'Defect';
+                        const support = item.view_support || `${combinedData.total_views || this.resultPhotos.length}/${combinedData.total_views || this.resultPhotos.length}`;
+                        const confPct = item.strongest_confidence_pct !== undefined && item.strongest_confidence_pct !== null
+                            ? `${Number(item.strongest_confidence_pct).toFixed(0)}%`
+                            : (item.strongest_confidence ? `${Math.round(item.strongest_confidence * 100)}%` : '—');
                         return `
                             <div style="display: flex; align-items: center; justify-content: space-between; background: #1e293b; padding: 0.4rem 0.6rem; border-radius: 4px; font-size: 0.8rem;">
-                                <span style="font-weight: 600; color: #f8fafc;">${cls}</span>
+                                <span style="font-weight: 600; color: #f8fafc;">${clsName}</span>
                                 <div style="display: flex; gap: 0.75rem; align-items: center; font-size: 0.74rem;">
                                     <span style="color: #94a3b8;">View Support: <strong style="color: #38bdf8;">${support}</strong></span>
-                                    <span style="color: #94a3b8;">Peak Conf: <strong style="color: #10b981;">${conf}</strong></span>
+                                    <span style="color: #94a3b8;">Peak Conf: <strong style="color: #10b981;">${confPct}</strong></span>
                                 </div>
                             </div>
                         `;

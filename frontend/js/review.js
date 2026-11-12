@@ -811,27 +811,40 @@ const Review = {
             const combinedBlock = document.getElementById('reviewCombinedMultiViewBlock');
             const combinedData = data.combined_multi_view_assessment || data.report.metadata?.combined_multi_view_assessment;
             if (combinedBlock) {
-                if (combinedData && combinedData.detected_classes && combinedData.detected_classes.length > 0) {
+                const classRows = Array.isArray(combinedData?.class_assessments) && combinedData.class_assessments.length > 0
+                    ? combinedData.class_assessments
+                    : (combinedData?.combined_classes || combinedData?.detected_classes || []).map(cls => ({
+                        defect_class: cls,
+                        view_support: combinedData?.per_class_view_support?.[cls] || '1/1',
+                        strongest_confidence_pct: combinedData?.strongest_model_confidence?.[cls]
+                            ? Math.round(combinedData.strongest_model_confidence[cls] * 100)
+                            : null
+                    }));
+                if (combinedData && ((combinedData.total_views || 1) > 1 || classRows.length > 0)) {
                     combinedBlock.classList.remove('hidden');
                     const sevPill = document.getElementById('reviewCombinedSeverityPill');
-                    const sev = (combinedData.highest_visual_severity || 'Low').toUpperCase();
+                    const sev = (combinedData.combined_visual_severity || combinedData.highest_visual_severity || data.report?.metadata?.relative_severity || 'Low').toUpperCase();
                     if (sevPill) {
-                        sevPill.textContent = sev;
+                        const rvsiSuffix = combinedData.report_rvsi !== undefined && combinedData.report_rvsi !== null
+                            ? ` • RVSI ${Number(combinedData.report_rvsi).toFixed(1)}`
+                            : '';
+                        sevPill.textContent = `${sev}${rvsiSuffix}`;
                         sevPill.className = `severity-pill ${sev.toLowerCase()}`;
                     }
                     const rowsEl = document.getElementById('reviewCombinedClassRows');
                     if (rowsEl) {
-                        rowsEl.innerHTML = combinedData.detected_classes.map(cls => {
-                            const support = combinedData.per_class_view_support?.[cls] || '1/1';
-                            const conf = combinedData.strongest_model_confidence?.[cls]
-                                ? `${Math.round(combinedData.strongest_model_confidence[cls] * 100)}%`
-                                : '—';
+                        rowsEl.innerHTML = classRows.map(item => {
+                            const clsName = item.defect_class || item.class || 'Defect';
+                            const support = item.view_support || `${combinedData.total_views || 1}/${combinedData.total_views || 1}`;
+                            const confPct = item.strongest_confidence_pct !== undefined && item.strongest_confidence_pct !== null
+                                ? `${Number(item.strongest_confidence_pct).toFixed(0)}%`
+                                : (item.strongest_confidence ? `${Math.round(item.strongest_confidence * 100)}%` : '—');
                             return `
                                 <div style="display:flex; justify-content:space-between; align-items:center; background:#1e293b; padding:0.35rem 0.6rem; border-radius:4px;">
-                                    <span style="font-weight:600; color:#f8fafc;">${cls}</span>
+                                    <span style="font-weight:600; color:#f8fafc;">${clsName}</span>
                                     <div style="display:flex; gap:0.6rem; font-size:0.75rem;">
                                         <span style="color:#94a3b8;">Support: <strong style="color:#38bdf8;">${support}</strong></span>
-                                        <span style="color:#94a3b8;">Max Conf: <strong style="color:#10b981;">${conf}</strong></span>
+                                        <span style="color:#94a3b8;">Max Conf: <strong style="color:#10b981;">${confPct}</strong></span>
                                     </div>
                                 </div>
                             `;
@@ -1935,34 +1948,72 @@ const Review = {
         if (!bodyEl) return;
 
         if (fhwa) {
+            const m = pRec?.measurements || {};
+            const methodStr = m.method || pRec?.method || 'Direct Field Measurement';
+            const tsStr = (pRec?.timestamp || fhwa.assessed_at)
+                ? new Date(pRec?.timestamp || fhwa.assessed_at).toLocaleString('en-KE', { dateStyle: 'medium', timeStyle: 'short' })
+                : '';
+            const rawDepthStr = (m.max_depth_raw !== undefined && m.max_depth_raw !== null && m.unit && m.unit !== 'mm')
+                ? ` (${m.max_depth_raw} ${m.unit})`
+                : '';
+            const spanParts = [];
+            if (m.length_mm != null) spanParts.push(`L: ${m.length_mm} mm`);
+            if (m.width_mm != null) spanParts.push(`W: ${m.width_mm} mm`);
             if (badgeEl) badgeEl.textContent = `${fhwa.standard || 'FHWA LTPP'}: ${fhwa.category.toUpperCase()}`;
             const sevColor = fhwa.category === 'High' ? '#dc2626' : (fhwa.category === 'Moderate' ? '#d97706' : '#16a34a');
             bodyEl.innerHTML = `
                 <div style="display:flex; flex-direction:column; gap:0.35rem;">
-                    <div style="display:flex; align-items:center; gap:0.5rem;">
+                    <div style="display:flex; align-items:center; gap:0.5rem; flex-wrap:wrap;">
                         <span style="font-weight:700; color:${sevColor}; font-size:0.95rem;">
                             ${fhwa.category} Severity
                         </span>
                         <span style="background:#f1f5f9; color:#475569; font-size:0.72rem; padding:2px 6px; border-radius:4px;">
-                            ${fhwa.measured_depth_mm} mm measured depth
+                            ${fhwa.measured_depth_mm} mm${rawDepthStr} measured depth
                         </span>
+                        ${spanParts.length ? `<span style="background:#f8fafc; color:#475569; font-size:0.72rem; padding:2px 6px; border-radius:4px;">${spanParts.join(' • ')}</span>` : ''}
                     </div>
                     <span style="font-size:0.74rem; color:#475569;">${fhwa.rule || 'Pothole depth classification: <25mm Low, 25-50mm Moderate, >50mm High'}</span>
-                    <div style="font-size:0.7rem; color:#64748b; margin-top:2px;">
+                    <div style="font-size:0.71rem; color:#64748b;">
+                        Method: <strong>${methodStr}</strong>${tsStr ? ` • ${tsStr}` : ''}
+                    </div>
+                    <div style="font-size:0.7rem; color:#64748b; margin-top:1px;">
                         Recorded by <strong>${pRec?.engineer_name || fhwa.assessed_by || 'Verified Civil Engineer'}</strong> ${pRec?.registration_number ? `(${pRec.registration_number})` : ''}
                     </div>
                 </div>
             `;
         } else if (pRec && pRec.defect_type === 'Crack') {
             const m = pRec.measurements || {};
+            const methodStr = m.method || pRec.method || 'Direct Field Measurement';
+            const tsStr = pRec.timestamp ? new Date(pRec.timestamp).toLocaleString('en-KE', { dateStyle: 'medium', timeStyle: 'short' }) : '';
             if (badgeEl) badgeEl.textContent = 'Crack Dimensions';
             bodyEl.innerHTML = `
                 <div style="display:flex; flex-direction:column; gap:0.35rem;">
                     <span style="font-weight:600; color:#0f172a; font-size:0.85rem;">
-                        Width: ${m.crack_width_mm || m.crack_width_raw || '—'} mm • Length: ${m.crack_length_mm || m.crack_length_raw || '—'} mm
+                        Width: ${m.crack_width_mm ?? m.crack_width_raw ?? '—'} mm • Length: ${m.crack_length_mm ?? m.crack_length_raw ?? '—'} mm
+                    </span>
+                    <span style="font-size:0.71rem; color:#64748b;">
+                        Method: <strong>${methodStr}</strong>${tsStr ? ` • ${tsStr}` : ''}
                     </span>
                     <span style="font-size:0.72rem; color:#64748b;">
-                        Recorded by ${pRec.engineer_name || 'Verified Civil Engineer'}. Physical dimensions are preserved for engineering oversight without automated severity categorization.
+                        Recorded by <strong>${pRec.engineer_name || 'Verified Civil Engineer'}</strong> ${pRec.registration_number ? `(${pRec.registration_number})` : ''}. Physical dimensions preserved without automated severity categorization.
+                    </span>
+                </div>
+            `;
+        } else if (pRec) {
+            const m = pRec.measurements || {};
+            const methodStr = m.method || pRec.method || 'Direct Field Measurement';
+            const tsStr = pRec.timestamp ? new Date(pRec.timestamp).toLocaleString('en-KE', { dateStyle: 'medium', timeStyle: 'short' }) : '';
+            if (badgeEl) badgeEl.textContent = pRec.defect_type || 'Field Measurement';
+            bodyEl.innerHTML = `
+                <div style="display:flex; flex-direction:column; gap:0.35rem;">
+                    <span style="font-weight:600; color:#0f172a; font-size:0.85rem;">
+                        ${m.area_m2 != null ? `Area: ${m.area_m2} m²` : ''}${m.length != null ? ` • Span: ${m.length} ${m.unit || 'm'}` : ''}
+                    </span>
+                    <span style="font-size:0.71rem; color:#64748b;">
+                        Method: <strong>${methodStr}</strong>${tsStr ? ` • ${tsStr}` : ''}
+                    </span>
+                    <span style="font-size:0.72rem; color:#64748b;">
+                        Recorded by <strong>${pRec.engineer_name || 'Verified Civil Engineer'}</strong> ${pRec.registration_number ? `(${pRec.registration_number})` : ''}.
                     </span>
                 </div>
             `;

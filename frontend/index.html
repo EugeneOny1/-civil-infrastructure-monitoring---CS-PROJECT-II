@@ -1839,7 +1839,7 @@
                             <div style="background: #ffffff; border: 1px solid #e2e8f0; border-radius: 8px; padding: 0.9rem; margin-bottom: 1rem;">
                                 <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem; border-bottom: 1px solid #f1f5f9; padding-bottom: 0.4rem;">
                                     <span style="font-size: 0.78rem; font-weight: 700; color: #0f172a; text-transform: uppercase; letter-spacing: 0.05em; display: flex; align-items: center; gap: 5px;">
-                                        <i class='bx bx-ruler' style="color: #0070d1; font-size: 1rem;"></i> Professional Field Measurements
+                                        <i class='bx bx-ruler' style="color: #0070d1; font-size: 1rem;"></i> Physical Engineering Assessment
                                     </span>
                                     <span style="font-size: 0.7rem; color: #64748b; background: #f1f5f9; padding: 2px 6px; border-radius: 4px;">Verified Engineer Entry</span>
                                 </div>
@@ -1862,9 +1862,12 @@
                                             <select id="measMethod" class="field-input" style="font-size: 0.78rem; padding: 4px 6px;">
                                                 <option value="Straightedge & Depth Gauge" selected>Straightedge & Depth Gauge</option>
                                                 <option value="Crack Comparator Card">Crack Comparator Card</option>
+                                                <option value="Optical Caliper">Optical Caliper</option>
                                                 <option value="Optical / Laser Meter">Optical / Laser Meter</option>
                                                 <option value="Steel Tape Measure">Steel Tape Measure</option>
+                                                <option value="Field Measurement">Field Measurement</option>
                                                 <option value="Visual Field Estimation">Visual Field Estimation</option>
+                                                <option value="Other Documented Method">Other Documented Method</option>
                                             </select>
                                         </div>
                                     </div>
@@ -1891,6 +1894,7 @@
                                                 <option value="mm" selected>mm</option>
                                                 <option value="cm">cm</option>
                                                 <option value="m">m</option>
+                                                <option value="in">in</option>
                                             </select>
                                             <span style="font-size: 0.7rem; color: #64748b;">(Normalized to mm for evaluation)</span>
                                         </div>
@@ -1914,6 +1918,7 @@
                                                 <option value="mm" selected>mm</option>
                                                 <option value="cm">cm</option>
                                                 <option value="m">m</option>
+                                                <option value="in">in</option>
                                             </select>
                                         </div>
                                     </div>
@@ -2217,6 +2222,17 @@
                             <i class='bx bx-broadcast'></i> Send Notice
                         </button>
                     </div>
+                </div>
+                <div class="ebk-verification-disclaimer" id="adminEbkDisclaimerBanner"
+                    style="display: flex; align-items: center; justify-content: space-between; gap: 1rem; flex-wrap: wrap; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 0.75rem 1rem; margin: 0 1.25rem 1rem 1.25rem;">
+                    <div style="font-size: 0.8rem; color: #475569; line-height: 1.45; max-width: 720px;">
+                        <strong style="color: #0f172a;"><i class='bx bx-certification' style="color: #0070d1;"></i> Manual EBK Verification Workflow:</strong>
+                        InfraVision does not currently integrate with a live Engineers Board of Kenya (EBK) API. Administrators should manually check the applicant's EBK registration number and category on the official EBK Register before approving engineer privileges.
+                    </div>
+                    <a href="https://engineers.ebk.go.ke/" target="_blank" rel="noopener noreferrer" id="btnVerifyEbkRegisterGlobal"
+                        class="btn-secondary btn-sm" style="display: inline-flex; align-items: center; gap: 5px; white-space: nowrap; text-decoration: none;">
+                        <i class='bx bx-link-external'></i> Verify against EBK Register
+                    </a>
                 </div>
                 <div class="table-container">
                     <table class="data-table" id="adminUsersTable">

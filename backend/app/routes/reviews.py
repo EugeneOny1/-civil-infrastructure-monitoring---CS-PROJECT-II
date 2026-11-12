@@ -834,6 +834,7 @@ def process_field_measurements(data: dict, current_user: dict, default_defect: s
             fhwa_assessment = severity_service.assess_pothole_fhwa(depth_mm, 'mm')
             if fhwa_assessment:
                 fhwa_assessment['assessed_by'] = reviewer_name
+                fhwa_assessment['assessed_by_id'] = reviewer_id
                 fhwa_assessment['assessed_at'] = now_iso
 
     elif 'crack' in defect_type.lower():
@@ -876,10 +877,13 @@ def process_field_measurements(data: dict, current_user: dict, default_defect: s
     record = {
         'source': 'professional_field_measurement',
         'defect_type': defect_type,
+        'method': method,
         'measurements': measurements,
         'engineering_assessment': fhwa_assessment,
         'engineer_id': reviewer_id,
         'engineer_name': reviewer_name,
+        'assessed_by_id': reviewer_id,
+        'assessed_by': reviewer_name,
         'registration_number': ebk_reg,
         'timestamp': measured_at,
         'notes': notes
