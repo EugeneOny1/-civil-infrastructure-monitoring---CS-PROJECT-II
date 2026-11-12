@@ -19,11 +19,21 @@ class DatabaseService:
     Includes an in-memory fallback store to ensure development and testing
     can proceed uninterrupted when offline or before Atlas credentials are configured.
     """
-    def __init__(self, uri=None, db_name=None):
+    def __init__(self, uri=None, db_name=None, require_persistent_db=None):
         self.uri = uri or os.getenv('MONGO_URI', 'mongodb://localhost:27017/civil_infrastructure')
         self.db_name = db_name or os.getenv('DB_NAME', 'civil_infrastructure')
         self.max_pool_size = int(os.getenv('MONGO_MAX_POOL_SIZE', '20'))
         self.is_testing = False
+        if require_persistent_db is None:
+            env_req = os.getenv('REQUIRE_PERSISTENT_DB', '').strip().lower()
+            if env_req in ('true', '1', 't'):
+                self.require_persistent_db = True
+            elif env_req in ('false', '0', 'f'):
+                self.require_persistent_db = False
+            else:
+                self.require_persistent_db = os.getenv('FLASK_ENV', '').strip().lower() == 'production'
+        else:
+            self.require_persistent_db = bool(require_persistent_db)
         self.client = None
         self.db = None
         self.use_mock = False
@@ -47,10 +57,22 @@ class DatabaseService:
         self.db_name = app.config.get('DB_NAME', self.db_name)
         self.max_pool_size = int(app.config.get('MONGO_MAX_POOL_SIZE', self.max_pool_size))
         self.is_testing = bool(app.config.get('TESTING', False))
+        self.require_persistent_db = bool(app.config.get('REQUIRE_PERSISTENT_DB', False))
         self.connect()
 
+    def is_connected(self, verify_ping=False):
+        """Returns True when backed by a live persistent MongoDB connection."""
+        if self.use_mock or self.client is None or self.db is None:
+            return False
+        if verify_ping:
+            try:
+                self.client.admin.command('ping')
+            except Exception:
+                return False
+        return True
+
     def connect(self):
-        """Attempts connection to MongoDB, falling back to mock store if unavailable."""
+        """Attempts connection to MongoDB, failing explicitly in production or falling back in local dev/testing."""
         try:
             if self.client is not None:
                 try:
@@ -73,6 +95,17 @@ class DatabaseService:
             self._ensure_indexes()
             self._ensure_initial_seeds()
         except (ConnectionFailure, ServerSelectionTimeoutError, Exception) as e:
+            if self.require_persistent_db:
+                self.client = None
+                self.db = None
+                self.use_mock = False
+                safe_uri = self.uri.split('@')[-1] if '@' in self.uri else self.uri
+                msg = (
+                    f"Persistent MongoDB connection is required in production (target={safe_uri}), "
+                    f"but connection failed: {e}"
+                )
+                print(f"[Database] FATAL: {msg}")
+                raise RuntimeError(msg) from e
             self.use_mock = True
             print(f"[Database] MongoDB connection not available ({e}). Using in-memory mock store for development.")
             self._seed_mock_data()

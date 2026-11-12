@@ -77,23 +77,27 @@ def create_app(config_name=None):
         """
         return jsonify({'status': 'healthy'}), 200
 
-    # Genuine Readiness Probe verifying TensorFlow SavedModel initialization
+    # Genuine Readiness Probe verifying TensorFlow SavedModel and persistent DB connectivity
     @app.route('/ready', methods=['GET'])
     @app.route('/api/ready', methods=['GET'])
     def readiness_probe():
         """
         Readiness probe for Azure Container Apps: returns HTTP 200 only once
-        the V2.1 SavedModel is loaded and ready to serve predictions, else HTTP 503.
+        the V2.1 SavedModel is loaded (and persistent MongoDB is reachable when required).
         """
         from .services.inference import inference_service
-        if not inference_service.is_loaded:
+        db_required = bool(app.config.get('REQUIRE_PERSISTENT_DB', False))
+        db_ready = db_service.is_connected(verify_ping=True) if db_required else True
+        if not inference_service.is_loaded or not db_ready:
             return jsonify({
                 'status': 'initializing',
-                'model_loaded': False
+                'model_loaded': bool(inference_service.is_loaded),
+                'database_ready': bool(db_ready),
             }), 503
         return jsonify({
             'status': 'ready',
             'model_loaded': True,
+            'database_ready': bool(db_ready),
             'model': app.config.get('MODEL_VERSION', 'ssd_mobilenet_v2_lr00015_step1500_v2_1')
         }), 200
 

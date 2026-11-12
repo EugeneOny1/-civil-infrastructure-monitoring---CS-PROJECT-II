@@ -23,6 +23,7 @@ class Config:
     MONGO_URI = os.getenv('MONGO_URI', 'mongodb://localhost:27017/civil_infrastructure')
     DB_NAME = os.getenv('DB_NAME', 'civil_infrastructure')
     MONGO_MAX_POOL_SIZE = int(os.getenv('MONGO_MAX_POOL_SIZE', '20'))
+    REQUIRE_PERSISTENT_DB = os.getenv('REQUIRE_PERSISTENT_DB', 'False').lower() in ('true', '1', 't')
 
     # File uploads & Persistent Storage Backend
     _raw_upload = os.getenv('UPLOAD_FOLDER', 'uploads').strip()
@@ -99,6 +100,7 @@ class DevelopmentConfig(Config):
 
 class ProductionConfig(Config):
     DEBUG = False
+    REQUIRE_PERSISTENT_DB = os.getenv('REQUIRE_PERSISTENT_DB', 'True').lower() in ('true', '1', 't')
     # Never inherit development ENABLE_DEMO_OTP silently in production;
     # controlled evaluation fallback requires explicit ENABLE_PRODUCTION_OTP_FALLBACK=true
     ENABLE_DEMO_OTP = os.getenv('ENABLE_PRODUCTION_OTP_FALLBACK', 'False').lower() in ('true', '1', 't')
@@ -109,6 +111,7 @@ class ProductionConfig(Config):
 class TestingConfig(Config):
     TESTING = True
     DEBUG = True
+    REQUIRE_PERSISTENT_DB = False
     ENABLE_DEMO_OTP = True
     DB_NAME = os.getenv('TEST_DB_NAME', 'civil_infrastructure_test')
     MONGO_URI = os.getenv('TEST_MONGO_URI', 'mongodb://localhost:27017/civil_infrastructure_test')
