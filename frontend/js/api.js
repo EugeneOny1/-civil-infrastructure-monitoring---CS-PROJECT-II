@@ -286,6 +286,14 @@ const Api = {
         return res.json();
     },
 
+    async getPublicRecentReports(limit = 5) {
+        const res = await this.safeFetch(`${API_BASE}/reports/public/recent?limit=${encodeURIComponent(limit)}`);
+        if (!res.ok) {
+            return { reports: [], count: 0 };
+        }
+        return res.json();
+    },
+
     async getReportById(reportId) {
         const res = await this.safeFetch(`${API_BASE}/reports/${reportId}`, {
             headers: this.getHeaders()

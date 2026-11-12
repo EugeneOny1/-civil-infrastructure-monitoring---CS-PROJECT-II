@@ -1300,3 +1300,67 @@ def serve_image(filename):
     and Google Cloud Storage (GCS).
     """
     return storage_service.serve_file(filename)
+
+
+@reports_bp.route('/public/recent', methods=['GET'])
+def get_public_recent_reports():
+    """
+    Public, privacy-safe summary of recently reported infrastructure defects for the landing page.
+    Strictly omits reporter PII, user IDs, email addresses, and internal engineering/notebook notes.
+    """
+    try:
+        limit = int(request.args.get('limit', 5))
+    except (TypeError, ValueError):
+        limit = 5
+    limit = max(1, min(limit, 10))
+
+    reports = db_service.find('infrastructure_reports', {}, sort_key='date_submitted', reverse=True)
+    public_items = []
+    for rep in reports[:limit]:
+        report_id = rep.get('_id')
+        meta = rep.get('metadata') or {}
+
+        image = db_service.find_one('submitted_images', {'report_id': report_id})
+        assessment = None
+        thumb_url = None
+        if image:
+            raw_path = image.get('image_path') or image.get('unique_filename') or ''
+            clean_name = os.path.basename(raw_path.replace('\\', '/')) if raw_path else ''
+            if clean_name:
+                thumb_url = f"/api/reports/images/{clean_name}"
+            assessment = db_service.find_one('ai_assessments', {'image_id': image.get('_id')})
+        if not assessment:
+            assessment = db_service.find_one('ai_assessments', {'report_id': report_id})
+
+        rel_sev = meta.get('relative_severity') or (assessment.get('relative_severity') if assessment else None) or 'Low'
+        defect_c = meta.get('defect_class') or (assessment.get('defect_class') if assessment else None) or 'Surface Defect'
+
+        combined_mv = meta.get('combined_multi_view_assessment') or {}
+        rvsi_val = meta.get('report_rvsi')
+        if rvsi_val is None:
+            rvsi_val = combined_mv.get('report_rvsi')
+        if rvsi_val is None:
+            rvsi_val = meta.get('rvsi_score')
+        if rvsi_val is None and assessment:
+            rvsi_val = assessment.get('rvsi_score')
+
+        display_id = rep.get('display_id') or meta.get('display_id') or f"REP-{datetime.now(timezone.utc).year}-{str(report_id)[-4:].upper()}"
+        canonical_st = InfrastructureReport.canonical_status(rep.get('status', InfrastructureReport.STATUS_RECEIVED))
+
+        public_items.append({
+            'report_id': report_id,
+            'display_id': display_id,
+            'defect_class': defect_c,
+            'asset_type': meta.get('asset_type', 'Road / Pavement'),
+            'location_name': meta.get('location_name', 'Monitored Infrastructure Corridor'),
+            'relative_severity': rel_sev,
+            'rvsi_score': float(rvsi_val) if rvsi_val is not None else None,
+            'status': canonical_st,
+            'date_submitted': rep.get('date_submitted'),
+            'thumbnail_url': thumb_url
+        })
+
+    return jsonify({
+        'reports': public_items,
+        'count': len(public_items)
+    }), 200

@@ -11,6 +11,7 @@ const App = {
 
     init() {
         this.bindNavigation();
+        this.bindLandingEvents();
         this.bindAuthEvents();
         this.bindPasswordStrengthMeter();
         this.bindEbkCategorySelector();
@@ -37,6 +38,7 @@ const App = {
         
         const urlParams = new URLSearchParams(window.location.search);
         const reportParam = urlParams.get('report_id');
+        const requestedView = urlParams.get('view');
 
         if (this.currentUser) {
             if (reportParam && (this.currentUser.role === 'engineer' || this.currentUser.role === 'admin')) {
@@ -48,8 +50,10 @@ const App = {
             } else {
                 this.navigateTo('view-submit');
             }
+        } else if (requestedView && document.getElementById(requestedView)) {
+            this.navigateTo(requestedView);
         } else {
-            this.navigateTo('view-submit');
+            this.navigateTo('view-landing');
         }
     },
 
@@ -97,6 +101,7 @@ const App = {
             // Exact, explicit Role-Based Navigation:
             if (user.role === 'admin') {
                 // Admin ONLY sees Admin Dashboard and User Governance
+                document.getElementById('tabHome')?.classList.add('hidden');
                 document.getElementById('tabSubmit')?.classList.add('hidden');
                 document.getElementById('tabTracking')?.classList.add('hidden');
                 document.getElementById('tabMap')?.classList.add('hidden');
@@ -105,7 +110,8 @@ const App = {
                 document.getElementById('tabAdminDashboard')?.classList.remove('hidden');
                 document.getElementById('tabAdmin')?.classList.remove('hidden');
             } else if (user.role === 'engineer') {
-                // Engineer sees: Report Defect, My Reports, Infrastructure Map, Monitoring Dashboard, Defect Review
+                // Engineer sees: Home, Report Defect, My Reports, Infrastructure Map, Monitoring Dashboard, Defect Review
+                document.getElementById('tabHome')?.classList.remove('hidden');
                 document.getElementById('tabSubmit')?.classList.remove('hidden');
                 document.getElementById('tabTracking')?.classList.remove('hidden');
                 document.getElementById('tabMap')?.classList.remove('hidden');
@@ -119,7 +125,8 @@ const App = {
                     document.getElementById('tabReview')?.classList.add('hidden');
                 }
             } else {
-                // Citizen sees: Report Defect, My Reports, and Infrastructure Map
+                // Citizen sees: Home, Report Defect, My Reports, and Infrastructure Map
+                document.getElementById('tabHome')?.classList.remove('hidden');
                 document.getElementById('tabSubmit')?.classList.remove('hidden');
                 document.getElementById('tabTracking')?.classList.remove('hidden');
                 document.getElementById('tabMap')?.classList.remove('hidden');
@@ -129,7 +136,7 @@ const App = {
                 document.getElementById('tabAdmin')?.classList.add('hidden');
             }
         } else {
-            // Unauthenticated Guest: public Citizen views
+            // Unauthenticated Guest: Public Landing + Citizen entry views
             const menu = document.getElementById('accountDropdownMenu');
             const wrapper = document.getElementById('userProfileWrapper');
             if (menu) menu.classList.add('hidden');
@@ -141,6 +148,7 @@ const App = {
 
             if (profileBadge) profileBadge.classList.add('hidden');
             if (authButtons) authButtons.classList.remove('hidden');
+            document.getElementById('tabHome')?.classList.remove('hidden');
             document.getElementById('tabSubmit')?.classList.remove('hidden');
             document.getElementById('tabTracking')?.classList.remove('hidden');
             document.getElementById('tabMap')?.classList.remove('hidden');
@@ -164,7 +172,11 @@ const App = {
         const brandHome = document.getElementById('brandHome');
         if (brandHome) {
             brandHome.addEventListener('click', () => {
-                this.navigateTo('view-submit');
+                if (this.currentUser && this.currentUser.role === 'admin') {
+                    this.navigateTo('view-admin-dashboard');
+                } else {
+                    this.navigateTo('view-landing');
+                }
             });
         }
 
@@ -242,7 +254,7 @@ const App = {
                 this.pending2FA = null;
                 this.updateSessionUI();
                 this.showToast('Logged out successfully.');
-                this.navigateTo('view-submit');
+                this.navigateTo('view-landing');
             });
         }
 
@@ -718,7 +730,9 @@ const App = {
         });
 
         // View-specific data loads
-        if (viewId === 'view-tracking') {
+        if (viewId === 'view-landing') {
+            this.loadPublicRecentReports();
+        } else if (viewId === 'view-tracking') {
             this.loadTrackingData();
         } else if (viewId === 'view-map') {
             if (window.DefectMap) {
@@ -2111,6 +2125,111 @@ const App = {
             remaining -= 1;
             updateDisplay();
         }, 1000);
+    },
+
+    bindLandingEvents() {
+        document.getElementById('btnLandingReport')?.addEventListener('click', () => this.navigateTo('view-submit'));
+        document.getElementById('btnEditorialReportRoad')?.addEventListener('click', () => this.navigateTo('view-submit'));
+        document.getElementById('btnRoleCitizenSubmit')?.addEventListener('click', () => this.navigateTo('view-submit'));
+
+        document.getElementById('btnLandingExploreMap')?.addEventListener('click', () => this.navigateTo('view-map'));
+        document.getElementById('btnEditorialExploreMap')?.addEventListener('click', () => this.navigateTo('view-map'));
+        document.getElementById('btnLandingViewMap')?.addEventListener('click', () => this.navigateTo('view-map'));
+        document.getElementById('btnRoleAuthorityMap')?.addEventListener('click', () => this.navigateTo('view-map'));
+
+        document.getElementById('btnLandingHeroSignIn')?.addEventListener('click', () => this.showAuthView('login'));
+        document.getElementById('btnLandingHeroRegister')?.addEventListener('click', () => this.showAuthView('register'));
+        document.getElementById('btnFooterSignIn')?.addEventListener('click', () => this.showAuthView('login'));
+        document.getElementById('btnFooterRegister')?.addEventListener('click', () => this.showAuthView('register'));
+
+        document.getElementById('btnRoleEngineerRegister')?.addEventListener('click', () => {
+            this.showAuthView('register');
+            const roleSel = document.getElementById('regRole');
+            if (roleSel) {
+                roleSel.value = 'engineer';
+                roleSel.dispatchEvent(new Event('change'));
+            }
+        });
+
+        document.querySelectorAll('.footer-nav-link[data-nav]').forEach(btn => {
+            btn.addEventListener('click', () => {
+                const targetView = btn.getAttribute('data-nav');
+                if (targetView) this.navigateTo(targetView);
+            });
+        });
+
+        const track = document.getElementById('landingEditorialTrack');
+        document.getElementById('btnLandingCarouselPrev')?.addEventListener('click', () => {
+            if (track) track.scrollBy({ left: -340, behavior: 'smooth' });
+        });
+        document.getElementById('btnLandingCarouselNext')?.addEventListener('click', () => {
+            if (track) track.scrollBy({ left: 340, behavior: 'smooth' });
+        });
+    },
+
+    async loadPublicRecentReports() {
+        const grid = document.getElementById('landingRecentReportsGrid');
+        if (!grid) return;
+
+        try {
+            const data = await window.Api.getPublicRecentReports(6);
+            const items = data.reports || [];
+
+            if (items.length === 0) {
+                grid.innerHTML = `<div class="landing-recent-empty">No public infrastructure defect reports recorded yet. Use <strong>Report a Defect</strong> above to submit an initial report.</div>`;
+                return;
+            }
+
+            grid.innerHTML = items.map(rep => {
+                const sev = (rep.relative_severity || 'Low').toUpperCase();
+                const status = rep.status || 'Received';
+                const statusSlug = status.toLowerCase().replace(/\s+/g, '-');
+                const dateStr = rep.date_submitted
+                    ? new Date(rep.date_submitted).toLocaleDateString('en-KE', { dateStyle: 'medium' })
+                    : 'Recent';
+                const thumbUrl = rep.thumbnail_url ? (window.Api.resolveImageUrl(rep.thumbnail_url) || rep.thumbnail_url) : '';
+                const rvsiChip = (rep.rvsi_score !== null && rep.rvsi_score !== undefined)
+                    ? `<span class="recent-rvsi-chip">RVSI ${Number(rep.rvsi_score).toFixed(1)}</span>`
+                    : '';
+
+                return `
+                    <div class="landing-recent-card glass-card" tabindex="0" role="button" data-view-map="true">
+                        <div class="recent-card-thumb ${thumbUrl ? '' : 'no-thumb'}">
+                            ${thumbUrl
+                                ? `<img src="${thumbUrl}" alt="${rep.defect_class || 'Infrastructure defect'}" onerror="this.style.display='none'; this.parentElement.classList.add('no-thumb');">`
+                                : ''}
+                            <span class="recent-thumb-fallback"><i class='bx bx-map-pin'></i></span>
+                        </div>
+                        <div class="recent-card-body">
+                            <div class="recent-card-top">
+                                <span class="recent-defect-title">${rep.defect_class || 'Surface Defect'}</span>
+                                <span class="severity-pill ${sev.toLowerCase()}">${sev}</span>
+                            </div>
+                            <div class="recent-card-location">${rep.location_name || 'Monitored Corridor'}</div>
+                            <div class="recent-card-meta">
+                                <span class="status-chip ${statusSlug}">${status}</span>
+                                ${rvsiChip}
+                                <span class="recent-date-text">${rep.asset_type || 'Asset'} • ${dateStr}</span>
+                            </div>
+                        </div>
+                    </div>
+                `;
+            }).join('');
+
+            grid.querySelectorAll('.landing-recent-card').forEach(card => {
+                const openMap = () => this.navigateTo('view-map');
+                card.addEventListener('click', openMap);
+                card.addEventListener('keydown', (e) => {
+                    if (e.key === 'Enter' || e.key === ' ') {
+                        e.preventDefault();
+                        openMap();
+                    }
+                });
+            });
+        } catch (err) {
+            console.warn('[Landing] Failed loading recent public reports:', err);
+            grid.innerHTML = `<div class="landing-recent-empty">Recent monitoring activity is currently unavailable.</div>`;
+        }
     },
 
     showToast(message, isError = false) {
