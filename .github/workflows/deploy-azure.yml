@@ -277,7 +277,7 @@ jobs:
           CONTAINER_APPS_ENV: ${{ vars.AZURE_CONTAINER_APPS_ENV || 'infravision-env' }}
           CONTAINER_APP_NAME: ${{ vars.AZURE_CONTAINER_APP_NAME || 'infravision' }}
           LOCATION: ${{ vars.AZURE_LOCATION || 'uaenorth' }}
-          STORAGE_ACCOUNT_URL: ${{ vars.AZURE_STORAGE_ACCOUNT_URL }}
+          STORAGE_ACCOUNT_URL: ${{ vars.AZURE_STORAGE_ACCOUNT_URL || 'https://infravisionst95f582bb.blob.core.windows.net' }}
           BLOB_CONTAINER_NAME: ${{ vars.AZURE_STORAGE_CONTAINER || 'defect-images' }}
           RUNTIME_IDENTITY_NAME: ${{ vars.AZURE_RUNTIME_IDENTITY_NAME || vars.AZURE_MANAGED_IDENTITY_NAME || 'infravision-identity' }}
           RUNTIME_CLIENT_ID_VAR: ${{ vars.AZURE_RUNTIME_CLIENT_ID || vars.AZURE_IDENTITY_CLIENT_ID || '' }}
@@ -285,12 +285,12 @@ jobs:
           SECRET_KEY: ${{ secrets.SECRET_KEY }}
           JWT_SECRET_KEY: ${{ secrets.JWT_SECRET_KEY }}
           GHCR_PULL_TOKEN: ${{ secrets.GHCR_PULL_TOKEN }}
-          SMTP_HOST: ${{ vars.SMTP_HOST }}
+          SMTP_HOST: ${{ vars.SMTP_HOST || '' }}
           SMTP_PORT: ${{ vars.SMTP_PORT || '587' }}
-          SMTP_USER: ${{ vars.SMTP_USER }}
-          SMTP_SENDER: ${{ vars.SMTP_SENDER }}
-          SMTP_PASSWORD: ${{ secrets.SMTP_PASSWORD }}
-          GOOGLE_CLIENT_ID: ${{ vars.GOOGLE_CLIENT_ID }}
+          SMTP_USER: ${{ vars.SMTP_USER || '' }}
+          SMTP_SENDER: ${{ vars.SMTP_SENDER || '' }}
+          SMTP_PASSWORD: ${{ secrets.SMTP_PASSWORD || '' }}
+          GOOGLE_CLIENT_ID: ${{ vars.GOOGLE_CLIENT_ID || '' }}
           IMAGE_OWNER: ${{ steps.meta.outputs.owner_lower }}
           SHA_IMAGE: ${{ steps.meta.outputs.sha_image }}
         run: |
