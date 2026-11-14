@@ -192,22 +192,55 @@ jobs:
           MONGO_NAME="infravision-smoke-mongo-${GITHUB_RUN_ID}"
           APP_NAME="infravision-smoke-app-${GITHUB_RUN_ID}"
 
-          cleanup() {
+          dump_diagnostics_and_cleanup() {
+            local exit_code=$?
+            if [[ "${exit_code}" -ne 0 ]]; then
+              echo "============================================================"
+              echo "SMOKE TEST FAILURE DIAGNOSTICS (Exit code: ${exit_code})"
+              echo "============================================================"
+              echo "--- App Container Inspection ---"
+              docker inspect "${APP_NAME}" --format 'Status: {{.State.Status}}, ExitCode: {{.State.ExitCode}}, Error: {{.State.Error}}, StartedAt: {{.State.StartedAt}}, FinishedAt: {{.State.FinishedAt}}' 2>/dev/null || echo "App container inspect unavailable"
+              echo "--- App Container Port Mappings ---"
+              docker port "${APP_NAME}" 2>/dev/null || echo "No port mapping found"
+              echo "--- App Container Logs (last 200 lines) ---"
+              docker logs --tail 200 "${APP_NAME}" 2>/dev/null || echo "No app logs available"
+              echo "--- MongoDB Container Inspection ---"
+              docker inspect "${MONGO_NAME}" --format 'Status: {{.State.Status}}, ExitCode: {{.State.ExitCode}}' 2>/dev/null || echo "MongoDB inspect unavailable"
+              echo "--- MongoDB Container Logs (last 50 lines) ---"
+              docker logs --tail 50 "${MONGO_NAME}" 2>/dev/null || echo "No mongo logs available"
+              echo "--- Docker Network Inspection ---"
+              docker network inspect "${NET_NAME}" 2>/dev/null || echo "No network inspect available"
+              echo "============================================================"
+            fi
             docker rm -f "${APP_NAME}" "${MONGO_NAME}" >/dev/null 2>&1 || true
             docker network rm "${NET_NAME}" >/dev/null 2>&1 || true
+            rm -f /tmp/infravision-smoke-*.html /tmp/infravision-smoke-homepage.html >/dev/null 2>&1 || true
           }
-          trap cleanup EXIT
+          trap dump_diagnostics_and_cleanup EXIT
 
+          echo "Creating isolated Docker bridge network: ${NET_NAME}"
           docker network create "${NET_NAME}" >/dev/null
+
+          echo "Starting smoke test MongoDB container: ${MONGO_NAME}"
           docker run -d --name "${MONGO_NAME}" --network "${NET_NAME}" mongo:7 >/dev/null
 
-          for _ in $(seq 1 20); do
+          MONGO_READY=0
+          echo "Waiting for smoke test MongoDB to accept connections..."
+          for i in $(seq 1 30); do
             if docker exec "${MONGO_NAME}" mongosh --eval "db.adminCommand({ ping: 1 })" --quiet >/dev/null 2>&1; then
+              MONGO_READY=1
+              echo "Smoke test MongoDB is ready on attempt ${i}."
               break
             fi
             sleep 1
           done
 
+          if [[ "${MONGO_READY}" -ne 1 ]]; then
+            echo "ERROR: Smoke test MongoDB failed to accept connections within 30s."
+            exit 1
+          fi
+
+          echo "Starting production application container: ${APP_NAME} on port 18080:8080"
           docker run -d --name "${APP_NAME}" --network "${NET_NAME}" -p 18080:8080 \
             -e FLASK_ENV=production \
             -e PORT=8080 \
@@ -219,25 +252,47 @@ jobs:
             "${IMAGE}" >/dev/null
 
           READY=0
-          for i in $(seq 1 30); do
-            if curl -fsS "http://127.0.0.1:18080/ready" | grep -q "${EXPECTED_MODEL_VERSION}"; then
-              READY=1
-              break
+          echo "Polling container readiness probe at http://127.0.0.1:18080/ready (up to 120s)..."
+          for i in $(seq 1 40); do
+            POLL_BODY=""
+            if POLL_BODY="$(curl -sS --max-time 10 --connect-timeout 5 "http://127.0.0.1:18080/ready" 2>/dev/null)"; then
+              if grep -qF "${EXPECTED_MODEL_VERSION}" <<< "${POLL_BODY}" && grep -qF '"status": "ready"' <<< "${POLL_BODY}"; then
+                READY=1
+                echo "Production container is ready on attempt ${i}."
+                break
+              fi
             fi
-            sleep 2
+            sleep 3
           done
 
           if [[ "${READY}" -ne 1 ]]; then
-            echo "Container /ready probe did not become ready in time:"
-            docker logs "${APP_NAME}" || true
+            echo "ERROR: Container /ready probe did not become ready within 120 seconds."
             exit 1
           fi
 
-          curl -fsS "http://127.0.0.1:18080/health" | grep -q "healthy"
-          curl -fsS "http://127.0.0.1:18080/api/health" | grep -q "${EXPECTED_MODEL_VERSION}"
-          curl -fsS "http://127.0.0.1:18080/api/reports/public/recent?limit=3" >/dev/null
-          curl -fsS "http://127.0.0.1:18080/" | grep -q "InfraVision"
-          echo "Production container smoke tests passed."
+          # 1. Verify /health (liveness probe)
+          HEALTH_RESP="$(curl -fsS --max-time 15 "http://127.0.0.1:18080/health")"
+          grep -qF "healthy" <<< "${HEALTH_RESP}"
+          echo "Verified /health endpoint."
+
+          # 2. Verify /api/health (telemetry & model verification)
+          API_HEALTH_RESP="$(curl -fsS --max-time 15 "http://127.0.0.1:18080/api/health")"
+          grep -qF "${EXPECTED_MODEL_VERSION}" <<< "${API_HEALTH_RESP}"
+          grep -qF '"model_loaded": true' <<< "${API_HEALTH_RESP}"
+          echo "Verified /api/health endpoint (model ${EXPECTED_MODEL_VERSION})."
+
+          # 3. Verify public reports endpoint
+          curl -fsS --max-time 15 "http://127.0.0.1:18080/api/reports/public/recent?limit=3" -o /dev/null
+          echo "Verified /api/reports/public/recent endpoint."
+
+          # 4. Verify frontend Single Page App (saving to file avoids broken pipe EPIPE / curl exit 23 on large HTML)
+          SMOKE_HTML="/tmp/infravision-smoke-homepage.html"
+          curl -fsS --max-time 30 "http://127.0.0.1:18080/" -o "${SMOKE_HTML}"
+          grep -qF "InfraVision" "${SMOKE_HTML}"
+          rm -f "${SMOKE_HTML}"
+          echo "Verified frontend Single Page App index.html."
+
+          echo "All production container smoke tests passed successfully."
 
       - name: Log in to GitHub Container Registry
         if: ${{ inputs.deploy_to_azure }}
@@ -513,10 +568,15 @@ jobs:
           REVISION="${{ steps.deploy.outputs.revision }}"
 
           READY=0
-          for i in $(seq 1 30); do
-            if curl -fsS --max-time 20 "${APP_URL}/ready" | grep -q "${EXPECTED_MODEL_VERSION}"; then
-              READY=1
-              break
+          echo "Waiting for live Azure Container App to become ready at ${APP_URL}/ready (up to 180s)..."
+          for i in $(seq 1 36); do
+            AZURE_READY_BODY=""
+            if AZURE_READY_BODY="$(curl -sS --max-time 15 --connect-timeout 5 "${APP_URL}/ready" 2>/dev/null)"; then
+              if grep -qF "${EXPECTED_MODEL_VERSION}" <<< "${AZURE_READY_BODY}" && grep -qF '"status": "ready"' <<< "${AZURE_READY_BODY}"; then
+                READY=1
+                echo "Azure Container App became ready on attempt ${i}."
+                break
+              fi
             fi
             sleep 5
           done
@@ -526,10 +586,26 @@ jobs:
             exit 1
           fi
 
-          curl -fsS --max-time 20 "${APP_URL}/health" | grep -q "healthy"
-          curl -fsS --max-time 20 "${APP_URL}/api/health" | grep -q "${EXPECTED_MODEL_VERSION}"
-          curl -fsS --max-time 20 "${APP_URL}/api/reports/public/recent?limit=3" >/dev/null
-          curl -fsS --max-time 20 "${APP_URL}/" | grep -q "InfraVision"
+          # 1. Verify health endpoint
+          HEALTH_RESP="$(curl -fsS --max-time 20 "${APP_URL}/health")"
+          grep -qF "healthy" <<< "${HEALTH_RESP}"
+          echo "Verified live Azure /health endpoint."
+
+          # 2. Verify API health endpoint (model telemetry)
+          API_HEALTH_RESP="$(curl -fsS --max-time 20 "${APP_URL}/api/health")"
+          grep -qF "${EXPECTED_MODEL_VERSION}" <<< "${API_HEALTH_RESP}"
+          echo "Verified live Azure /api/health endpoint (model ${EXPECTED_MODEL_VERSION})."
+
+          # 3. Verify public reports endpoint
+          curl -fsS --max-time 20 "${APP_URL}/api/reports/public/recent?limit=3" -o /dev/null
+          echo "Verified live Azure /api/reports/public/recent endpoint."
+
+          # 4. Verify frontend homepage (saving to file avoids broken pipe EPIPE / curl exit 23 on large HTML)
+          AZURE_HTML="/tmp/azure-homepage.html"
+          curl -fsS --max-time 30 "${APP_URL}/" -o "${AZURE_HTML}"
+          grep -qF "InfraVision" "${AZURE_HTML}"
+          rm -f "${AZURE_HTML}"
+          echo "Verified live Azure frontend homepage."
 
           {
             echo "### InfraVision Azure Deployment Summary"
