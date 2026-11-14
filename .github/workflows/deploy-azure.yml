@@ -76,6 +76,15 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements.txt
 
+      - name: Prepare test environment, fixtures, and seed MongoDB
+        env:
+          MONGO_URI: "mongodb://127.0.0.1:27017/civil_infrastructure"
+          TEST_MONGO_URI: "mongodb://127.0.0.1:27017/civil_infrastructure_test"
+          DB_NAME: "civil_infrastructure"
+          TEST_DB_NAME: "civil_infrastructure_test"
+        run: |
+          python backend/scripts/prepare_ci_environment.py
+
       - name: Run full InfraVision test suite
         env:
           MONGO_URI: "mongodb://127.0.0.1:27017/civil_infrastructure"

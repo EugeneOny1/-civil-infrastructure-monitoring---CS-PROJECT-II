@@ -28,6 +28,16 @@ data/
 datasets/
 images/
 
+# Explicitly permit authoritative Kenya reference data and test fixtures
+!backend/app/data/
+!backend/app/data/**
+!tests/fixtures/
+!tests/fixtures/**
+
+# Explicitly permit production V2.1 detector SavedModel
+!backend/models/structural_defect_detector/
+!backend/models/structural_defect_detector/**
+
 # Logs
 *.log
 

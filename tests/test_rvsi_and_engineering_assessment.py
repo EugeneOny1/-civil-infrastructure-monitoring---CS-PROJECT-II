@@ -27,6 +27,20 @@ from backend.app.utils.auth_helpers import create_access_token
 class TestRVSIAndEngineeringAssessment(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
+        fixtures_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), 'fixtures', 'images'))
+        for target_dir in [
+            os.path.abspath(os.path.join(os.path.dirname(__file__), '..', 'backend', 'uploads')),
+            os.path.abspath(os.path.join(os.path.dirname(__file__), '..', 'uploads')),
+        ]:
+            os.makedirs(target_dir, exist_ok=True)
+            if os.path.exists(fixtures_dir):
+                import shutil
+                for fn in os.listdir(fixtures_dir):
+                    src = os.path.join(fixtures_dir, fn)
+                    dst = os.path.join(target_dir, fn)
+                    if os.path.isfile(src) and not os.path.exists(dst):
+                        shutil.copy2(src, dst)
+
         os.environ['DATABASE_TYPE'] = 'mock'
         cls.app = create_app()
         cls.client = cls.app.test_client()
@@ -332,6 +346,10 @@ class TestRVSIAndEngineeringAssessment(unittest.TestCase):
         seed_path = os.path.abspath(os.path.join(
             os.path.dirname(__file__), '..', 'backend', 'uploads', 'seed_pothole.jpg'
         ))
+        if not os.path.exists(seed_path):
+            seed_path = os.path.abspath(os.path.join(
+                os.path.dirname(__file__), 'fixtures', 'images', 'seed_pothole.jpg'
+            ))
         with open(seed_path, 'rb') as f:
             img_bytes = f.read()
 

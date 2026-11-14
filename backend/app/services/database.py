@@ -71,6 +71,17 @@ class DatabaseService:
                 return False
         return True
 
+    def close(self):
+        """Safely closes the underlying MongoClient connection if open."""
+        if self.client is not None:
+            try:
+                self.client.close()
+            except Exception:
+                pass
+            finally:
+                self.client = None
+                self.db = None
+
     def connect(self):
         """Attempts connection to MongoDB, failing explicitly in production or falling back in local dev/testing."""
         try:

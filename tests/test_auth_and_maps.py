@@ -20,6 +20,20 @@ from app.utils.auth_helpers import validate_password_strength, validate_ebk_regi
 class TestAuthAndMaps(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
+        fixtures_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), 'fixtures', 'images'))
+        for target_dir in [
+            os.path.abspath(os.path.join(os.path.dirname(__file__), '..', 'backend', 'uploads')),
+            os.path.abspath(os.path.join(os.path.dirname(__file__), '..', 'uploads')),
+        ]:
+            os.makedirs(target_dir, exist_ok=True)
+            if os.path.exists(fixtures_dir):
+                import shutil
+                for fn in os.listdir(fixtures_dir):
+                    src = os.path.join(fixtures_dir, fn)
+                    dst = os.path.join(target_dir, fn)
+                    if os.path.isfile(src) and not os.path.exists(dst):
+                        shutil.copy2(src, dst)
+
         cls.app = create_app('testing')
         cls.client = cls.app.test_client()
         cls.created_user_emails = []
@@ -377,6 +391,10 @@ class TestAuthAndMaps(unittest.TestCase):
         seed_path = os.path.abspath(os.path.join(
             os.path.dirname(__file__), '..', 'backend', 'uploads', 'seed_pothole.jpg'
         ))
+        if not os.path.exists(seed_path):
+            seed_path = os.path.abspath(os.path.join(
+                os.path.dirname(__file__), 'fixtures', 'images', 'seed_pothole.jpg'
+            ))
         with open(seed_path, 'rb') as f:
             img_bytes = f.read()
 
@@ -502,6 +520,10 @@ class TestAuthAndMaps(unittest.TestCase):
         seed_path = os.path.abspath(os.path.join(
             os.path.dirname(__file__), '..', 'backend', 'uploads', 'seed_pothole.jpg'
         ))
+        if not os.path.exists(seed_path):
+            seed_path = os.path.abspath(os.path.join(
+                os.path.dirname(__file__), 'fixtures', 'images', 'seed_pothole.jpg'
+            ))
         with open(seed_path, 'rb') as f:
             img_bytes = f.read()
 
@@ -636,6 +658,10 @@ class TestAuthAndMaps(unittest.TestCase):
         seed_path = os.path.abspath(os.path.join(
             os.path.dirname(__file__), '..', 'backend', 'uploads', 'seed_pothole.jpg'
         ))
+        if not os.path.exists(seed_path):
+            seed_path = os.path.abspath(os.path.join(
+                os.path.dirname(__file__), 'fixtures', 'images', 'seed_pothole.jpg'
+            ))
         with open(seed_path, 'rb') as f:
             seed_bytes = f.read()
 
