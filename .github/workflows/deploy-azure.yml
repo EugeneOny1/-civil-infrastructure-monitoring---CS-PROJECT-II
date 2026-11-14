@@ -263,37 +263,7 @@ jobs:
             LAST_STATUS="${HTTP_CODE}"
             LAST_BODY="${BODY}"
 
-            EVAL_OUTPUT="$(python3 -c "
-import json, sys
-code = sys.argv[1]
-expected_model = sys.argv[2]
-raw = sys.argv[3].strip()
-
-if code == '000':
-    print('CONNECTING: Port 18080 not yet accepting connections')
-    sys.exit(2)
-
-try:
-    data = json.loads(raw)
-except Exception:
-    print(f'INVALID_JSON (HTTP {code}): raw={raw[:120]}')
-    sys.exit(3)
-
-status = data.get('status')
-model_loaded = data.get('model_loaded')
-db_ready = data.get('database_ready')
-model = data.get('model')
-
-if code == '200' and status == 'ready' and model_loaded is True and db_ready is True and model == expected_model:
-    print(f'READY: model={model}, database_ready={db_ready}')
-    sys.exit(0)
-elif code == '503':
-    print(f'INITIALIZING (HTTP 503): model_loaded={model_loaded}, database_ready={db_ready}')
-    sys.exit(4)
-else:
-    print(f'PENDING (HTTP {code}): status={status}, model={model}, db_ready={db_ready}')
-    sys.exit(5)
-" "${HTTP_CODE}" "${EXPECTED_MODEL_VERSION}" "${BODY}" 2>&1)" && EVAL_EXIT=0 || EVAL_EXIT=$?
+            EVAL_OUTPUT="$(python3 backend/scripts/eval_readiness.py "${HTTP_CODE}" "${EXPECTED_MODEL_VERSION}" "${BODY}" 2>&1)" && EVAL_EXIT=0 || EVAL_EXIT=$?
 
             if [[ "${EVAL_EXIT}" -eq 0 ]]; then
               READY=1
@@ -319,23 +289,17 @@ else:
 
           # 1. Verify /health (liveness probe)
           HEALTH_RESP="$(curl -fsS --max-time 15 "http://127.0.0.1:18080/health")"
-          python3 -c "import json, sys; d=json.loads(sys.argv[1]); assert d.get('status') == 'healthy', f'Unexpected: {d}'" "${HEALTH_RESP}"
+          python3 -c "import json, sys; d=json.loads(sys.argv[1]); assert d.get('status') == 'healthy'" "${HEALTH_RESP}"
           echo "Verified /health endpoint: ${HEALTH_RESP}"
 
           # 2. Verify /api/health (telemetry & model verification)
           API_HEALTH_RESP="$(curl -fsS --max-time 15 "http://127.0.0.1:18080/api/health")"
-          python3 -c "
-import json, sys
-d = json.loads(sys.argv[1])
-assert d.get('status') == 'online', f'Unexpected status: {d.get(\"status\")}'
-assert d.get('model_loaded') is True, 'model_loaded is not True'
-assert d.get('model') == sys.argv[2], f'Model mismatch: {d.get(\"model\")} != {sys.argv[2]}'
-" "${API_HEALTH_RESP}" "${EXPECTED_MODEL_VERSION}"
+          python3 -c "import json, sys; d=json.loads(sys.argv[1]); assert d.get('status') == 'online'; assert d.get('model_loaded') is True; assert d.get('model') == sys.argv[2]" "${API_HEALTH_RESP}" "${EXPECTED_MODEL_VERSION}"
           echo "Verified /api/health endpoint: model ${EXPECTED_MODEL_VERSION} loaded."
 
           # 3. Verify public reports endpoint
           REPORTS_RESP="$(curl -fsS --max-time 15 "http://127.0.0.1:18080/api/reports/public/recent?limit=3")"
-          python3 -c "import json, sys; d=json.loads(sys.argv[1]); assert isinstance(d, list), f'Expected list, got {type(d)}'" "${REPORTS_RESP}"
+          python3 -c "import json, sys; d=json.loads(sys.argv[1]); assert isinstance(d, list)" "${REPORTS_RESP}"
           echo "Verified /api/reports/public/recent endpoint."
 
           # 4. Verify frontend Single Page App (saving to file avoids broken pipe EPIPE / curl exit 23 on large HTML)
@@ -630,37 +594,7 @@ assert d.get('model') == sys.argv[2], f'Model mismatch: {d.get(\"model\")} != {s
             LAST_STATUS="${HTTP_CODE}"
             LAST_BODY="${BODY}"
 
-            EVAL_OUTPUT="$(python3 -c "
-import json, sys
-code = sys.argv[1]
-expected_model = sys.argv[2]
-raw = sys.argv[3].strip()
-
-if code == '000':
-    print('CONNECTING: Azure Container App ingress not yet reachable')
-    sys.exit(2)
-
-try:
-    data = json.loads(raw)
-except Exception:
-    print(f'INVALID_JSON (HTTP {code}): raw={raw[:120]}')
-    sys.exit(3)
-
-status = data.get('status')
-model_loaded = data.get('model_loaded')
-db_ready = data.get('database_ready')
-model = data.get('model')
-
-if code == '200' and status == 'ready' and model_loaded is True and db_ready is True and model == expected_model:
-    print(f'READY: model={model}, database_ready={db_ready}')
-    sys.exit(0)
-elif code == '503':
-    print(f'INITIALIZING (HTTP 503): model_loaded={model_loaded}, database_ready={db_ready}')
-    sys.exit(4)
-else:
-    print(f'PENDING (HTTP {code}): status={status}, model={model}, db_ready={db_ready}')
-    sys.exit(5)
-" "${HTTP_CODE}" "${EXPECTED_MODEL_VERSION}" "${BODY}" 2>&1)" && EVAL_EXIT=0 || EVAL_EXIT=$?
+            EVAL_OUTPUT="$(python3 backend/scripts/eval_readiness.py "${HTTP_CODE}" "${EXPECTED_MODEL_VERSION}" "${BODY}" 2>&1)" && EVAL_EXIT=0 || EVAL_EXIT=$?
 
             if [[ "${EVAL_EXIT}" -eq 0 ]]; then
               READY=1
@@ -686,23 +620,17 @@ else:
 
           # 1. Verify health endpoint
           HEALTH_RESP="$(curl -fsS --max-time 20 "${APP_URL}/health")"
-          python3 -c "import json, sys; d=json.loads(sys.argv[1]); assert d.get('status') == 'healthy', f'Unexpected: {d}'" "${HEALTH_RESP}"
+          python3 -c "import json, sys; d=json.loads(sys.argv[1]); assert d.get('status') == 'healthy'" "${HEALTH_RESP}"
           echo "Verified live Azure /health endpoint: ${HEALTH_RESP}"
 
           # 2. Verify API health endpoint (model telemetry)
           API_HEALTH_RESP="$(curl -fsS --max-time 20 "${APP_URL}/api/health")"
-          python3 -c "
-import json, sys
-d = json.loads(sys.argv[1])
-assert d.get('status') == 'online', f'Unexpected status: {d.get(\"status\")}'
-assert d.get('model_loaded') is True, 'model_loaded is not True'
-assert d.get('model') == sys.argv[2], f'Model mismatch: {d.get(\"model\")} != {sys.argv[2]}'
-" "${API_HEALTH_RESP}" "${EXPECTED_MODEL_VERSION}"
+          python3 -c "import json, sys; d=json.loads(sys.argv[1]); assert d.get('status') == 'online'; assert d.get('model_loaded') is True; assert d.get('model') == sys.argv[2]" "${API_HEALTH_RESP}" "${EXPECTED_MODEL_VERSION}"
           echo "Verified live Azure /api/health endpoint: model ${EXPECTED_MODEL_VERSION} loaded."
 
           # 3. Verify public reports endpoint
           REPORTS_RESP="$(curl -fsS --max-time 20 "${APP_URL}/api/reports/public/recent?limit=3")"
-          python3 -c "import json, sys; d=json.loads(sys.argv[1]); assert isinstance(d, list), f'Expected list, got {type(d)}'" "${REPORTS_RESP}"
+          python3 -c "import json, sys; d=json.loads(sys.argv[1]); assert isinstance(d, list)" "${REPORTS_RESP}"
           echo "Verified live Azure /api/reports/public/recent endpoint."
 
           # 4. Verify frontend homepage (saving to file avoids broken pipe EPIPE / curl exit 23 on large HTML)
