@@ -202,13 +202,17 @@ class TestAzureDeploymentReadiness(unittest.TestCase):
         """Verifies exact V2.1 SavedModel files, SHA-256 digest, and serving_default signature."""
         model_dir = REPO_ROOT / 'backend' / 'models' / 'structural_defect_detector'
         pb_file = model_dir / 'saved_model.pb'
+        fp_file = model_dir / 'fingerprint.pb'
         var_data = model_dir / 'variables' / 'variables.data-00000-of-00001'
         var_idx = model_dir / 'variables' / 'variables.index'
         self.assertTrue(pb_file.is_file())
+        self.assertTrue(fp_file.is_file())
         self.assertTrue(var_data.is_file())
         self.assertTrue(var_idx.is_file())
-        sha = hashlib.sha256(pb_file.read_bytes()).hexdigest()
-        self.assertEqual(sha, '384977d303af3e293dfbff4ae922cd0e7fd8a72b9a9713bb08b9378fc2f205a9')
+        self.assertEqual(hashlib.sha256(pb_file.read_bytes()).hexdigest(), '384977d303af3e293dfbff4ae922cd0e7fd8a72b9a9713bb08b9378fc2f205a9')
+        self.assertEqual(hashlib.sha256(fp_file.read_bytes()).hexdigest(), 'e8536ffb467db6879a7d0207a272cd0c9c10c19381c4224e3d9cbb253b69f4ee')
+        self.assertEqual(hashlib.sha256(var_data.read_bytes()).hexdigest(), '48c9c32dc59d15f281e69a18125489210693e1fe1fa5c4c2e8971630322efa7e')
+        self.assertEqual(hashlib.sha256(var_idx.read_bytes()).hexdigest(), '1e4861f42b49fafc321fe8dba62bf8aa66513c6744df5cb720e51d99d109ea42')
         self.assertTrue(inference_service.is_loaded)
         self.assertEqual(inference_service.model_version, 'ssd_mobilenet_v2_lr00015_step1500_v2_1')
 
@@ -272,6 +276,7 @@ class TestAzureDeploymentReadiness(unittest.TestCase):
             'id-token: write',
             'azure/login@v2',
             '384977d303af3e293dfbff4ae922cd0e7fd8a72b9a9713bb08b9378fc2f205a9',
+            '1e4861f42b49fafc321fe8dba62bf8aa66513c6744df5cb720e51d99d109ea42',
             'ssd_mobilenet_v2_lr00015_step1500_v2_1',
             'ghcr.io',
             'sha-${GITHUB_SHA}',

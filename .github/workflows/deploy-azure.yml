@@ -34,7 +34,7 @@ env:
   EXPECTED_SAVED_MODEL_SHA256: "384977d303af3e293dfbff4ae922cd0e7fd8a72b9a9713bb08b9378fc2f205a9"
   EXPECTED_FINGERPRINT_SHA256: "e8536ffb467db6879a7d0207a272cd0c9c10c19381c4224e3d9cbb253b69f4ee"
   EXPECTED_VARIABLES_DATA_SHA256: "48c9c32dc59d15f281e69a18125489210693e1fe1fa5c4c2e8971630322efa7e"
-  EXPECTED_VARIABLES_INDEX_SHA256: "1e4861f42b9fafc321fe8dba62bf8aa66513c6744df5cb720e51d99d109ea42"
+  EXPECTED_VARIABLES_INDEX_SHA256: "1e4861f42b49fafc321fe8dba62bf8aa66513c6744df5cb720e51d99d109ea42"
 
 jobs:
   regression-tests:
@@ -59,10 +59,10 @@ jobs:
         run: |
           set -euo pipefail
           MODEL_DIR="backend/models/structural_defect_detector"
-          echo "${EXPECTED_SAVED_MODEL_SHA256}  ${MODEL_DIR}/saved_model.pb" | sha256sum -c -
-          echo "${EXPECTED_FINGERPRINT_SHA256}  ${MODEL_DIR}/fingerprint.pb" | sha256sum -c -
-          echo "${EXPECTED_VARIABLES_DATA_SHA256}  ${MODEL_DIR}/variables/variables.data-00000-of-00001" | sha256sum -c -
-          echo "${EXPECTED_VARIABLES_INDEX_SHA256}  ${MODEL_DIR}/variables/variables.index" | sha256sum -c -
+          printf '%s  %s\n' "${EXPECTED_SAVED_MODEL_SHA256}" "${MODEL_DIR}/saved_model.pb" | sha256sum -c -
+          printf '%s  %s\n' "${EXPECTED_FINGERPRINT_SHA256}" "${MODEL_DIR}/fingerprint.pb" | sha256sum -c -
+          printf '%s  %s\n' "${EXPECTED_VARIABLES_DATA_SHA256}" "${MODEL_DIR}/variables/variables.data-00000-of-00001" | sha256sum -c -
+          printf '%s  %s\n' "${EXPECTED_VARIABLES_INDEX_SHA256}" "${MODEL_DIR}/variables/variables.index" | sha256sum -c -
 
       - name: Set up Python ${{ env.PYTHON_VERSION }}
         uses: actions/setup-python@v5
@@ -102,10 +102,10 @@ jobs:
         run: |
           set -euo pipefail
           MODEL_DIR="backend/models/structural_defect_detector"
-          echo "${EXPECTED_SAVED_MODEL_SHA256}  ${MODEL_DIR}/saved_model.pb" | sha256sum -c -
-          echo "${EXPECTED_FINGERPRINT_SHA256}  ${MODEL_DIR}/fingerprint.pb" | sha256sum -c -
-          echo "${EXPECTED_VARIABLES_DATA_SHA256}  ${MODEL_DIR}/variables/variables.data-00000-of-00001" | sha256sum -c -
-          echo "${EXPECTED_VARIABLES_INDEX_SHA256}  ${MODEL_DIR}/variables/variables.index" | sha256sum -c -
+          printf '%s  %s\n' "${EXPECTED_SAVED_MODEL_SHA256}" "${MODEL_DIR}/saved_model.pb" | sha256sum -c -
+          printf '%s  %s\n' "${EXPECTED_FINGERPRINT_SHA256}" "${MODEL_DIR}/fingerprint.pb" | sha256sum -c -
+          printf '%s  %s\n' "${EXPECTED_VARIABLES_DATA_SHA256}" "${MODEL_DIR}/variables/variables.data-00000-of-00001" | sha256sum -c -
+          printf '%s  %s\n' "${EXPECTED_VARIABLES_INDEX_SHA256}" "${MODEL_DIR}/variables/variables.index" | sha256sum -c -
 
       - name: Compute immutable image tags
         id: meta
