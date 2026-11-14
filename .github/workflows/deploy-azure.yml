@@ -299,7 +299,7 @@ jobs:
 
           # 3. Verify public reports endpoint
           REPORTS_RESP="$(curl -fsS --max-time 15 "http://127.0.0.1:18080/api/reports/public/recent?limit=3")"
-          python3 -c "import json, sys; d=json.loads(sys.argv[1]); assert isinstance(d, list)" "${REPORTS_RESP}"
+          python3 backend/scripts/eval_public_reports.py "${REPORTS_RESP}" 3
           echo "Verified /api/reports/public/recent endpoint."
 
           # 4. Verify frontend Single Page App (saving to file avoids broken pipe EPIPE / curl exit 23 on large HTML)
@@ -630,7 +630,7 @@ jobs:
 
           # 3. Verify public reports endpoint
           REPORTS_RESP="$(curl -fsS --max-time 20 "${APP_URL}/api/reports/public/recent?limit=3")"
-          python3 -c "import json, sys; d=json.loads(sys.argv[1]); assert isinstance(d, list)" "${REPORTS_RESP}"
+          python3 backend/scripts/eval_public_reports.py "${REPORTS_RESP}" 3
           echo "Verified live Azure /api/reports/public/recent endpoint."
 
           # 4. Verify frontend homepage (saving to file avoids broken pipe EPIPE / curl exit 23 on large HTML)
