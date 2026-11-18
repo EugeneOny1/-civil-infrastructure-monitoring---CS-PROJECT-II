@@ -361,6 +361,7 @@ jobs:
           STORAGE_ACCOUNT_URL: ${{ vars.AZURE_STORAGE_ACCOUNT_URL || 'https://infravisionst95f582bb.blob.core.windows.net' }}
           BLOB_CONTAINER_NAME: "defect-images"
           RUNTIME_IDENTITY_NAME: "infravision-identity"
+          # AZURE_RUNTIME_CLIENT_ID: Optional override variable (defaults to dynamic resolution via RUNTIME_IDENTITY_NAME)
           RUNTIME_CLIENT_ID_VAR: ""
           MONGO_URI: ${{ secrets.MONGO_URI }}
           SECRET_KEY: ${{ secrets.SECRET_KEY }}

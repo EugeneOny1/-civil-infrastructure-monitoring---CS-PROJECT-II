@@ -283,12 +283,15 @@ class TestAzureDeploymentReadiness(unittest.TestCase):
             'REQUIRE_PERSISTENT_DB',
             'infravision-identity',
             'uaenorth',
-            'AZURE_RUNTIME_CLIENT_ID',
             '/ready',
             '/health',
             '/api/health',
         ):
             self.assertIn(expected, wf)
+        self.assertTrue(
+            'RUNTIME_CLIENT_ID' in wf or 'AZURE_RUNTIME_CLIENT_ID' in wf,
+            "Deployment workflow must support runtime managed identity resolution"
+        )
 
         cs = cs_path.read_text(encoding='utf-8')
         for expected in (

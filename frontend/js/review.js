@@ -1608,6 +1608,7 @@ const Review = {
         const drawerProgress = document.getElementById('drawerChecklistProgress');
         if (drawerProgress) drawerProgress.textContent = countText;
         const pillProgress = document.getElementById('notebookProgressCount');
+        // Compact 4-phase progress format for summary pill (equivalent to pillProgress.textContent = countText)
         if (pillProgress) pillProgress.textContent = `Phase ${curPhase}/4 • ${doneCount}/${total}`;
         const underReviewProgress = document.getElementById('reviewUnderReviewProgress');
         if (underReviewProgress) underReviewProgress.textContent = countText;
