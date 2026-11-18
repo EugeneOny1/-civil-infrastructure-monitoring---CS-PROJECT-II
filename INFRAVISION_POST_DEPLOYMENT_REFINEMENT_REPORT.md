@@ -252,3 +252,61 @@ In VS Code, 7 warnings are flagged on `.github/workflows/deploy-azure.yml` stati
 | Combined Regression Run | Both suites executed simultaneously | 18 | **100% PASSED** | 14.01s |
 
 Both previously failing tests now pass completely without breaking any existing contracts, models, endpoints, or permissions.
+
+---
+
+## Section J: Resolution of ACR CI/CD Deployment Failures
+
+### 1. Root Cause Analysis
+
+#### A. Obsolete Private GHCR Image Pull Failure
+* **Failure Symptom:**
+  During ACA deployment, Azure attempted to pull an obsolete private GHCR image (`ghcr.io/.../infravision:...`) instead of the newly built and pushed Azure Container Registry (ACR) image, resulting in image pull failure.
+* **Mechanism:**
+  * In the previous iteration, if `az containerapp update --yaml` exited non-zero, the fallback script called `az containerapp registry set` separately before updating the image.
+  * In Azure Container Apps, modifying registry credentials on a running container app triggers immediate reconciliation of the *active revision*. Because the active revision was still pointing to the private GHCR image, Azure attempted to reprovision that obsolete image before the subsequent `az containerapp update --image` command could run.
+* **Resolution:**
+  1. Guaranteed that registry configuration (`configuration.registries`) and container image (`template.containers[0].image`) are **always updated simultaneously in a single coordinated atomic operation**.
+  2. Replaced the sequential fallback with an atomic ARM REST PATCH (`az rest --method PATCH --url ... --body @update.yaml`), which updates both registry credentials and the container image together, completely preventing Azure from attempting to reprovision the obsolete GHCR image.
+  3. Eliminated all standalone invocations of `az containerapp registry set` during recovery.
+
+#### B. Malformed Python Heredoc (`PYEOF <<< "${APP_JSON}"`)
+* **Failure Symptom:**
+  Bash encountered a syntax error at `PYEOF <<< "${APP_JSON}"`.
+* **Mechanism:**
+  * In Bash, a heredoc (`<<'PYEOF'`) consumes standard input for `python3 -`. Appending a herestring redirection (`<<< "${APP_JSON}"`) to the closing delimiter `PYEOF` is invalid Bash syntax.
+  * Additionally, `python3 -` reads the script itself from `sys.stdin`, meaning `json.load(sys.stdin)` inside the script had already reached EOF.
+* **Resolution:**
+  1. Stored the current ACA JSON output in a clean temporary file (`APP_JSON_FILE="$(mktemp ...)"`) via standard shell redirection (`> "${APP_JSON_FILE}"`).
+  2. Passed the file path as `sys.argv[1]` to `python3 -`, reading via `with open(in_path, 'r', encoding='utf-8') as fh: app_data = json.load(fh)`.
+  3. Terminated the heredoc with a clean, unadorned `PYEOF` on its own line.
+  4. Extracted the identical transformation into a dedicated, importable utility script: [backend/scripts/prepare_aca_update.py](file:///c:/Laptop%20Data/Desktop/IS%20PROJECT%202/-civil-infrastructure-monitoring---CS-PROJECT-II/backend/scripts/prepare_aca_update.py).
+  5. Added a dedicated regression test (`test_13_aca_coordinated_update_payload_and_heredoc_syntax`) in `tests/test_azure_deployment_readiness.py` to compile all heredocs and verify config transformations.
+
+---
+
+### 2. Test Execution & Verification
+
+| Test | Suite | Status | Duration |
+| :--- | :--- | :---: | :---: |
+| `test_10_github_actions_workflow_and_cloudshell_contracts` | `tests/test_azure_deployment_readiness.py` | **PASSED** | Included |
+| `test_13_aca_coordinated_update_payload_and_heredoc_syntax` | `tests/test_azure_deployment_readiness.py` | **PASSED** | Included |
+| Full Azure Readiness Suite (13 tests) | `tests/test_azure_deployment_readiness.py` | **100% PASSED** | 9.396s |
+| Full UI Cohesion Suite (6 tests) | `tests/test_ui_cohesion.py` | **100% PASSED** | 2.744s |
+| Inspection Progress & Public Reports (9 tests) | `tests/test_inspection_progress.py`, `tests/test_eval_public_reports.py` | **100% PASSED** | 1.458s |
+
+---
+
+### 3. Final Authorized Run Instructions
+
+To deploy to Azure via GitHub Actions:
+
+```bash
+# 1. Commit and push the verified workflow and scripts
+git add .github/workflows/deploy-azure.yml backend/scripts/prepare_aca_update.py tests/test_azure_deployment_readiness.py INFRAVISION_POST_DEPLOYMENT_REFINEMENT_REPORT.md
+git commit -m "fix(ci): correct ACR coordinated update heredoc and prevent obsolete GHCR reprovisioning"
+git push origin app-development
+
+# 2. Trigger workflow run via GitHub CLI or Web UI
+gh workflow run "Deploy InfraVision to Azure" --ref app-development -f run_tests=true -f deploy_to_azure=true
+```

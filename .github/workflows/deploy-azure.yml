@@ -9,7 +9,7 @@ on:
         type: boolean
         default: true
       deploy_to_azure:
-        description: "Push image to GHCR and deploy to Azure Container Apps"
+        description: "Push image to ACR and deploy to Azure Container Apps"
         required: true
         type: boolean
         default: true
@@ -445,88 +445,90 @@ jobs:
           fi
 
           # 4. Coordinated Azure resource update to recover from Failed provisioning state (Requirement 9 & 13)
-          APP_JSON="$(az containerapp show --name "${CONTAINER_APP_NAME}" --resource-group "${RESOURCE_GROUP}" -o json)"
+          APP_JSON_FILE="$(mktemp /tmp/infravision-app-XXXXXX.json)"
           UPDATE_YAML="$(mktemp /tmp/infravision-update-XXXXXX.yaml)"
-          trap 'rm -f "${UPDATE_YAML}"' EXIT
+          trap 'rm -f "${APP_JSON_FILE}" "${UPDATE_YAML}"' EXIT
 
-          python3 - "${UPDATE_YAML}" "${ACR_SERVER}" "${RUNTIME_IDENTITY_ID}" "${ACR_IMAGE}" "${EXPECTED_MODEL_VERSION}" "${RUNTIME_CLIENT_ID}" <<'PYEOF'
-          import json, sys
+          az containerapp show --name "${CONTAINER_APP_NAME}" --resource-group "${RESOURCE_GROUP}" -o json > "${APP_JSON_FILE}"
 
-          out_path, acr_server, identity_id, acr_image, expected_model, runtime_client_id = sys.argv[1:7]
-          app_data = json.load(sys.stdin)
+          python3 - "${APP_JSON_FILE}" "${UPDATE_YAML}" "${ACR_SERVER}" "${RUNTIME_IDENTITY_ID}" "${ACR_IMAGE}" "${EXPECTED_MODEL_VERSION}" "${RUNTIME_CLIENT_ID}" <<'PYEOF'
+import json, sys
 
-          props = app_data.get('properties', {})
-          config = props.setdefault('configuration', {})
+in_path, out_path, acr_server, identity_id, acr_image, expected_model, runtime_client_id = sys.argv[1:8]
 
-          # Coordinated registry configuration: Managed identity for ACR
-          config['registries'] = [
-              {
-                  'server': acr_server,
-                  'identity': identity_id
-              }
-          ]
+with open(in_path, 'r', encoding='utf-8') as fh:
+    app_data = json.load(fh)
 
-          # Clean up obsolete GHCR token references from secrets (Requirement 12)
-          if 'secrets' in config and isinstance(config['secrets'], list):
-              config['secrets'] = [s for s in config['secrets'] if s.get('name') != 'ghcr-token']
+props = app_data.get('properties', {})
+config = props.setdefault('configuration', {})
 
-          # Coordinated template update: Update container image to ACR
-          template = props.setdefault('template', {})
-          # Express consumption environment does not support custom revision suffixes (Requirement 13)
-          template.pop('revisionSuffix', None)
+# Coordinated registry configuration: Managed identity for ACR
+config['registries'] = [
+    {
+        'server': acr_server,
+        'identity': identity_id
+    }
+]
 
-          containers = template.setdefault('containers', [])
-          if containers:
-              containers[0]['image'] = acr_image
-              # Preserve existing environment variables and update model telemetry/identity
-              envs = containers[0].setdefault('env', [])
-              env_dict = {e.get('name'): e for e in envs if 'name' in e}
+# Clean up obsolete GHCR token references from secrets (Requirement 12)
+if 'secrets' in config and isinstance(config['secrets'], list):
+    config['secrets'] = [s for s in config['secrets'] if s.get('name') != 'ghcr-token']
 
-              for k, v in [
-                  ('MODEL_VERSION', expected_model),
-                  ('REQUIRE_PERSISTENT_DB', 'True'),
-                  ('AZURE_CLIENT_ID', runtime_client_id),
-              ]:
-                  if k in env_dict:
-                      env_dict[k]['value'] = v
-                  else:
-                      envs.append({'name': k, 'value': v})
+# Coordinated template update: Update container image to ACR
+template = props.setdefault('template', {})
+# Express consumption environment does not support custom revision suffixes (Requirement 13)
+template.pop('revisionSuffix', None)
 
-          # Construct clean resource payload for coordinated az containerapp update --yaml
-          clean_payload = {
-              'location': app_data.get('location'),
-              'properties': {
-                  'managedEnvironmentId': props.get('managedEnvironmentId'),
-                  'configuration': config,
-                  'template': template
-              }
-          }
-          if 'identity' in app_data:
-              clean_payload['identity'] = app_data['identity']
+containers = template.setdefault('containers', [])
+if containers:
+    containers[0]['image'] = acr_image
+    # Preserve existing environment variables and update model telemetry/identity
+    envs = containers[0].setdefault('env', [])
+    env_dict = {e.get('name'): e for e in envs if 'name' in e}
 
-          with open(out_path, 'w', encoding='utf-8') as fh:
-              json.dump(clean_payload, fh, indent=2)
-          PYEOF <<< "${APP_JSON}"
+    for k, v in [
+        ('MODEL_VERSION', expected_model),
+        ('REQUIRE_PERSISTENT_DB', 'True'),
+        ('AZURE_CLIENT_ID', runtime_client_id),
+    ]:
+        if k in env_dict:
+            env_dict[k]['value'] = v
+        else:
+            envs.append({'name': k, 'value': v})
 
-          echo "Applying coordinated ACR registry and container image update..."
-          if ! az containerapp update \
+# Construct clean resource payload for coordinated az containerapp update --yaml
+clean_payload = {
+    'location': app_data.get('location'),
+    'properties': {
+        'managedEnvironmentId': props.get('managedEnvironmentId'),
+        'configuration': config,
+        'template': template
+    }
+}
+if 'identity' in app_data:
+    clean_payload['identity'] = app_data['identity']
+
+with open(out_path, 'w', encoding='utf-8') as fh:
+    json.dump(clean_payload, fh, indent=2)
+PYEOF
+
+          echo "Applying coordinated ACR registry and container image update via YAML..."
+          UPDATE_EXIT=0
+          az containerapp update \
             --name "${CONTAINER_APP_NAME}" \
             --resource-group "${RESOURCE_GROUP}" \
             --yaml "${UPDATE_YAML}" \
-            --only-show-errors >/dev/null 2>&1; then
-            echo "Notice: Coordinated YAML update encountered an error. Applying sequential registry configuration and image update..."
-            az containerapp registry set \
-              --name "${CONTAINER_APP_NAME}" \
-              --resource-group "${RESOURCE_GROUP}" \
-              --server "${ACR_SERVER}" \
-              --identity "${RUNTIME_IDENTITY_ID}" \
-              --only-show-errors >/dev/null
-            az containerapp update \
-              --name "${CONTAINER_APP_NAME}" \
-              --resource-group "${RESOURCE_GROUP}" \
-              --image "${ACR_IMAGE}" \
-              --set-env-vars "MODEL_VERSION=${EXPECTED_MODEL_VERSION}" "REQUIRE_PERSISTENT_DB=True" "AZURE_CLIENT_ID=${RUNTIME_CLIENT_ID}" \
-              --only-show-errors >/dev/null
+            --only-show-errors || UPDATE_EXIT=$?
+
+          if [[ "${UPDATE_EXIT}" -ne 0 ]]; then
+            echo "::warning::Direct YAML update returned non-zero (${UPDATE_EXIT}). Applying coordinated ARM REST PATCH (never reprovisioning obsolete GHCR image)..."
+            ARM_APP_ID="$(az containerapp show --name "${CONTAINER_APP_NAME}" --resource-group "${RESOURCE_GROUP}" --query "id" -o tsv | tr -d '\r')"
+            az rest \
+              --method PATCH \
+              --url "https://management.azure.com${ARM_APP_ID}?api-version=2024-03-01" \
+              --body "@${UPDATE_YAML}" \
+              --headers "Content-Type=application/json" \
+              --only-show-errors
           fi
 
           # 5. Verify revision readiness and that new ACR image is active (Requirement 15)

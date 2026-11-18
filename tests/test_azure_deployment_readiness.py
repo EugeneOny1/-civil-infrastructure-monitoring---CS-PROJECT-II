@@ -390,6 +390,112 @@ class TestAzureDeploymentReadiness(unittest.TestCase):
         ops = tgt_col.bulk_write.call_args[0][0]
         self.assertTrue(all(isinstance(op, UpdateOne) for op in ops))
 
+    def test_13_aca_coordinated_update_payload_and_heredoc_syntax(self):
+        """Verifies ACA coordinated update Python heredoc syntax and config transformation logic."""
+        import json
+        import re
+        from backend.scripts.prepare_aca_update import transform_aca_config
+
+        wf_path = REPO_ROOT / '.github' / 'workflows' / 'deploy-azure.yml'
+        wf_content = wf_path.read_text(encoding='utf-8')
+
+        # 1. No malformed heredoc or trailing herestring redirection
+        self.assertNotIn('PYEOF <<<', wf_content, "deploy-azure.yml must not contain malformed heredoc herestring syntax (PYEOF <<<)")
+        self.assertNotIn('az containerapp registry set', wf_content.split('Applying coordinated ACR registry')[1] if 'Applying coordinated ACR registry' in wf_content else '',
+                         "Coordinated recovery must not invoke standalone 'az containerapp registry set' which reprovisions obsolete GHCR images")
+
+        # 2. Extract and compile Python heredocs from workflow to verify syntax
+        heredocs = re.findall(r"<<'PYEOF'(.*?)PYEOF", wf_content, re.DOTALL)
+        self.assertGreaterEqual(len(heredocs), 1, "Expected at least one PYEOF heredoc in deploy-azure.yml")
+        for idx, code in enumerate(heredocs):
+            try:
+                compile(code, f'<deploy_workflow_heredoc_{idx}>', 'exec')
+            except SyntaxError as e:
+                self.fail(f"Heredoc {idx} in deploy-azure.yml failed compilation: {e}")
+
+        # 3. Verify coordinated transformation eliminates GHCR references and updates to ACR + Managed Identity
+        sample_app = {
+            'location': 'uaenorth',
+            'identity': {
+                'type': 'UserAssigned',
+                'userAssignedIdentities': {
+                    '/subscriptions/sub1/resourceGroups/infravision-rg/providers/Microsoft.ManagedIdentity/userAssignedIdentities/infravision-identity': {}
+                }
+            },
+            'properties': {
+                'managedEnvironmentId': '/subscriptions/sub1/resourceGroups/infravision-rg/providers/Microsoft.App/managedEnvironments/infravision-env',
+                'configuration': {
+                    'activeRevisionsMode': 'Single',
+                    'ingress': {'external': True, 'targetPort': 8080, 'transport': 'auto'},
+                    'registries': [
+                        {'server': 'ghcr.io', 'username': 'testowner', 'passwordSecretRef': 'ghcr-token'}
+                    ],
+                    'secrets': [
+                        {'name': 'mongo-uri', 'value': 'mongodb+srv://...'},
+                        {'name': 'ghcr-token', 'value': 'ghp_secret'}
+                    ]
+                },
+                'template': {
+                    'revisionSuffix': 'custom-suffix-2',
+                    'containers': [
+                        {
+                            'name': 'infravision',
+                            'image': 'ghcr.io/testowner/infravision:sha-oldghcr',
+                            'resources': {'cpu': 2.0, 'memory': '4Gi'},
+                            'env': [
+                                {'name': 'FLASK_ENV', 'value': 'production'},
+                                {'name': 'MODEL_VERSION', 'value': 'old_model'}
+                            ],
+                            'probes': [{'type': 'Readiness', 'httpGet': {'path': '/ready', 'port': 8080}}]
+                        }
+                    ],
+                    'scale': {'minReplicas': 0, 'maxReplicas': 2}
+                }
+            }
+        }
+
+        acr_server = 'infravisionacr.azurecr.io'
+        identity_id = '/subscriptions/sub1/resourceGroups/infravision-rg/providers/Microsoft.ManagedIdentity/userAssignedIdentities/infravision-identity'
+        acr_image = 'infravisionacr.azurecr.io/infravision:sha-fedcba9876543210'
+        expected_model = 'ssd_mobilenet_v2_lr00015_step1500_v2_1'
+        runtime_client_id = 'client-id-abc'
+
+        transformed = transform_aca_config(
+            sample_app,
+            acr_server=acr_server,
+            identity_id=identity_id,
+            acr_image=acr_image,
+            expected_model=expected_model,
+            runtime_client_id=runtime_client_id
+        )
+
+        # Confirm registry is ACR with managed identity
+        registries = transformed['properties']['configuration']['registries']
+        self.assertEqual(len(registries), 1)
+        self.assertEqual(registries[0]['server'], acr_server)
+        self.assertEqual(registries[0]['identity'], identity_id)
+        self.assertNotIn('username', registries[0])
+        self.assertNotIn('passwordSecretRef', registries[0])
+
+        # Confirm image is ACR image, not GHCR
+        container = transformed['properties']['template']['containers'][0]
+        self.assertEqual(container['image'], acr_image)
+        self.assertNotIn('ghcr.io', container['image'])
+
+        # Confirm ghcr-token secret is purged while mongo-uri is preserved
+        secrets = transformed['properties']['configuration']['secrets']
+        self.assertTrue(any(s['name'] == 'mongo-uri' for s in secrets))
+        self.assertFalse(any(s['name'] == 'ghcr-token' for s in secrets))
+
+        # Confirm unsupported revisionSuffix is purged
+        self.assertNotIn('revisionSuffix', transformed['properties']['template'])
+
+        # Confirm model version and runtime client ID are updated
+        env_map = {e['name']: e.get('value') for e in container['env']}
+        self.assertEqual(env_map.get('MODEL_VERSION'), expected_model)
+        self.assertEqual(env_map.get('REQUIRE_PERSISTENT_DB'), 'True')
+        self.assertEqual(env_map.get('AZURE_CLIENT_ID'), runtime_client_id)
+
 
 if __name__ == '__main__':
     unittest.main()
