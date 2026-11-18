@@ -13,9 +13,8 @@ Expected Input: RGB image, dtype: uint8, shape: [1, height, width, 3]
 """
 
 import os
-import sys
 from pathlib import Path
-from typing import List, Dict, Any, Tuple, Optional
+from typing import List, Dict, Any
 import numpy as np
 from PIL import Image
 

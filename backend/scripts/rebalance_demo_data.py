@@ -7,8 +7,6 @@ PRESERVES all legitimate real user submissions.
 """
 
 import sys
-import os
-import uuid
 from pathlib import Path
 from datetime import datetime, timezone, timedelta
 

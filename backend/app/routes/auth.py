@@ -6,7 +6,6 @@ from ..services.database import db_service
 from ..services.email_service import email_service
 from ..utils.auth_helpers import (
     create_access_token,
-    get_current_user,
     login_required,
     validate_password_strength,
     validate_ebk_registration

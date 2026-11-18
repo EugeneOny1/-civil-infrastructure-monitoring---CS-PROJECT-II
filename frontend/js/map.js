@@ -384,7 +384,7 @@ const DefectMap = {
         }
     },
 
-    createMarkerIcon(severity, isUnusual, status, hasAdvisory = false) {
+    createMarkerIcon(severity, isUnusual, status, hasAdvisory = false, inspectionProgress = null) {
         const isResolved = status === 'Resolved' || this.activeFilters.status === 'Resolved';
         const isUnderReview = status === 'Under Review';
         const sev = (severity || 'Low').toLowerCase();
@@ -425,9 +425,29 @@ const DefectMap = {
                 </span>
             `;
 
+            let clockBadge = '';
+            if (isUnderReview && !hasAdvisory) {
+                const q = inspectionProgress ? (inspectionProgress.quarters ?? inspectionProgress.phases_completed ?? 0) : 0;
+                const curP = inspectionProgress ? (inspectionProgress.current_phase ?? 1) : 1;
+                const sumText = inspectionProgress?.summary || '0/10 checks completed';
+                const titleText = `Under Review — Phase ${curP} of 4 (${sumText})`;
+
+                let bgStyle = '#0f172a';
+                if (q === 1) bgStyle = 'conic-gradient(#38bdf8 0deg 90deg, #0f172a 90deg 360deg)';
+                else if (q === 2) bgStyle = 'conic-gradient(#38bdf8 0deg 180deg, #0f172a 180deg 360deg)';
+                else if (q === 3) bgStyle = 'conic-gradient(#38bdf8 0deg 270deg, #0f172a 270deg 360deg)';
+                else if (q >= 4) bgStyle = '#38bdf8';
+
+                clockBadge = `
+                    <span class="review-phase-clock-badge" style="position:absolute; top:-4px; right:-4px; width:11px; height:11px; border-radius:50%; background:${bgStyle}; border:1.5px solid #ffffff; box-shadow:0 1px 3px rgba(0,0,0,0.5); display:inline-flex; align-items:center; justify-content:center; z-index:4;" title="${titleText}">
+                        ${q >= 4 ? '<i class="bx bx-check" style="font-size:8px; color:#0f172a; font-weight:800;"></i>' : '<i class="bx bx-time" style="font-size:7px; color:' + (q > 0 ? '#ffffff' : '#38bdf8') + '; opacity:0.95;"></i>'}
+                    </span>
+                `;
+            }
+
             iconInner = `
                 <div class="custom-leaflet-marker compact-defect-marker ${sev} ${hasAdvisory ? 'composite-advisory-marker' : ''}" style="position:relative; width:${hasAdvisory ? '14px' : '13px'}; height:${hasAdvisory ? '14px' : '13px'}; border-radius:50%; background:${dotColor}; border:2px solid #ffffff; box-shadow:0 1px 6px ${dotGlow}; cursor:pointer; transition:transform 0.15s ease;" title="${severity} Defect${hasAdvisory ? ' — Active Safety Advisory' : ''}">
-                    ${isUnderReview && !hasAdvisory ? '<span style="position:absolute; top:-3px; right:-3px; font-size:8px; background:#0f172a; border-radius:50%; width:10px; height:10px; display:inline-flex; align-items:center; justify-content:center; color:#38bdf8; border:1px solid #ffffff;" title="Under Review"><i class="bx bx-time"></i></span>' : ''}
+                    ${clockBadge}
                     ${isUnusual ? '<span style="position:absolute; top:-3px; left:-3px; font-size:8px; background:#fff7ed; border-radius:50%; width:10px; height:10px; display:inline-flex; align-items:center; justify-content:center; color:#c2410c; border:1px solid #fed7aa;" title="Unusual Pairing Flagged"><i class="bx bx-error-circle"></i></span>' : ''}
                     ${hasAdvisory ? advisoryBadge : ''}
                 </div>
@@ -477,6 +497,17 @@ const DefectMap = {
                     <div style="font-size:0.75rem; color:#475569; margin-bottom:6px;">
                         <i class='bx bx-map-pin'></i> ${location}
                     </div>
+                    ${(point.inspection_progress || status === 'Under Review') ? `
+                        <div style="margin-bottom:6px; padding:5px 7px; background:#f0f9ff; border:1px solid #bae6fd; border-radius:5px;">
+                            <div style="display:flex; justify-content:space-between; align-items:center; font-size:0.72rem; margin-bottom:3px;">
+                                <span style="font-weight:700; color:#0369a1;">Phase ${point.inspection_progress?.current_phase || 1} of 4</span>
+                                <span style="font-size:0.68rem; color:#475569; font-weight:600;">${point.inspection_progress?.summary || '0/10 checks completed'}</span>
+                            </div>
+                            <div style="height:3px; background:#e2e8f0; border-radius:2px; overflow:hidden;">
+                                <div style="height:100%; width:${point.inspection_progress?.percent || 0}%; background:#0284c7; border-radius:2px;"></div>
+                            </div>
+                        </div>
+                    ` : ''}
                     <div style="display:flex; justify-content:space-between; align-items:center; font-size:0.72rem; color:#94a3b8; border-top:1px solid #f1f5f9; padding-top:5px;">
                         <span><i class='bx bx-calendar'></i> ${reportDate}</span>
                         <button type="button" class="btn-popup-link" onclick="DefectMap.openReportDetails('${point.report_id || point._id}')" style="background:none; border:none; padding:0; color:#0284c7; font-weight:600; cursor:pointer; font-size:0.75rem; display:inline-flex; align-items:center; gap:2px;">
@@ -535,6 +566,20 @@ const DefectMap = {
                     <span>Asset: <strong>${asset}</strong></span>
                     <span class="status-chip ${statusSlug}" style="font-size:0.7rem; padding:2px 8px;">${status}</span>
                 </div>
+                ${(point.inspection_progress || status === 'Under Review') ? `
+                    <div class="popup-inspection-phase-box" style="margin-bottom:8px; padding:6px 8px; background:#f0f9ff; border:1px solid #bae6fd; border-radius:6px;">
+                        <div style="display:flex; justify-content:space-between; align-items:center; font-size:0.75rem; margin-bottom:4px;">
+                            <span style="font-weight:700; color:#0369a1;"><i class='bx bx-time'></i> Phase ${point.inspection_progress?.current_phase || 1} of 4</span>
+                            <span style="font-size:0.7rem; color:#475569; font-weight:600;">${point.inspection_progress?.summary || '0/10 checks completed'}</span>
+                        </div>
+                        <div style="font-size:0.68rem; color:#0284c7; margin-bottom:4px; font-weight:500;">
+                            ${point.inspection_progress?.current_phase_name || 'Triage & Verification'}
+                        </div>
+                        <div style="height:4px; background:#e2e8f0; border-radius:2px; overflow:hidden;">
+                            <div style="height:100%; width:${point.inspection_progress?.percent || 0}%; background:#0284c7; border-radius:2px;"></div>
+                        </div>
+                    </div>
+                ` : ''}
                 ${point.nearby_report_count > 0 ? `
                     <div style="font-size:0.75rem; color:#0284c7; font-weight:600; margin-bottom:6px; background:#f0f9ff; padding:3px 6px; border-radius:4px; border:1px solid #bae6fd;">
                         <i class='bx bx-layer'></i> Density: ${point.nearby_report_count} nearby defect report(s) within 50m
@@ -723,7 +768,7 @@ const DefectMap = {
             }
 
             const hasAdvisory = Boolean(point.active_advisory);
-            const icon = this.createMarkerIcon(point.relative_severity, point.is_unusual, point.status, hasAdvisory);
+            const icon = this.createMarkerIcon(point.relative_severity, point.is_unusual, point.status, hasAdvisory, point.inspection_progress);
             const marker = L.marker([lat, lng], { icon: icon });
             marker.reportSeverity = point.relative_severity;
             marker.reportStatus = point.status;

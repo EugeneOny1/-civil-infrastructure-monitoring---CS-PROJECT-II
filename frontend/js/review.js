@@ -1583,14 +1583,32 @@ const Review = {
 
         const items = this.currentNotebook.checklist || [];
         const total = items.length;
-        const doneCount = items.filter(i => i.completed || i.checked || i.is_na || i.status === 'completed' || i.status === 'not_applicable').length;
+        const isItemDone = (i) => Boolean(i.completed || i.checked || i.is_na || i.status === 'completed' || i.status === 'not_applicable');
+        const doneCount = items.filter(isItemDone).length;
 
-        const countText = `${doneCount} of ${total} completed`;
+        // Calculate 4-phase progress
+        const phaseDefs = [
+            { start: 0, end: 3, name: 'Triage & Verification' },
+            { start: 3, end: 5, name: 'Condition Evaluation' },
+            { start: 5, end: 7, name: 'Safety & Priority' },
+            { start: 7, end: total, name: 'Remedial Sign-off' }
+        ];
+        let phasesDone = 0;
+        for (const pd of phaseDefs) {
+            const pSlice = items.slice(pd.start, pd.end);
+            if (pSlice.length > 0 && pSlice.every(isItemDone)) {
+                phasesDone += 1;
+            }
+        }
+        const curPhase = Math.min(phasesDone + 1, 4);
+        const curPhaseName = phaseDefs[curPhase - 1]?.name || 'Triage & Verification';
+
+        const countText = `Phase ${curPhase} of 4: ${curPhaseName} (${doneCount}/${total} checks)`;
         if (progressEl) progressEl.textContent = countText;
         const drawerProgress = document.getElementById('drawerChecklistProgress');
         if (drawerProgress) drawerProgress.textContent = countText;
         const pillProgress = document.getElementById('notebookProgressCount');
-        if (pillProgress) pillProgress.textContent = countText;
+        if (pillProgress) pillProgress.textContent = `Phase ${curPhase}/4 • ${doneCount}/${total}`;
         const underReviewProgress = document.getElementById('reviewUnderReviewProgress');
         if (underReviewProgress) underReviewProgress.textContent = countText;
 

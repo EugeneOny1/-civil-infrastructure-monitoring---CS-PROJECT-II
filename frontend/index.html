@@ -744,14 +744,21 @@
                                 <input type="file" id="imageFileInput"
                                     accept="image/png, image/jpeg, image/jpg, image/webp" multiple
                                     class="file-input-hidden">
+                                <input type="file" id="cameraFileInput"
+                                    accept="image/*" capture="environment"
+                                    class="file-input-hidden">
                                 <div class="dropzone-content" id="dropzonePrompt">
                                     <div class="upload-icon-circle"><i class='bx bx-camera'></i></div>
                                     <p class="upload-title">Upload Defect Photo(s)</p>
                                     <p class="upload-meta">Upload 1 to 3 photos (PNG, JPG, JPEG, WEBP under 16MB each)
                                     </p>
                                     <div class="button-row">
-                                        <button type="button" class="btn-micro" id="btnTriggerUpload">Choose File(s) /
-                                            Camera</button>
+                                        <button type="button" class="btn-micro" id="btnTriggerUpload">
+                                            <i class='bx bx-folder-open'></i> Choose File(s)
+                                        </button>
+                                        <button type="button" class="btn-micro" id="btnTriggerCamera">
+                                            <i class='bx bx-camera'></i> Take Photo
+                                        </button>
                                         <button type="button" class="btn-micro btn-accent" id="btnSamplePhoto">Load Test
                                             Sample</button>
                                     </div>
@@ -761,7 +768,10 @@
                                 </div>
                                 <div class="multi-add-row hidden" id="multiAddRow" style="margin-top: 0.75rem;">
                                     <button type="button" class="btn-micro" id="btnAddMorePhotos">
-                                        <span><i class='bx bx-plus'></i></span> Add Another Photo (up to 3)
+                                        <span><i class='bx bx-plus'></i></span> Choose File
+                                    </button>
+                                    <button type="button" class="btn-micro" id="btnAddMoreCamera">
+                                        <span><i class='bx bx-camera'></i></span> Take Photo
                                     </button>
                                 </div>
 

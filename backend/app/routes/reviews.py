@@ -69,6 +69,79 @@ def get_default_notebook_template(asset_type: str = 'Road / Pavement') -> dict:
         'last_updated_by': 'System Initialization'
     }
 
+
+def calculate_inspection_progress(checklist: list, asset_type: str = '') -> dict:
+    """
+    Computes four-phase inspection progress from persisted inspection notebook checklist.
+    Phases:
+      Phase 1: Initial Triage & Defect Verification (Checks 1-3)
+      Phase 2: Condition & Secondary Distress Evaluation (Checks 4-5)
+      Phase 3: Impact & Operational Safety Assessment (Checks 6-7)
+      Phase 4: Remedial Action & Closeout Sign-off (Checks 8-10)
+    Accounts for both completed checks and legitimate N/A exclusions without false completion.
+    """
+    if not checklist or not isinstance(checklist, list):
+        return {
+            'phases_completed': 0,
+            'total_phases': 4,
+            'current_phase': 1,
+            'current_phase_name': 'Triage & Verification',
+            'completed_items': 0,
+            'total_items': 10,
+            'summary': '0/10 checks completed',
+            'percent': 0,
+            'quarters': 0
+        }
+
+    total = len(checklist)
+    completed_items = 0
+
+    def is_item_done(it):
+        if not isinstance(it, dict):
+            return False
+        return bool(it.get('completed') or it.get('checked') or it.get('is_na') or 
+                    it.get('status') in ('completed', 'na', 'not_applicable'))
+
+    for item in checklist:
+        if is_item_done(item):
+            completed_items += 1
+
+    phase_defs = [
+        (0, 3, 'Triage & Verification'),
+        (3, 5, 'Condition Evaluation'),
+        (5, 7, 'Safety & Priority'),
+        (7, total, 'Remedial Sign-off')
+    ]
+
+    phases_done = 0
+    for start, end, name in phase_defs:
+        phase_slice = checklist[start:end]
+        if phase_slice and all(is_item_done(it) for it in phase_slice):
+            phases_done += 1
+
+    phase_names = [
+        'Triage & Verification',
+        'Condition Evaluation',
+        'Safety & Priority',
+        'Remedial Sign-off'
+    ]
+
+    current_phase = min(phases_done + 1, 4)
+    current_name = phase_names[current_phase - 1]
+    percent = int(round((completed_items / total) * 100)) if total > 0 else 0
+
+    return {
+        'phases_completed': phases_done,
+        'total_phases': 4,
+        'current_phase': current_phase,
+        'current_phase_name': current_name,
+        'completed_items': completed_items,
+        'total_items': total,
+        'summary': f"{completed_items}/{total} checks completed",
+        'percent': percent,
+        'quarters': phases_done
+    }
+
 @reviews_bp.route('/<assessment_id>', methods=['POST'])
 @role_required('engineer', 'admin')
 def submit_review(current_user, assessment_id):

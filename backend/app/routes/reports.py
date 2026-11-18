@@ -1,7 +1,7 @@
 import os
 import uuid
 from datetime import datetime, timezone
-from flask import Blueprint, request, jsonify, current_app, send_from_directory, make_response
+from flask import Blueprint, request, jsonify, current_app, make_response
 from ..models.report import InfrastructureReport, SubmittedImage
 from ..models.assessment import AIAssessment
 from ..models.asset import InfrastructureAsset
@@ -12,7 +12,7 @@ from ..services.validation import validation_service
 from ..services.storage import storage_service
 from ..utils.auth_helpers import get_current_user, login_required
 from ..utils.file_helpers import allowed_file, save_uploaded_image
-from .reviews import get_default_notebook_template
+from .reviews import get_default_notebook_template, calculate_inspection_progress
 
 reports_bp = Blueprint('reports', __name__, url_prefix='/api/reports')
 
@@ -903,6 +903,10 @@ def get_report_detail(current_user, report_id):
 
     display_id = report.get('display_id') or meta.get('display_id') or f"REP-{datetime.now(timezone.utc).year}-{str(report_id)[-4:].upper()}"
 
+    nb_for_prog = meta.get('inspection_notebook') or report.get('inspection_notebook') or {}
+    cl_for_prog = nb_for_prog.get('checklist') or []
+    inspection_progress = calculate_inspection_progress(cl_for_prog, report.get('asset_type') or meta.get('asset_type', ''))
+
     resp = make_response(jsonify({
         'report': report,
         'report_id': report_id,
@@ -914,7 +918,8 @@ def get_report_detail(current_user, report_id):
         'images': image_list,
         'assessment': primary_assessment,
         'assessments': assessment_list,
-        'review': review
+        'review': review,
+        'inspection_progress': inspection_progress
     }), 200)
     resp.headers['Cache-Control'] = 'no-cache, no-store, must-revalidate'
     return resp
@@ -1054,6 +1059,11 @@ def get_map_reports():
             'date_submitted': rep.get('date_submitted'),
             'image_url': f"/api/reports/images/{image['image_path']}" if image else None
         }
+
+        if rep_status == InfrastructureReport.STATUS_UNDER_REVIEW:
+            nb = meta.get('inspection_notebook') or rep.get('inspection_notebook') or {}
+            cl = nb.get('checklist') or []
+            point['inspection_progress'] = calculate_inspection_progress(cl, asset_t)
 
         # Privacy Protection: Privileged roles get extra audit data; public gets clean defect record
         if is_privileged:

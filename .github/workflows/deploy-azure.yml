@@ -354,14 +354,14 @@ jobs:
         id: deploy
         if: ${{ inputs.deploy_to_azure }}
         env:
-          RESOURCE_GROUP: ${{ vars.AZURE_RESOURCE_GROUP || 'infravision-rg' }}
-          CONTAINER_APPS_ENV: ${{ vars.AZURE_CONTAINER_APPS_ENV || 'infravision-env' }}
-          CONTAINER_APP_NAME: ${{ vars.AZURE_CONTAINER_APP_NAME || 'infravision' }}
+          RESOURCE_GROUP: "infravision-rg"
+          CONTAINER_APPS_ENV: "infravision-env"
+          CONTAINER_APP_NAME: "infravision"
           LOCATION: ${{ vars.AZURE_LOCATION || 'uaenorth' }}
           STORAGE_ACCOUNT_URL: ${{ vars.AZURE_STORAGE_ACCOUNT_URL || 'https://infravisionst95f582bb.blob.core.windows.net' }}
-          BLOB_CONTAINER_NAME: ${{ vars.AZURE_STORAGE_CONTAINER || 'defect-images' }}
-          RUNTIME_IDENTITY_NAME: ${{ vars.AZURE_RUNTIME_IDENTITY_NAME || vars.AZURE_MANAGED_IDENTITY_NAME || 'infravision-identity' }}
-          RUNTIME_CLIENT_ID_VAR: ${{ vars.AZURE_RUNTIME_CLIENT_ID || vars.AZURE_IDENTITY_CLIENT_ID || '' }}
+          BLOB_CONTAINER_NAME: "defect-images"
+          RUNTIME_IDENTITY_NAME: "infravision-identity"
+          RUNTIME_CLIENT_ID_VAR: ""
           MONGO_URI: ${{ secrets.MONGO_URI }}
           SECRET_KEY: ${{ secrets.SECRET_KEY }}
           JWT_SECRET_KEY: ${{ secrets.JWT_SECRET_KEY }}

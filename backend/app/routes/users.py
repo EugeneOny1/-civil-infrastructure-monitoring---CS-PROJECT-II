@@ -1,7 +1,9 @@
 from flask import Blueprint, request, jsonify
 from werkzeug.security import generate_password_hash
 from ..models.user import User
+from ..models.report import InfrastructureReport
 from ..services.database import db_service
+from ..services.notification_service import notification_service
 from ..utils.auth_helpers import login_required
 
 users_bp = Blueprint('users', __name__, url_prefix='/api/users')
@@ -37,8 +39,6 @@ def update_profile(current_user):
         'user': User.from_dict(updated_user).to_dict()
     }), 200
 
-from ..models.report import InfrastructureReport
-
 @users_bp.route('/reports', methods=['GET'])
 @login_required
 def get_user_reports(current_user):
@@ -71,8 +71,6 @@ def get_user_reports(current_user):
         })
 
     return jsonify({'reports': results, 'count': len(results)}), 200
-
-from ..services.notification_service import notification_service
 
 @users_bp.route('/notifications', methods=['GET'])
 @login_required

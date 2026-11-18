@@ -16,8 +16,11 @@ const Submission = {
 
     bindEvents() {
         const fileInput = document.getElementById('imageFileInput');
+        const cameraInput = document.getElementById('cameraFileInput');
         const triggerBtn = document.getElementById('btnTriggerUpload');
+        const cameraBtn = document.getElementById('btnTriggerCamera');
         const addMoreBtn = document.getElementById('btnAddMorePhotos');
+        const addMoreCameraBtn = document.getElementById('btnAddMoreCamera');
         const dropzone = document.getElementById('uploadDropzone');
         const sampleBtn = document.getElementById('btnSamplePhoto');
         const submitAiBtn = document.getElementById('btnSubmitAiAnalysis');
@@ -28,8 +31,16 @@ const Submission = {
             triggerBtn.addEventListener('click', () => fileInput.click());
         }
 
+        if (cameraBtn && cameraInput) {
+            cameraBtn.addEventListener('click', () => cameraInput.click());
+        }
+
         if (addMoreBtn && fileInput) {
             addMoreBtn.addEventListener('click', () => fileInput.click());
+        }
+
+        if (addMoreCameraBtn && cameraInput) {
+            addMoreCameraBtn.addEventListener('click', () => cameraInput.click());
         }
 
         if (fileInput) {
@@ -37,6 +48,15 @@ const Submission = {
                 if (e.target.files && e.target.files.length > 0) {
                     this.handleFilesSelected(Array.from(e.target.files));
                     fileInput.value = '';
+                }
+            });
+        }
+
+        if (cameraInput) {
+            cameraInput.addEventListener('change', (e) => {
+                if (e.target.files && e.target.files.length > 0) {
+                    this.handleFilesSelected(Array.from(e.target.files));
+                    cameraInput.value = '';
                 }
             });
         }

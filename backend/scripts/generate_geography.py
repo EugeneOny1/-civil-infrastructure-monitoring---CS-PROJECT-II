@@ -5,7 +5,6 @@ plus popular urban and regional localities (Runda, Karen, Embakasi, Westlands, e
 """
 
 import json
-import os
 
 def build_kenya_hierarchy():
     # 47 Counties with representative Constituencies and Wards
