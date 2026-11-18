@@ -100,7 +100,7 @@ jobs:
     if: ${{ !cancelled() && (needs.regression-tests.result == 'success' || needs.regression-tests.result == 'skipped') }}
     runs-on: ubuntu-latest
     outputs:
-      image_ref: ${{ steps.meta.outputs.sha_image }}
+      image_ref: ${{ steps.deploy.outputs.acr_image || steps.meta.outputs.sha_image }}
       app_url: ${{ steps.deploy.outputs.app_url }}
       revision: ${{ steps.deploy.outputs.revision }}
     steps:
@@ -336,9 +336,14 @@ jobs:
           AZURE_CLIENT_ID: ${{ vars.AZURE_CLIENT_ID }}
           AZURE_TENANT_ID: ${{ vars.AZURE_TENANT_ID }}
           AZURE_SUBSCRIPTION_ID: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+          ACR_NAME: ${{ vars.ACR_NAME }}
         run: |
           if [[ -z "${AZURE_CLIENT_ID}" || -z "${AZURE_TENANT_ID}" || -z "${AZURE_SUBSCRIPTION_ID}" ]]; then
             echo "::error::Missing GitHub Repository Variables AZURE_CLIENT_ID, AZURE_TENANT_ID, or AZURE_SUBSCRIPTION_ID. Run scripts/provision_azure_infra.sh in Azure Cloud Shell first and add those variables to GitHub."
+            exit 1
+          fi
+          if [[ -z "${ACR_NAME}" ]]; then
+            echo "::error::Missing GitHub Repository Variable ACR_NAME. Set ACR_NAME in Settings -> Secrets and variables -> Actions -> Variables."
             exit 1
           fi
 
@@ -349,6 +354,43 @@ jobs:
           client-id: ${{ vars.AZURE_CLIENT_ID }}
           tenant-id: ${{ vars.AZURE_TENANT_ID }}
           subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Authenticate to ACR and push immutable image
+        if: ${{ inputs.deploy_to_azure }}
+        id: acr
+        env:
+          ACR_NAME: ${{ vars.ACR_NAME }}
+          SOURCE_IMAGE: ${{ steps.meta.outputs.sha_image }}
+        run: |
+          set -euo pipefail
+          ACR_REGISTRY_NAME="${ACR_NAME%.azurecr.io}"
+          ACR_LOGIN_SERVER="${ACR_REGISTRY_NAME}.azurecr.io"
+          ACR_IMAGE="${ACR_LOGIN_SERVER}/infravision:sha-${GITHUB_SHA}"
+
+          echo "Authenticating to Azure Container Registry '${ACR_REGISTRY_NAME}' via Azure CLI..."
+          az acr login --name "${ACR_REGISTRY_NAME}"
+
+          echo "Tagging verified image ${SOURCE_IMAGE} as ${ACR_IMAGE}..."
+          docker tag "${SOURCE_IMAGE}" "${ACR_IMAGE}"
+
+          echo "Pushing immutable image to ACR: ${ACR_IMAGE}..."
+          docker push "${ACR_IMAGE}"
+
+          echo "Verifying image existence and digest in ACR '${ACR_REGISTRY_NAME}'..."
+          ACR_DIGEST="$(az acr manifest show-metadata --registry "${ACR_REGISTRY_NAME}" --name "infravision:sha-${GITHUB_SHA}" --query "digest" -o tsv 2>/dev/null | tr -d '\r' || true)"
+          if [[ -z "${ACR_DIGEST}" ]]; then
+            ACR_DIGEST="$(az acr repository show-manifests --name "${ACR_REGISTRY_NAME}" --repository "infravision" --query "[?contains(tags, 'sha-${GITHUB_SHA}')].digest | [0]" -o tsv 2>/dev/null | tr -d '\r' || true)"
+          fi
+
+          if [[ -z "${ACR_DIGEST}" ]]; then
+            echo "::error::Failed to verify pushed image in ACR '${ACR_REGISTRY_NAME}'. The image manifest could not be retrieved."
+            exit 1
+          fi
+
+          echo "Verified immutable ACR image: ${ACR_IMAGE} (Digest: ${ACR_DIGEST})"
+          echo "acr_server=${ACR_LOGIN_SERVER}" >> "$GITHUB_OUTPUT"
+          echo "acr_image=${ACR_IMAGE}" >> "$GITHUB_OUTPUT"
+          echo "acr_digest=${ACR_DIGEST}" >> "$GITHUB_OUTPUT"
 
       - name: Deploy immutable image to Azure Container Apps
         id: deploy
@@ -363,220 +405,165 @@ jobs:
           RUNTIME_IDENTITY_NAME: "infravision-identity"
           # AZURE_RUNTIME_CLIENT_ID: Optional override variable (defaults to dynamic resolution via RUNTIME_IDENTITY_NAME)
           RUNTIME_CLIENT_ID_VAR: ""
+          ACR_SERVER: ${{ steps.acr.outputs.acr_server }}
+          ACR_IMAGE: ${{ steps.acr.outputs.acr_image }}
+          ACR_DIGEST: ${{ steps.acr.outputs.acr_digest }}
           MONGO_URI: ${{ secrets.MONGO_URI }}
           SECRET_KEY: ${{ secrets.SECRET_KEY }}
           JWT_SECRET_KEY: ${{ secrets.JWT_SECRET_KEY }}
-          GHCR_PULL_TOKEN: ${{ secrets.GHCR_PULL_TOKEN }}
           SMTP_HOST: ${{ vars.SMTP_HOST || '' }}
           SMTP_PORT: ${{ vars.SMTP_PORT || '587' }}
           SMTP_USER: ${{ vars.SMTP_USER || '' }}
           SMTP_SENDER: ${{ vars.SMTP_SENDER || '' }}
           SMTP_PASSWORD: ${{ secrets.SMTP_PASSWORD || '' }}
           GOOGLE_CLIENT_ID: ${{ vars.GOOGLE_CLIENT_ID || '' }}
-          IMAGE_OWNER: ${{ steps.meta.outputs.owner_lower }}
-          SHA_IMAGE: ${{ steps.meta.outputs.sha_image }}
         run: |
           set -euo pipefail
           az extension add --name containerapp --upgrade --only-show-errors >/dev/null
 
-          # Always resolve the application runtime identity's ARM ID and Client ID (infravision-identity)
+          # 1. Fail explicitly if Container App does not exist (Requirement 14)
+          if ! az containerapp show --name "${CONTAINER_APP_NAME}" --resource-group "${RESOURCE_GROUP}" >/dev/null 2>&1; then
+            echo "::error::Target Azure Container App '${CONTAINER_APP_NAME}' in resource group '${RESOURCE_GROUP}' does not exist. Failing explicitly to prevent recreation."
+            exit 1
+          fi
+
+          # 2. Resolve existing runtime identity ARM ID and Client ID (Requirement 7)
           RUNTIME_IDENTITY_ID="$(az identity show --name "${RUNTIME_IDENTITY_NAME}" --resource-group "${RESOURCE_GROUP}" --query "id" -o tsv | tr -d '\r')"
           RUNTIME_CLIENT_ID="${RUNTIME_CLIENT_ID_VAR}"
           if [[ -z "${RUNTIME_CLIENT_ID}" ]]; then
             RUNTIME_CLIENT_ID="$(az identity show --name "${RUNTIME_IDENTITY_NAME}" --resource-group "${RESOURCE_GROUP}" --query "clientId" -o tsv | tr -d '\r')"
           fi
-          echo "Using Runtime Managed Identity '${RUNTIME_IDENTITY_NAME}' (${RUNTIME_CLIENT_ID}) for ACA container Blob access."
+          echo "Using Runtime Managed Identity '${RUNTIME_IDENTITY_NAME}' (${RUNTIME_CLIENT_ID}) for ACR image pulling and Blob access."
 
-          if az containerapp show --name "${CONTAINER_APP_NAME}" --resource-group "${RESOURCE_GROUP}" >/dev/null 2>&1; then
-            echo "Updating existing Azure Container App '${CONTAINER_APP_NAME}' to ${SHA_IMAGE}..."
-            if [[ -n "${GHCR_PULL_TOKEN}" ]]; then
-              az containerapp secret set \
-                --name "${CONTAINER_APP_NAME}" \
-                --resource-group "${RESOURCE_GROUP}" \
-                --secrets "ghcr-token=${GHCR_PULL_TOKEN}" \
-                --only-show-errors >/dev/null
-              az containerapp registry set \
-                --name "${CONTAINER_APP_NAME}" \
-                --resource-group "${RESOURCE_GROUP}" \
-                --server "ghcr.io" \
-                --username "${IMAGE_OWNER}" \
-                --password "ghcr-token" \
-                --only-show-errors >/dev/null
-            fi
-            if [[ -n "${MONGO_URI}" ]]; then
-              az containerapp secret set \
-                --name "${CONTAINER_APP_NAME}" \
-                --resource-group "${RESOURCE_GROUP}" \
-                --secrets "mongo-uri=${MONGO_URI}" \
-                --only-show-errors >/dev/null
-            fi
+          # 3. Update sensitive secrets if provided (Requirement 10)
+          if [[ -n "${MONGO_URI}" ]]; then
+            az containerapp secret set \
+              --name "${CONTAINER_APP_NAME}" \
+              --resource-group "${RESOURCE_GROUP}" \
+              --secrets "mongo-uri=${MONGO_URI}" \
+              --only-show-errors >/dev/null || true
+          fi
+
+          # 4. Coordinated Azure resource update to recover from Failed provisioning state (Requirement 9 & 13)
+          APP_JSON="$(az containerapp show --name "${CONTAINER_APP_NAME}" --resource-group "${RESOURCE_GROUP}" -o json)"
+          UPDATE_YAML="$(mktemp /tmp/infravision-update-XXXXXX.yaml)"
+          trap 'rm -f "${UPDATE_YAML}"' EXIT
+
+          python3 - "${UPDATE_YAML}" "${ACR_SERVER}" "${RUNTIME_IDENTITY_ID}" "${ACR_IMAGE}" "${EXPECTED_MODEL_VERSION}" "${RUNTIME_CLIENT_ID}" <<'PYEOF'
+          import json, sys
+
+          out_path, acr_server, identity_id, acr_image, expected_model, runtime_client_id = sys.argv[1:7]
+          app_data = json.load(sys.stdin)
+
+          props = app_data.get('properties', {})
+          config = props.setdefault('configuration', {})
+
+          # Coordinated registry configuration: Managed identity for ACR
+          config['registries'] = [
+              {
+                  'server': acr_server,
+                  'identity': identity_id
+              }
+          ]
+
+          # Clean up obsolete GHCR token references from secrets (Requirement 12)
+          if 'secrets' in config and isinstance(config['secrets'], list):
+              config['secrets'] = [s for s in config['secrets'] if s.get('name') != 'ghcr-token']
+
+          # Coordinated template update: Update container image to ACR
+          template = props.setdefault('template', {})
+          # Express consumption environment does not support custom revision suffixes (Requirement 13)
+          template.pop('revisionSuffix', None)
+
+          containers = template.setdefault('containers', [])
+          if containers:
+              containers[0]['image'] = acr_image
+              # Preserve existing environment variables and update model telemetry/identity
+              envs = containers[0].setdefault('env', [])
+              env_dict = {e.get('name'): e for e in envs if 'name' in e}
+
+              for k, v in [
+                  ('MODEL_VERSION', expected_model),
+                  ('REQUIRE_PERSISTENT_DB', 'True'),
+                  ('AZURE_CLIENT_ID', runtime_client_id),
+              ]:
+                  if k in env_dict:
+                      env_dict[k]['value'] = v
+                  else:
+                      envs.append({'name': k, 'value': v})
+
+          # Construct clean resource payload for coordinated az containerapp update --yaml
+          clean_payload = {
+              'location': app_data.get('location'),
+              'properties': {
+                  'managedEnvironmentId': props.get('managedEnvironmentId'),
+                  'configuration': config,
+                  'template': template
+              }
+          }
+          if 'identity' in app_data:
+              clean_payload['identity'] = app_data['identity']
+
+          with open(out_path, 'w', encoding='utf-8') as fh:
+              json.dump(clean_payload, fh, indent=2)
+          PYEOF <<< "${APP_JSON}"
+
+          echo "Applying coordinated ACR registry and container image update..."
+          if ! az containerapp update \
+            --name "${CONTAINER_APP_NAME}" \
+            --resource-group "${RESOURCE_GROUP}" \
+            --yaml "${UPDATE_YAML}" \
+            --only-show-errors >/dev/null 2>&1; then
+            echo "Notice: Coordinated YAML update encountered an error. Applying sequential registry configuration and image update..."
+            az containerapp registry set \
+              --name "${CONTAINER_APP_NAME}" \
+              --resource-group "${RESOURCE_GROUP}" \
+              --server "${ACR_SERVER}" \
+              --identity "${RUNTIME_IDENTITY_ID}" \
+              --only-show-errors >/dev/null
             az containerapp update \
               --name "${CONTAINER_APP_NAME}" \
               --resource-group "${RESOURCE_GROUP}" \
-              --image "${SHA_IMAGE}" \
+              --image "${ACR_IMAGE}" \
               --set-env-vars "MODEL_VERSION=${EXPECTED_MODEL_VERSION}" "REQUIRE_PERSISTENT_DB=True" "AZURE_CLIENT_ID=${RUNTIME_CLIENT_ID}" \
-              --only-show-errors >/dev/null
-          else
-            echo "Creating Azure Container App '${CONTAINER_APP_NAME}' on Consumption environment '${CONTAINER_APPS_ENV}'..."
-            if [[ -z "${MONGO_URI}" ]]; then
-              echo "::error::secrets.MONGO_URI (MongoDB Atlas URI) is required on initial Container App creation."
-              exit 1
-            fi
-            if [[ -z "${STORAGE_ACCOUNT_URL}" ]]; then
-              echo "::error::vars.AZURE_STORAGE_ACCOUNT_URL is required on initial Container App creation."
-              exit 1
-            fi
-            if [[ -z "${GHCR_PULL_TOKEN}" ]]; then
-              echo "::error::secrets.GHCR_PULL_TOKEN (read:packages PAT) is required so Azure Container Apps can pull private ghcr.io images without exposing the image publicly."
-              exit 1
-            fi
-
-            ENV_ID="$(az containerapp env show --name "${CONTAINER_APPS_ENV}" --resource-group "${RESOURCE_GROUP}" --query "id" -o tsv)"
-            APP_SECRET_KEY="${SECRET_KEY:-$(python3 -c 'import secrets; print(secrets.token_urlsafe(32))')}"
-            APP_JWT_SECRET="${JWT_SECRET_KEY:-${APP_SECRET_KEY}}"
-
-            YAML_FILE="$(mktemp /tmp/infravision-aca-XXXXXX.yaml)"
-            trap 'rm -f "${YAML_FILE}"' EXIT
-
-            python3 - "${YAML_FILE}" "${ENV_ID}" "${RUNTIME_IDENTITY_ID}" "${RUNTIME_CLIENT_ID}" "${APP_SECRET_KEY}" "${APP_JWT_SECRET}" <<'PYEOF'
-          import json, os, sys
-          yaml_path, env_id, identity_id, client_id, skey, jkey = sys.argv[1:7]
-          smtp_pass = os.environ.get("SMTP_PASSWORD", "")
-          lines = [
-              f"location: {os.environ['LOCATION']}",
-              "identity:",
-              "  type: UserAssigned",
-              "  userAssignedIdentities:",
-              f"    {json.dumps(identity_id)}: {{}}",
-              "properties:",
-              f"  managedEnvironmentId: {env_id}",
-              "  configuration:",
-              "    activeRevisionsMode: Single",
-              "    ingress:",
-              "      external: true",
-              "      targetPort: 8080",
-              "      allowInsecure: false",
-              "      transport: auto",
-              "    registries:",
-              "      - server: ghcr.io",
-              f"        username: {os.environ['IMAGE_OWNER']}",
-              "        passwordSecretRef: ghcr-token",
-              "    secrets:",
-              "      - name: secret-key",
-              f"        value: {json.dumps(skey)}",
-              "      - name: jwt-secret-key",
-              f"        value: {json.dumps(jkey)}",
-              "      - name: mongo-uri",
-              f"        value: {json.dumps(os.environ['MONGO_URI'])}",
-              "      - name: ghcr-token",
-              f"        value: {json.dumps(os.environ['GHCR_PULL_TOKEN'])}",
-          ]
-          if smtp_pass:
-              lines += ["      - name: smtp-password", f"        value: {json.dumps(smtp_pass)}"]
-          lines += [
-              "  template:",
-              "    containers:",
-              f"      - name: {os.environ['CONTAINER_APP_NAME']}",
-              f"        image: {os.environ['SHA_IMAGE']}",
-              "        resources:",
-              "          cpu: 2.0",
-              "          memory: 4Gi",
-              "        env:",
-              "          - name: FLASK_ENV",
-              "            value: production",
-              "          - name: DEBUG",
-              '            value: "False"',
-              "          - name: PORT",
-              '            value: "8080"',
-              "          - name: DB_NAME",
-              "            value: civil_infrastructure",
-              "          - name: REQUIRE_PERSISTENT_DB",
-              '            value: "True"',
-              "          - name: MONGO_URI",
-              "            secretRef: mongo-uri",
-              "          - name: SECRET_KEY",
-              "            secretRef: secret-key",
-              "          - name: JWT_SECRET_KEY",
-              "            secretRef: jwt-secret-key",
-              "          - name: STORAGE_BACKEND",
-              "            value: azure",
-              "          - name: AZURE_STORAGE_ACCOUNT_URL",
-              f"            value: {os.environ['STORAGE_ACCOUNT_URL']}",
-              "          - name: AZURE_STORAGE_CONTAINER",
-              f"            value: {os.environ['BLOB_CONTAINER_NAME']}",
-              "          - name: AZURE_CLIENT_ID",
-              f"            value: {client_id}",
-              "          - name: UPLOAD_FOLDER",
-              "            value: /tmp/uploads",
-              "          - name: MODEL_PATH",
-              "            value: /app/backend/models/structural_defect_detector",
-              "          - name: MODEL_VERSION",
-              f"            value: {os.environ['EXPECTED_MODEL_VERSION']}",
-              "          - name: ENABLE_PRODUCTION_OTP_FALLBACK",
-              '            value: "False"',
-              "          - name: SMTP_HOST",
-              f"            value: {json.dumps(os.environ.get('SMTP_HOST', ''))}",
-              "          - name: SMTP_PORT",
-              f"            value: {json.dumps(os.environ.get('SMTP_PORT', '587'))}",
-              "          - name: SMTP_USER",
-              f"            value: {json.dumps(os.environ.get('SMTP_USER', ''))}",
-              "          - name: SMTP_SENDER",
-              f"            value: {json.dumps(os.environ.get('SMTP_SENDER', ''))}",
-              "          - name: GOOGLE_CLIENT_ID",
-              f"            value: {json.dumps(os.environ.get('GOOGLE_CLIENT_ID', ''))}",
-          ]
-          if smtp_pass:
-              lines += ["          - name: SMTP_PASSWORD", "            secretRef: smtp-password"]
-          lines += [
-              "        probes:",
-              "          - type: Startup",
-              "            httpGet:",
-              "              path: /ready",
-              "              port: 8080",
-              "            initialDelaySeconds: 10",
-              "            periodSeconds: 10",
-              "            timeoutSeconds: 5",
-              "            failureThreshold: 18",
-              "          - type: Readiness",
-              "            httpGet:",
-              "              path: /ready",
-              "              port: 8080",
-              "            periodSeconds: 15",
-              "            timeoutSeconds: 5",
-              "            failureThreshold: 3",
-              "          - type: Liveness",
-              "            httpGet:",
-              "              path: /health",
-              "              port: 8080",
-              "            periodSeconds: 30",
-              "            timeoutSeconds: 5",
-              "            failureThreshold: 3",
-              "    scale:",
-              "      minReplicas: 0",
-              "      maxReplicas: 2",
-              "      rules:",
-              "        - name: http-scaling-rule",
-              "          http:",
-              "            metadata:",
-              '              concurrentRequests: "4"',
-          ]
-          with open(yaml_path, "w", encoding="utf-8") as fh:
-              fh.write("\n".join(lines) + "\n")
-          PYEOF
-
-            az containerapp create \
-              --name "${CONTAINER_APP_NAME}" \
-              --resource-group "${RESOURCE_GROUP}" \
-              --yaml "${YAML_FILE}" \
               --only-show-errors >/dev/null
           fi
 
-          FQDN="$(az containerapp show --name "${CONTAINER_APP_NAME}" --resource-group "${RESOURCE_GROUP}" --query "properties.configuration.ingress.fqdn" -o tsv)"
-          REVISION="$(az containerapp show --name "${CONTAINER_APP_NAME}" --resource-group "${RESOURCE_GROUP}" --query "properties.latestRevisionName" -o tsv)"
+          # 5. Verify revision readiness and that new ACR image is active (Requirement 15)
+          FQDN="$(az containerapp show --name "${CONTAINER_APP_NAME}" --resource-group "${RESOURCE_GROUP}" --query "properties.configuration.ingress.fqdn" -o tsv | tr -d '\r')"
           APP_URL="https://${FQDN}"
 
+          echo "Waiting for latest revision to be provisioned with ACR image ${ACR_IMAGE}..."
+          LATEST_REV=""
+          PROV_STATE=""
+          for attempt in $(seq 1 36); do
+            LATEST_REV="$(az containerapp show --name "${CONTAINER_APP_NAME}" --resource-group "${RESOURCE_GROUP}" --query "properties.latestRevisionName" -o tsv 2>/dev/null | tr -d '\r' || true)"
+            if [[ -n "${LATEST_REV}" ]]; then
+              PROV_STATE="$(az containerapp revision show --name "${CONTAINER_APP_NAME}" --resource-group "${RESOURCE_GROUP}" --revision "${LATEST_REV}" --query "properties.provisioningState" -o tsv 2>/dev/null | tr -d '\r' || true)"
+              REV_IMAGE="$(az containerapp revision show --name "${CONTAINER_APP_NAME}" --resource-group "${RESOURCE_GROUP}" --revision "${LATEST_REV}" --query "properties.template.containers[0].image" -o tsv 2>/dev/null | tr -d '\r' || true)"
+
+              if [[ "${PROV_STATE}" == "Provisioned" && "${REV_IMAGE}" == "${ACR_IMAGE}" ]]; then
+                echo "Revision '${LATEST_REV}' is successfully Provisioned with image '${REV_IMAGE}' on attempt ${attempt}."
+                break
+              elif [[ "${PROV_STATE}" == "Failed" ]]; then
+                echo "::error::Revision '${LATEST_REV}' provisioning failed."
+                az containerapp revision show --name "${CONTAINER_APP_NAME}" --resource-group "${RESOURCE_GROUP}" --revision "${LATEST_REV}" -o json || true
+                exit 1
+              else
+                echo "Attempt ${attempt}/36: Revision '${LATEST_REV}' provisioningState='${PROV_STATE}', image='${REV_IMAGE}'..."
+              fi
+            fi
+            sleep 5
+          done
+
+          if [[ "${PROV_STATE}" != "Provisioned" ]]; then
+            echo "::error::Revision '${LATEST_REV}' did not reach Provisioned state within 180s (current state: '${PROV_STATE}')."
+            exit 1
+          fi
+
           echo "app_url=${APP_URL}" >> "$GITHUB_OUTPUT"
-          echo "revision=${REVISION}" >> "$GITHUB_OUTPUT"
+          echo "revision=${LATEST_REV}" >> "$GITHUB_OUTPUT"
+          echo "acr_image=${ACR_IMAGE}" >> "$GITHUB_OUTPUT"
 
       - name: Verify live Azure Container App endpoints
         if: ${{ inputs.deploy_to_azure }}
@@ -642,10 +629,13 @@ jobs:
           echo "Verified live Azure frontend homepage."
 
           {
-            echo "### InfraVision Azure Deployment Summary"
+            echo "### InfraVision Azure Container Apps (ACR) Deployment Summary"
             echo "- **Production URL:** ${APP_URL}"
             echo "- **Active Revision:** \`${REVISION}\`"
-            echo "- **Immutable Image:** \`${{ steps.meta.outputs.sha_image }}\`"
+            echo "- **ACR Login Server:** \`${{ steps.acr.outputs.acr_server }}\`"
+            echo "- **Immutable ACR Image:** \`${{ steps.deploy.outputs.acr_image }}\`"
+            echo "- **ACR Digest:** \`${{ steps.acr.outputs.acr_digest }}\`"
+            echo "- **Managed Identity:** \`infravision-identity\` (AcrPull)"
             echo "- **SavedModel Version:** \`${EXPECTED_MODEL_VERSION}\`"
             echo "- **Verified Endpoints:** \`/health\`, \`/ready\`, \`/api/health\`, \`/api/reports/public/recent\`, \`/\`"
           } >> "$GITHUB_STEP_SUMMARY"

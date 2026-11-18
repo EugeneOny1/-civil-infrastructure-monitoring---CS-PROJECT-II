@@ -292,6 +292,12 @@ class TestAzureDeploymentReadiness(unittest.TestCase):
             'RUNTIME_CLIENT_ID' in wf or 'AZURE_RUNTIME_CLIENT_ID' in wf,
             "Deployment workflow must support runtime managed identity resolution"
         )
+        for acr_expected in (
+            'ACR_NAME',
+            'az acr login',
+            'infravision:sha-${GITHUB_SHA}',
+        ):
+            self.assertIn(acr_expected, wf)
 
         cs = cs_path.read_text(encoding='utf-8')
         for expected in (
