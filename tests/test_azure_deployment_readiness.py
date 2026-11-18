@@ -391,22 +391,30 @@ class TestAzureDeploymentReadiness(unittest.TestCase):
         self.assertTrue(all(isinstance(op, UpdateOne) for op in ops))
 
     def test_13_aca_coordinated_update_payload_and_heredoc_syntax(self):
-        """Verifies ACA coordinated update Python heredoc syntax and config transformation logic."""
+        """Verifies ACA coordinated update script invocation, YAML syntax, and config transformation logic."""
         import json
         import re
+        import yaml
         from backend.scripts.prepare_aca_update import transform_aca_config
 
         wf_path = REPO_ROOT / '.github' / 'workflows' / 'deploy-azure.yml'
         wf_content = wf_path.read_text(encoding='utf-8')
 
-        # 1. No malformed heredoc or trailing herestring redirection
+        # 1. Workflow file must be valid YAML (no YAML syntax errors)
+        try:
+            parsed_yaml = yaml.safe_load(wf_content)
+            self.assertIsInstance(parsed_yaml, dict)
+        except Exception as e:
+            self.fail(f"deploy-azure.yml is not valid YAML: {e}")
+
+        # 2. No malformed heredoc or trailing herestring redirection, uses dedicated script
         self.assertNotIn('PYEOF <<<', wf_content, "deploy-azure.yml must not contain malformed heredoc herestring syntax (PYEOF <<<)")
+        self.assertIn('prepare_aca_update.py', wf_content, "deploy-azure.yml must invoke backend/scripts/prepare_aca_update.py for clean execution")
         self.assertNotIn('az containerapp registry set', wf_content.split('Applying coordinated ACR registry')[1] if 'Applying coordinated ACR registry' in wf_content else '',
                          "Coordinated recovery must not invoke standalone 'az containerapp registry set' which reprovisions obsolete GHCR images")
 
-        # 2. Extract and compile Python heredocs from workflow to verify syntax
+        # 3. Any Python heredocs in workflow must compile without SyntaxError
         heredocs = re.findall(r"<<'PYEOF'(.*?)PYEOF", wf_content, re.DOTALL)
-        self.assertGreaterEqual(len(heredocs), 1, "Expected at least one PYEOF heredoc in deploy-azure.yml")
         for idx, code in enumerate(heredocs):
             try:
                 compile(code, f'<deploy_workflow_heredoc_{idx}>', 'exec')

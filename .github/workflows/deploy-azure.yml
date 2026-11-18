@@ -451,66 +451,14 @@ jobs:
 
           az containerapp show --name "${CONTAINER_APP_NAME}" --resource-group "${RESOURCE_GROUP}" -o json > "${APP_JSON_FILE}"
 
-          python3 - "${APP_JSON_FILE}" "${UPDATE_YAML}" "${ACR_SERVER}" "${RUNTIME_IDENTITY_ID}" "${ACR_IMAGE}" "${EXPECTED_MODEL_VERSION}" "${RUNTIME_CLIENT_ID}" <<'PYEOF'
-import json, sys
-
-in_path, out_path, acr_server, identity_id, acr_image, expected_model, runtime_client_id = sys.argv[1:8]
-
-with open(in_path, 'r', encoding='utf-8') as fh:
-    app_data = json.load(fh)
-
-props = app_data.get('properties', {})
-config = props.setdefault('configuration', {})
-
-# Coordinated registry configuration: Managed identity for ACR
-config['registries'] = [
-    {
-        'server': acr_server,
-        'identity': identity_id
-    }
-]
-
-# Clean up obsolete GHCR token references from secrets (Requirement 12)
-if 'secrets' in config and isinstance(config['secrets'], list):
-    config['secrets'] = [s for s in config['secrets'] if s.get('name') != 'ghcr-token']
-
-# Coordinated template update: Update container image to ACR
-template = props.setdefault('template', {})
-# Express consumption environment does not support custom revision suffixes (Requirement 13)
-template.pop('revisionSuffix', None)
-
-containers = template.setdefault('containers', [])
-if containers:
-    containers[0]['image'] = acr_image
-    # Preserve existing environment variables and update model telemetry/identity
-    envs = containers[0].setdefault('env', [])
-    env_dict = {e.get('name'): e for e in envs if 'name' in e}
-
-    for k, v in [
-        ('MODEL_VERSION', expected_model),
-        ('REQUIRE_PERSISTENT_DB', 'True'),
-        ('AZURE_CLIENT_ID', runtime_client_id),
-    ]:
-        if k in env_dict:
-            env_dict[k]['value'] = v
-        else:
-            envs.append({'name': k, 'value': v})
-
-# Construct clean resource payload for coordinated az containerapp update --yaml
-clean_payload = {
-    'location': app_data.get('location'),
-    'properties': {
-        'managedEnvironmentId': props.get('managedEnvironmentId'),
-        'configuration': config,
-        'template': template
-    }
-}
-if 'identity' in app_data:
-    clean_payload['identity'] = app_data['identity']
-
-with open(out_path, 'w', encoding='utf-8') as fh:
-    json.dump(clean_payload, fh, indent=2)
-PYEOF
+          python3 backend/scripts/prepare_aca_update.py \
+            "${APP_JSON_FILE}" \
+            "${UPDATE_YAML}" \
+            "${ACR_SERVER}" \
+            "${RUNTIME_IDENTITY_ID}" \
+            "${ACR_IMAGE}" \
+            "${EXPECTED_MODEL_VERSION}" \
+            "${RUNTIME_CLIENT_ID}"
 
           echo "Applying coordinated ACR registry and container image update via YAML..."
           UPDATE_EXIT=0

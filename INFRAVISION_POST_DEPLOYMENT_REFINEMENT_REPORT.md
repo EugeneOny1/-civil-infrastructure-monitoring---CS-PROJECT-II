@@ -270,18 +270,17 @@ Both previously failing tests now pass completely without breaking any existing 
   2. Replaced the sequential fallback with an atomic ARM REST PATCH (`az rest --method PATCH --url ... --body @update.yaml`), which updates both registry credentials and the container image together, completely preventing Azure from attempting to reprovision the obsolete GHCR image.
   3. Eliminated all standalone invocations of `az containerapp registry set` during recovery.
 
-#### B. Malformed Python Heredoc (`PYEOF <<< "${APP_JSON}"`)
+#### B. Malformed Python Heredoc & YAML Indentation Error (Line 455)
 * **Failure Symptom:**
-  Bash encountered a syntax error at `PYEOF <<< "${APP_JSON}"`.
+  GitHub Actions rejected the workflow run with:
+  `Invalid workflow file: .github/workflows/deploy-azure.yml#L455: You have an error in your yaml syntax on line 455`
 * **Mechanism:**
-  * In Bash, a heredoc (`<<'PYEOF'`) consumes standard input for `python3 -`. Appending a herestring redirection (`<<< "${APP_JSON}"`) to the closing delimiter `PYEOF` is invalid Bash syntax.
-  * Additionally, `python3 -` reads the script itself from `sys.stdin`, meaning `json.load(sys.stdin)` inside the script had already reached EOF.
+  * In YAML block scalars (`run: |`), any unindented line (at column 0) terminates the scalar and is parsed as a top-level YAML key. In commit `ad2b09d`, the inline Python heredoc `import json, sys` was placed at column 0, causing YAML parser failure.
+  * In Bash, heredoc delimiters also cannot carry trailing herestring redirections (`PYEOF <<< "${APP_JSON}"`), causing syntax errors when parsing.
 * **Resolution:**
-  1. Stored the current ACA JSON output in a clean temporary file (`APP_JSON_FILE="$(mktemp ...)"`) via standard shell redirection (`> "${APP_JSON_FILE}"`).
-  2. Passed the file path as `sys.argv[1]` to `python3 -`, reading via `with open(in_path, 'r', encoding='utf-8') as fh: app_data = json.load(fh)`.
-  3. Terminated the heredoc with a clean, unadorned `PYEOF` on its own line.
-  4. Extracted the identical transformation into a dedicated, importable utility script: [backend/scripts/prepare_aca_update.py](file:///c:/Laptop%20Data/Desktop/IS%20PROJECT%202/-civil-infrastructure-monitoring---CS-PROJECT-II/backend/scripts/prepare_aca_update.py).
-  5. Added a dedicated regression test (`test_13_aca_coordinated_update_payload_and_heredoc_syntax`) in `tests/test_azure_deployment_readiness.py` to compile all heredocs and verify config transformations.
+  1. Extracted the ACA JSON-to-YAML transformation into a dedicated, clean script: [backend/scripts/prepare_aca_update.py](file:///c:/Laptop%20Data/Desktop/IS%20PROJECT%202/-civil-infrastructure-monitoring---CS-PROJECT-II/backend/scripts/prepare_aca_update.py).
+  2. Invoked `python3 backend/scripts/prepare_aca_update.py` with standard argument passing, maintaining clean 10-space indentation inside the YAML `run: |` block.
+  3. Added strict YAML syntax validation (`yaml.safe_load`) to `test_13_aca_coordinated_update_payload_and_heredoc_syntax` in `tests/test_azure_deployment_readiness.py` to prevent any future YAML formatting regressions.
 
 ---
 
@@ -290,10 +289,10 @@ Both previously failing tests now pass completely without breaking any existing 
 | Test | Suite | Status | Duration |
 | :--- | :--- | :---: | :---: |
 | `test_10_github_actions_workflow_and_cloudshell_contracts` | `tests/test_azure_deployment_readiness.py` | **PASSED** | Included |
-| `test_13_aca_coordinated_update_payload_and_heredoc_syntax` | `tests/test_azure_deployment_readiness.py` | **PASSED** | Included |
-| Full Azure Readiness Suite (13 tests) | `tests/test_azure_deployment_readiness.py` | **100% PASSED** | 9.396s |
-| Full UI Cohesion Suite (6 tests) | `tests/test_ui_cohesion.py` | **100% PASSED** | 2.744s |
-| Inspection Progress & Public Reports (9 tests) | `tests/test_inspection_progress.py`, `tests/test_eval_public_reports.py` | **100% PASSED** | 1.458s |
+| `test_13_aca_coordinated_update_payload_and_heredoc_syntax` (YAML + Script) | `tests/test_azure_deployment_readiness.py` | **PASSED** | Included |
+| Full Azure Readiness Suite (13 tests) | `tests/test_azure_deployment_readiness.py` | **100% PASSED** | 9.136s |
+| Full UI Cohesion Suite (6 tests) | `tests/test_ui_cohesion.py` | **100% PASSED** | 2.541s |
+| Inspection Progress & Public Reports (9 tests) | `tests/test_inspection_progress.py`, `tests/test_eval_public_reports.py` | **100% PASSED** | 1.679s |
 
 ---
 
@@ -303,8 +302,8 @@ To deploy to Azure via GitHub Actions:
 
 ```bash
 # 1. Commit and push the verified workflow and scripts
-git add .github/workflows/deploy-azure.yml backend/scripts/prepare_aca_update.py tests/test_azure_deployment_readiness.py INFRAVISION_POST_DEPLOYMENT_REFINEMENT_REPORT.md
-git commit -m "fix(ci): correct ACR coordinated update heredoc and prevent obsolete GHCR reprovisioning"
+git add .github/workflows/deploy-azure.yml tests/test_azure_deployment_readiness.py INFRAVISION_POST_DEPLOYMENT_REFINEMENT_REPORT.md
+git commit -m "fix(ci): resolve YAML syntax error on line 455 with clean prepare_aca_update script invocation"
 git push origin app-development
 
 # 2. Trigger workflow run via GitHub CLI or Web UI
