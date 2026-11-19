@@ -104,6 +104,10 @@ class EmailService:
             return False
         return self.is_demo_mode()
 
+    def is_acs_enabled(self) -> bool:
+        """Checks if ENABLE_ACS_EMAIL feature flag is explicitly enabled."""
+        return os.getenv('ENABLE_ACS_EMAIL', 'False').strip().lower() in ('true', '1', 't')
+
     def is_acs_configured(self) -> bool:
         """
         Checks if Azure Communication Services Email (HTTPS) is explicitly enabled
@@ -115,7 +119,7 @@ class EmailService:
                 return False
         except Exception:
             pass
-        if os.getenv('ENABLE_ACS_EMAIL', 'False').strip().lower() not in ('true', '1', 't'):
+        if not self.is_acs_enabled():
             return False
         conn_str = os.getenv('ACS_EMAIL_CONNECTION_STRING', '').strip()
         sender = os.getenv('ACS_EMAIL_SENDER', '').strip()
@@ -156,6 +160,9 @@ class EmailService:
         Genuinely verifies whether the active email transport (SMTP primary, or explicitly
         enabled ACS) can connect and authenticate. Does not reveal credentials.
         """
+        if self.is_acs_enabled() and not self.is_acs_configured():
+            return False, "Misconfigured ACS (Missing ACS_EMAIL_CONNECTION_STRING or ACS_EMAIL_SENDER)"
+
         if self.is_acs_configured():
             try:
                 from azure.communication.email import EmailClient  # type: ignore
@@ -272,6 +279,9 @@ class EmailService:
 
         acs_error: Optional[str] = None
         # Priority 1: Azure Communication Services Email (HTTPS Port 443)
+        if self.is_acs_enabled() and not self.is_acs_configured() and not is_testing:
+            acs_error = 'MissingACSConfiguration'
+
         if self.is_acs_configured():
             try:
                 from azure.communication.email import EmailClient  # type: ignore

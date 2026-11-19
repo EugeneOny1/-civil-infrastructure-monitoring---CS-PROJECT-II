@@ -443,6 +443,7 @@ class TestAzureDeploymentReadiness(unittest.TestCase):
                     ],
                     'secrets': [
                         {'name': 'mongo-uri', 'value': 'mongodb+srv://...'},
+                        {'name': 'acs-email-connection-string', 'value': 'endpoint=https://example.communication.azure.com/;accesskey=fake'},
                         {'name': 'ghcr-token', 'value': 'ghp_secret'}
                     ]
                 },
@@ -455,7 +456,10 @@ class TestAzureDeploymentReadiness(unittest.TestCase):
                             'resources': {'cpu': 2.0, 'memory': '4Gi'},
                             'env': [
                                 {'name': 'FLASK_ENV', 'value': 'production'},
-                                {'name': 'MODEL_VERSION', 'value': 'old_model'}
+                                {'name': 'MODEL_VERSION', 'value': 'old_model'},
+                                {'name': 'ENABLE_ACS_EMAIL', 'value': 'true'},
+                                {'name': 'ACS_EMAIL_CONNECTION_STRING', 'secretRef': 'acs-email-connection-string'},
+                                {'name': 'ACS_EMAIL_SENDER', 'value': 'DoNotReply@example.azurecomm.net'}
                             ],
                             'probes': [{'type': 'Readiness', 'httpGet': {'path': '/ready', 'port': 8080}}]
                         }
@@ -493,19 +497,24 @@ class TestAzureDeploymentReadiness(unittest.TestCase):
         self.assertEqual(container['image'], acr_image)
         self.assertNotIn('ghcr.io', container['image'])
 
-        # Confirm ghcr-token secret is purged while mongo-uri is preserved
+        # Confirm ghcr-token secret is purged while mongo-uri and acs-email-connection-string are preserved
         secrets = transformed['properties']['configuration']['secrets']
         self.assertTrue(any(s['name'] == 'mongo-uri' for s in secrets))
+        self.assertTrue(any(s['name'] == 'acs-email-connection-string' for s in secrets))
         self.assertFalse(any(s['name'] == 'ghcr-token' for s in secrets))
 
         # Confirm unsupported revisionSuffix is purged
         self.assertNotIn('revisionSuffix', transformed['properties']['template'])
 
-        # Confirm model version and runtime client ID are updated, and NO production OTP bypass is injected
+        # Confirm model version, runtime client ID, and existing ACS env vars are preserved (no prod OTP bypass)
         env_map = {e['name']: e.get('value') for e in container['env']}
+        env_secret_refs = {e['name']: e.get('secretRef') for e in container['env']}
         self.assertEqual(env_map.get('MODEL_VERSION'), expected_model)
         self.assertEqual(env_map.get('REQUIRE_PERSISTENT_DB'), 'True')
         self.assertEqual(env_map.get('AZURE_CLIENT_ID'), runtime_client_id)
+        self.assertEqual(env_map.get('ENABLE_ACS_EMAIL'), 'true')
+        self.assertEqual(env_secret_refs.get('ACS_EMAIL_CONNECTION_STRING'), 'acs-email-connection-string')
+        self.assertEqual(env_map.get('ACS_EMAIL_SENDER'), 'DoNotReply@example.azurecomm.net')
         self.assertNotIn('ENABLE_PRODUCTION_OTP_FALLBACK', env_map)
 
     def test_14_production_no_otp_fallback_and_smtp_first_transport(self):
@@ -612,6 +621,28 @@ class TestAzureDeploymentReadiness(unittest.TestCase):
             sent_msg = fake_client.begin_send.call_args[0][0]
             self.assertEqual(sent_msg['senderAddress'], 'DoNotReply@infravision.azurecomm.net')
             self.assertEqual(sent_msg['recipients']['to'][0]['address'], 'friend@gmail.com')
+
+        # Missing ACS config when ENABLE_ACS_EMAIL=True returns controlled error and NEVER bypasses auth
+        with mock.patch.dict(os.environ, {
+            'FLASK_ENV': 'production',
+            'ENABLE_ACS_EMAIL': 'True',
+            'ACS_EMAIL_CONNECTION_STRING': '',
+            'ACS_EMAIL_SENDER': '',
+            'SMTP_HOST': '',
+            'SMTP_USER': '',
+            'SMTP_PASSWORD': '',
+        }):
+            ok_health, msg_health = email_service.verify_smtp_health()
+            self.assertFalse(ok_health)
+            self.assertIn('Misconfigured ACS', msg_health)
+            res_missing = email_service.send_otp_email('friend@gmail.com', '654321', 'Friend User')
+            self.assertFalse(res_missing['delivered'])
+            self.assertEqual(res_missing['error'], 'MissingACSConfiguration')
+            self.assertNotIn('demo_code', res_missing)
+
+        # Confirm azure-communication-email is packaged in production requirements manifests
+        for req_path in [REPO_ROOT / 'requirements.txt', REPO_ROOT / 'backend' / 'requirements.txt']:
+            self.assertIn('azure-communication-email', req_path.read_text(encoding='utf-8'))
 
     def test_16_citizen_lifecycle_notifications_deduplication_and_visibility(self):
         """Citizen receives deduplicated notifications for Verified, Under Review, and Resolved linked to My Reports."""
