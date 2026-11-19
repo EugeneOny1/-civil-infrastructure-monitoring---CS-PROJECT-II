@@ -1202,7 +1202,7 @@ const App = {
                 const isUnread = !n.is_read;
                 const timeStr = n.created_at ? new Date(n.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', month: 'short', day: 'numeric' }) : '';
                 const isAdvisory = n.event_type === 'safety_advisory' || n.category === 'safety_advisory' || (n.title && n.title.includes('Safety Advisory'));
-                const isCitizenLifecycle = ['verified', 'resolved', 'override'].includes(n.event_type) || (!isAdvisory && n.report_id && this.currentUser?.role === 'citizen');
+                const isCitizenLifecycle = ['verified', 'under_review', 'resolved', 'override'].includes(n.event_type) || (!isAdvisory && n.report_id && this.currentUser?.role === 'citizen');
                 const isEngineerReview = !isAdvisory && n.report_id && (this.currentUser?.role === 'engineer');
                 const isAdminGovernance = !isAdvisory && (this.currentUser?.role === 'admin' && (n.event_type === 'engineer_registered' || !n.report_id));
 
@@ -1250,9 +1250,10 @@ const App = {
                     } catch (e) {
                         console.warn("Failed to mark notification read:", e);
                     }
+                    const wasUnread = item.classList.contains('unread');
                     item.classList.remove('unread');
                     const currentBadge = document.getElementById('notificationBadge');
-                    if (currentBadge && !currentBadge.classList.contains('hidden')) {
+                    if (wasUnread && currentBadge && !currentBadge.classList.contains('hidden')) {
                         const count = parseInt(currentBadge.textContent, 10) || 1;
                         if (count <= 1) {
                             currentBadge.classList.add('hidden');

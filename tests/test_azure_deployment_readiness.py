@@ -501,11 +501,199 @@ class TestAzureDeploymentReadiness(unittest.TestCase):
         # Confirm unsupported revisionSuffix is purged
         self.assertNotIn('revisionSuffix', transformed['properties']['template'])
 
-        # Confirm model version and runtime client ID are updated
+        # Confirm model version and runtime client ID are updated, and NO production OTP bypass is injected
         env_map = {e['name']: e.get('value') for e in container['env']}
         self.assertEqual(env_map.get('MODEL_VERSION'), expected_model)
         self.assertEqual(env_map.get('REQUIRE_PERSISTENT_DB'), 'True')
         self.assertEqual(env_map.get('AZURE_CLIENT_ID'), runtime_client_id)
+        self.assertNotIn('ENABLE_PRODUCTION_OTP_FALLBACK', env_map)
+
+    def test_14_production_no_otp_fallback_and_smtp_first_transport(self):
+        """Production NEVER exposes OTP fallback; Gmail SMTP (587 STARTTLS / 465 SSL) is primary."""
+        from unittest import mock
+        from app.services.email_service import email_service
+
+        smtp_failed = {'delivered': False, 'method': 'smtp_failed_fallback'}
+
+        # Even if env var is set, production runtime NEVER exposes fallback OTP
+        with mock.patch.dict(os.environ, {
+            'FLASK_ENV': 'production',
+            'ENABLE_PRODUCTION_OTP_FALLBACK': 'True',
+            'ENABLE_DEMO_OTP': 'True',
+        }):
+            self.assertFalse(email_service.is_demo_mode())
+            self.assertFalse(email_service.should_expose_fallback_otp('Eugene.Odhiambo@strathmore.edu', smtp_failed))
+            self.assertFalse(email_service.should_expose_fallback_otp('Eugene.Odhiambo1604@gmail.com', smtp_failed))
+
+        # Verify Gmail SMTP (port 587 STARTTLS) is primary and uses EHLO -> STARTTLS -> EHLO -> login -> sendmail
+        fake_smtp = mock.MagicMock()
+        with mock.patch('app.services.email_service.smtplib.SMTP', return_value=fake_smtp) as mock_smtp_cls, \
+             mock.patch.dict(os.environ, {
+                 'FLASK_ENV': 'production',
+                 'SMTP_HOST': 'smtp.gmail.com',
+                 'SMTP_PORT': '587',
+                 'SMTP_USER': 'infravision.system@gmail.com',
+                 'SMTP_PASSWORD': 'test-app-password-only',
+                 'SMTP_SENDER': 'infravision.system@gmail.com',
+                 'SMTP_USE_TLS': 'True',
+                 'ENABLE_ACS_EMAIL': 'False',
+                 'ACS_EMAIL_CONNECTION_STRING': 'endpoint=https://ignored.communication.azure.com/;accesskey=fake',
+                 'ACS_EMAIL_SENDER': 'DoNotReply@ignored.azurecomm.net',
+             }):
+            res = email_service.send_otp_email('citizen@example.com', '123456', 'Test Citizen')
+            self.assertTrue(res['delivered'])
+            self.assertEqual(res['method'], 'smtp')
+            self.assertNotIn('demo_code', res)
+            mock_smtp_cls.assert_called_once_with('smtp.gmail.com', 587, timeout=10)
+            self.assertEqual(fake_smtp.ehlo.call_count, 2)
+            fake_smtp.starttls.assert_called_once()
+            fake_smtp.login.assert_called_once_with('infravision.system@gmail.com', 'test-app-password-only')
+            fake_smtp.sendmail.assert_called_once()
+
+        # Verify port 465 uses SMTP_SSL
+        fake_ssl = mock.MagicMock()
+        with mock.patch('app.services.email_service.smtplib.SMTP_SSL', return_value=fake_ssl) as mock_ssl_cls, \
+             mock.patch.dict(os.environ, {
+                 'FLASK_ENV': 'production',
+                 'SMTP_HOST': 'smtp.gmail.com',
+                 'SMTP_PORT': '465',
+                 'SMTP_USER': 'infravision.system@gmail.com',
+                 'SMTP_PASSWORD': 'test-app-password-only',
+                 'ENABLE_ACS_EMAIL': 'False',
+             }):
+            res_ssl = email_service.send_otp_email('citizen@example.com', '654321', 'Test Citizen')
+            self.assertTrue(res_ssl['delivered'])
+            self.assertEqual(res_ssl['method'], 'smtp')
+            mock_ssl_cls.assert_called_once_with('smtp.gmail.com', 465, timeout=10)
+
+    def test_15_acs_email_optional_inactive_by_default_and_works_when_explicitly_enabled(self):
+        """ACS Email remains inactive by default and works over HTTPS only when ENABLE_ACS_EMAIL=True."""
+        import types
+        from unittest import mock
+        from app.services.email_service import email_service
+
+        # Inactive by default even if connection string and sender are present
+        with mock.patch.dict(os.environ, {
+            'ENABLE_ACS_EMAIL': 'False',
+            'ACS_EMAIL_CONNECTION_STRING': 'endpoint=https://infravision-acs.communication.azure.com/;accesskey=fakekey',
+            'ACS_EMAIL_SENDER': 'DoNotReply@infravision.azurecomm.net',
+        }):
+            self.assertFalse(email_service.is_acs_configured())
+
+        fake_poller = mock.MagicMock()
+        fake_poller.result.return_value = {'status': 'Succeeded'}
+        fake_client = mock.MagicMock()
+        fake_client.begin_send.return_value = fake_poller
+
+        fake_email_cls = mock.MagicMock()
+        fake_email_cls.from_connection_string.return_value = fake_client
+
+        fake_acs_email_mod = types.ModuleType('azure.communication.email')
+        fake_acs_email_mod.EmailClient = fake_email_cls  # type: ignore
+        fake_acs_comm_mod = types.ModuleType('azure.communication')
+        fake_acs_comm_mod.email = fake_acs_email_mod  # type: ignore
+
+        with mock.patch.dict(sys.modules, {
+            'azure.communication': fake_acs_comm_mod,
+            'azure.communication.email': fake_acs_email_mod,
+        }), mock.patch.dict(os.environ, {
+            'FLASK_ENV': 'production',
+            'ENABLE_ACS_EMAIL': 'True',
+            'ACS_EMAIL_CONNECTION_STRING': 'endpoint=https://infravision-acs.communication.azure.com/;accesskey=fakekey',
+            'ACS_EMAIL_SENDER': 'DoNotReply@infravision.azurecomm.net',
+        }):
+            self.assertTrue(email_service.is_acs_configured())
+            res = email_service.send_otp_email('friend@gmail.com', '654321', 'Friend User')
+            self.assertTrue(res['delivered'])
+            self.assertEqual(res['method'], 'azure_communication_services')
+            self.assertNotIn('demo_code', res)
+
+            fake_client.begin_send.assert_called_once()
+            sent_msg = fake_client.begin_send.call_args[0][0]
+            self.assertEqual(sent_msg['senderAddress'], 'DoNotReply@infravision.azurecomm.net')
+            self.assertEqual(sent_msg['recipients']['to'][0]['address'], 'friend@gmail.com')
+
+    def test_16_citizen_lifecycle_notifications_deduplication_and_visibility(self):
+        """Citizen receives deduplicated notifications for Verified, Under Review, and Resolved linked to My Reports."""
+        from app.services.notification_service import notification_service
+        from app.services.database import db_service
+
+        cit_a = 'cit_notif_owner_a'
+        cit_b = 'cit_notif_other_b'
+        rep_id = 'REP-NOTIF-LIFECYCLE-001'
+
+        # Clean isolated mock store entries for this test
+        db_service.delete_many('citizen_notifications', {'report_id': rep_id})
+
+        # 1. Received -> Verified (with Engineer override summary)
+        n1 = notification_service.notify_citizen_report_status(
+            submitter_id=cit_a,
+            report_id=rep_id,
+            previous_status='Received',
+            new_status='Verified',
+            decision='Overridden',
+            override_details={'override_class': 'Pothole', 'override_severity': 'Critical'},
+            original_class='Crack',
+            original_severity='Medium',
+            notes='Deep structural cavity confirmed.',
+        )
+        self.assertIsNotNone(n1)
+        self.assertEqual(n1['event_type'], 'override')
+        self.assertIn('Crack → Pothole', n1['message'])
+        self.assertEqual(n1['metadata']['target_view'], 'view-tracking')
+        self.assertEqual(n1['metadata']['report_id'], rep_id)
+
+        # Duplicate save on same status MUST NOT create a duplicate notification
+        n1_dup = notification_service.notify_citizen_report_status(
+            submitter_id=cit_a,
+            report_id=rep_id,
+            previous_status='Verified',
+            new_status='Verified',
+        )
+        self.assertIsNone(n1_dup)
+        n1_dup2 = notification_service.notify_citizen_report_status(
+            submitter_id=cit_a,
+            report_id=rep_id,
+            previous_status='Received',
+            new_status='Verified',
+        )
+        self.assertIsNone(n1_dup2)
+
+        # 2. Verified -> Under Review
+        n2 = notification_service.notify_citizen_report_status(
+            submitter_id=cit_a,
+            report_id=rep_id,
+            previous_status='Verified',
+            new_status='Under Review',
+            notes='Assigned for field inspection.',
+        )
+        self.assertIsNotNone(n2)
+        self.assertEqual(n2['event_type'], 'under_review')
+        self.assertEqual(n2['title'], 'Report Under Review')
+        self.assertEqual(n2['metadata']['target_view'], 'view-tracking')
+
+        # 3. Under Review -> Resolved
+        n3 = notification_service.notify_citizen_report_status(
+            submitter_id=cit_a,
+            report_id=rep_id,
+            previous_status='Under Review',
+            new_status='Resolved',
+            notes='Pavement patched and resurfaced.',
+        )
+        self.assertIsNotNone(n3)
+        self.assertEqual(n3['event_type'], 'resolved')
+        self.assertEqual(n3['title'], 'Report Resolved')
+
+        # Verify total count is exactly 3 for cit_a and 0 for cit_b (strict isolation)
+        notifs_a = notification_service.get_user_notifications(cit_a)
+        rep_notifs_a = [n for n in notifs_a if n.get('report_id') == rep_id]
+        self.assertEqual(len(rep_notifs_a), 3)
+
+        notifs_b = notification_service.get_user_notifications(cit_b)
+        rep_notifs_b = [n for n in notifs_b if n.get('report_id') == rep_id]
+        self.assertEqual(len(rep_notifs_b), 0)
+
+        db_service.delete_many('citizen_notifications', {'report_id': rep_id})
 
 
 if __name__ == '__main__':

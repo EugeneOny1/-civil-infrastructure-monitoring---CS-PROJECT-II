@@ -54,12 +54,20 @@ class TestApiWorkflow(unittest.TestCase):
                 cls.test_image_path = fallback_img
         cls.created_report_ids = []
 
-        # Login as citizen
+        # Login as citizen (handles email + password OTP)
         res = cls.client.post('/api/auth/login', json={
             'email': 'citizen@strathmore.edu',
             'password': 'Citizen@123'
         })
-        cls.citizen_token = res.get_json().get('token')
+        cit_data = res.get_json() or {}
+        if cit_data.get('require_2fa'):
+            res_cit_2fa = cls.client.post('/api/auth/verify-2fa', json={
+                'user_id': cit_data.get('user_id'),
+                'otp': cit_data.get('demo_otp')
+            })
+            cls.citizen_token = res_cit_2fa.get_json().get('token')
+        else:
+            cls.citizen_token = cit_data.get('token')
 
         # Login as engineer (handles mandatory 2FA)
         res_eng = cls.client.post('/api/auth/login', json={

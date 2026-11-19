@@ -31,7 +31,7 @@ def register():
     engineering_category = (data.get('engineering_category') or data.get('professional_category') or 'Professional Engineer').strip()
     professional_reg_no = data.get('professional_reg_no', '').strip()
     phone = data.get('phone', '').strip()
-    two_factor_enabled = bool(data.get('two_factor_enabled', False))
+    two_factor_enabled = bool(data.get('two_factor_enabled', True))
 
     if not name or not email or not password:
         return jsonify({'error': 'Full name, email address, and password are required.'}), 400
@@ -126,9 +126,9 @@ def login():
 
     user = User.from_dict(user_data)
 
-    # 2FA is mandatory for engineers and administrators, or if explicitly enabled
-    is_privileged = user.role in ['engineer', 'admin']
-    has_2fa = is_privileged or user.two_factor_enabled or data.get('require_2fa') is True
+    # Email + password login always requires email OTP verification
+    # (Citizens using Google Sign-In bypass OTP directly via /api/auth/google)
+    has_2fa = True
 
     # If 2FA is required and OTP was provided in this request, verify it
     if has_2fa and otp_code:
@@ -188,8 +188,17 @@ def login():
         expiry_seconds = email_service.get_expiry_seconds()
         expiry_utc = now_utc + timedelta(seconds=expiry_seconds)
 
-        # Dispatch real email via SMTP service
+        # Dispatch real email via configured transport (SMTP primary, optional ACS)
         dispatch_result = email_service.send_otp_email(email, otp, user.name)
+        can_fallback = email_service.should_expose_fallback_otp(email, dispatch_result)
+
+        if not dispatch_result.get('delivered', False) and not can_fallback:
+            return jsonify({
+                'error': 'Unable to deliver verification code email at this time. Please try again later or contact the system administrator.',
+                'require_2fa': True,
+                'smtp_delivered': False,
+                'enable_demo_otp': False
+            }), 503
 
         db_service.update_one('users', {'_id': user_data['_id']}, {
             'two_factor_otp': otp,
@@ -198,7 +207,6 @@ def login():
             'otp_dispatched_at': now_utc.isoformat()
         })
 
-        can_fallback = email_service.should_expose_fallback_otp(email, dispatch_result)
         resp_payload = {
             'require_2fa': True,
             'user_id': str(user_data['_id']),
@@ -341,6 +349,14 @@ def resend_otp():
     expiry_utc = now_utc + timedelta(seconds=expiry_seconds)
 
     dispatch_result = email_service.send_otp_email(email, otp, user_data.get('name', 'User'))
+    can_fallback = email_service.should_expose_fallback_otp(email, dispatch_result)
+
+    if not dispatch_result.get('delivered', False) and not can_fallback:
+        return jsonify({
+            'error': 'Unable to deliver a fresh verification code email at this time. Please try again later.',
+            'smtp_delivered': False,
+            'enable_demo_otp': False
+        }), 503
 
     recent_sends.append(now_utc.isoformat())
     db_service.update_one('users', {'_id': user_data['_id']}, {
@@ -351,7 +367,6 @@ def resend_otp():
         'otp_send_history': recent_sends
     })
 
-    can_fallback = email_service.should_expose_fallback_otp(email, dispatch_result)
     res_payload = {
         'message': f'A fresh verification code has been dispatched to {email}.',
         'expires_at': expiry_utc.isoformat(),
@@ -549,8 +564,17 @@ def google_auth():
         now_utc = datetime.now(timezone.utc)
         expiry_utc = now_utc + timedelta(seconds=expiry_seconds)
 
-        # Dispatch real OTP email (or demo fallback)
+        # Dispatch real OTP email (or dev/test fallback)
         dispatch_result = email_service.send_otp_email(user.email, otp, user.name)
+        can_fallback = email_service.should_expose_fallback_otp(user.email, dispatch_result)
+
+        if not dispatch_result.get('delivered', False) and not can_fallback:
+            return jsonify({
+                'error': 'Unable to deliver verification code email at this time. Please try again later or contact the system administrator.',
+                'require_2fa': True,
+                'smtp_delivered': False,
+                'enable_demo_otp': False
+            }), 503
 
         send_history = (existing_user.get('otp_send_history', []) if existing_user else [])
         send_history.append(now_utc.isoformat())
@@ -564,7 +588,6 @@ def google_auth():
             'otp_send_history': send_history
         })
 
-        can_fallback = email_service.should_expose_fallback_otp(user.email, dispatch_result)
         res_payload = {
             'require_2fa': True,
             'email': user.email,

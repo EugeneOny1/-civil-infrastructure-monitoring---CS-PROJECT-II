@@ -42,6 +42,110 @@ class NotificationService:
         return doc
 
     @staticmethod
+    def notify_citizen_report_status(
+        submitter_id: str,
+        report_id: str,
+        previous_status: str,
+        new_status: str,
+        decision: str = '',
+        override_details: dict = None,
+        original_class: str = 'Defect',
+        original_severity: str = 'Low',
+        notes: str = '',
+        next_action: str = '',
+        follow_up_date: str = '',
+    ):
+        """
+        Dispatches a deduplicated Citizen notification for canonical report lifecycle transitions:
+        - Verified (including concise Engineer override details when applicable)
+        - Under Review
+        - Resolved
+
+        Prevents duplicate notifications on unchanged states or repeated saves for the same stage.
+        Links to the Citizen My Reports view ('view-tracking') selecting report_id.
+        """
+        if not submitter_id or not report_id or not new_status:
+            return None
+
+        prev_norm = str(previous_status or '').strip().lower()
+        new_norm = str(new_status or '').strip().lower()
+        if prev_norm == new_norm:
+            return None
+
+        # Only emit citizen status notifications for the 3 canonical post-submission stages
+        if new_norm not in ('verified', 'under review', 'resolved'):
+            return None
+
+        # Deduplication guard: avoid repeating a notification for the same (user, report, stage)
+        existing = db_service.find('citizen_notifications', {
+            'user_id': str(submitter_id),
+            'report_id': str(report_id)
+        })
+        for n in existing:
+            meta = n.get('metadata') or {}
+            if str(meta.get('target_status', '')).strip().lower() == new_norm:
+                return None
+            # Also honor legacy notifications created before metadata.target_status was added
+            if new_norm == 'verified' and n.get('event_type') in ('verified', 'override'):
+                return None
+            if new_norm == 'under review' and n.get('event_type') == 'under_review':
+                return None
+            if new_norm == 'resolved' and n.get('event_type') == 'resolved':
+                return None
+
+        action_text = f" Next Action: {next_action}." if next_action else ""
+        date_text = (
+            f" Target Inspection: {follow_up_date}."
+            if (follow_up_date and next_action == 'On-site inspection recommended')
+            else ""
+        )
+        notes_clean = str(notes or '').strip()
+
+        if new_norm == 'verified':
+            if str(decision or '').strip().lower() == 'overridden' and override_details:
+                corr_class = override_details.get('override_class') or original_class
+                corr_sev = override_details.get('override_severity') or original_severity
+                changes = []
+                if corr_class and corr_class != original_class:
+                    changes.append(f"{original_class} → {corr_class}")
+                if corr_sev and corr_sev != original_severity:
+                    changes.append(f"{original_severity} → {corr_sev}")
+                change_str = ", ".join(changes) if changes else f"{corr_class} ({corr_sev})"
+                reason_str = f" Reason: {notes_clean}." if notes_clean else ""
+                event_type = 'override'
+                title = 'Assessment Updated'
+                msg = f"Your report has been technically verified with updated assessment: {change_str}.{reason_str}{action_text}{date_text}"
+            else:
+                feedback_str = f" Engineer feedback: {notes_clean}." if notes_clean and notes_clean != 'Confirmed' else ""
+                event_type = 'verified'
+                title = 'Report Verified'
+                msg = f"Your infrastructure defect report has been technically verified.{feedback_str}{action_text}{date_text}"
+        elif new_norm == 'under review':
+            note_str = f" Note: {notes_clean}" if notes_clean else ""
+            event_type = 'under_review'
+            title = 'Report Under Review'
+            msg = f"Your infrastructure defect report is now Under Review by a certified engineer.{note_str}"
+        else:
+            note_str = f" Note: {notes_clean}" if notes_clean else ""
+            event_type = 'resolved'
+            title = 'Report Resolved'
+            msg = f"Your infrastructure defect report has been marked Resolved.{note_str}"
+
+        return NotificationService.create_notification(
+            user_id=str(submitter_id),
+            report_id=str(report_id),
+            event_type=event_type,
+            title=title,
+            message=msg,
+            metadata={
+                'target_status': str(new_status),
+                'previous_status': str(previous_status or ''),
+                'target_view': 'view-tracking',
+                'report_id': str(report_id),
+            },
+        )
+
+    @staticmethod
     def broadcast_notification(audience: str, title: str, message: str, sender_id: str = None, report_id: str = None, event_type: str = 'system_announcement', metadata: dict = None) -> int:
         """
         Dispatches an operational notification to active users matching the target audience.

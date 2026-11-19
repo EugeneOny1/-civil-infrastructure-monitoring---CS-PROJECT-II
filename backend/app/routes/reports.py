@@ -1286,19 +1286,24 @@ def update_report_status(current_user, report_id):
             meta['safety_advisory']['status'] = 'inactive'
             meta['safety_advisory']['closed_at'] = now_iso
 
-        # Dispatch citizen notification on resolution
-        submitter_id = str(report.get('user_id') or meta.get('submitted_by_id') or '')
-        if submitter_id:
-            from ..services.notification_service import notification_service
-            feedback_str = f" Note: {notes}" if notes else ""
-            msg = f"Your infrastructure defect report has been professionally resolved.{feedback_str}"
-            notification_service.create_notification(submitter_id, report_id, 'resolved', 'Report Resolved', msg)
-
+    previous_status = report.get('status', '')
     db_service.update_one('infrastructure_reports', {'_id': report_id}, {
         'status': target_status,
         'metadata': meta,
         'last_updated_at': now_iso
     })
+
+    # Dispatch deduplicated citizen notification AFTER persistence on Verified / Under Review / Resolved
+    submitter_id = str(report.get('user_id') or meta.get('submitted_by_id') or '')
+    if submitter_id:
+        from ..services.notification_service import notification_service
+        notification_service.notify_citizen_report_status(
+            submitter_id=submitter_id,
+            report_id=report_id,
+            previous_status=previous_status,
+            new_status=target_status,
+            notes=notes,
+        )
 
     updated_report = db_service.find_one('infrastructure_reports', {'_id': report_id})
     return jsonify({

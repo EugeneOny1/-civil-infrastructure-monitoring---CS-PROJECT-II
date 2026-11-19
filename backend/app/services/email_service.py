@@ -65,33 +65,64 @@ class EmailService:
             pass
         return int(os.getenv('OTP_MAX_SENDS_PER_HOUR', '5'))
 
+    def _is_production_runtime(self) -> bool:
+        """Returns True when running in production (non-debug, non-testing)."""
+        try:
+            from flask import current_app
+            if current_app:
+                if current_app.config.get('TESTING'):
+                    return False
+                if not current_app.config.get('DEBUG', False):
+                    return True
+        except Exception:
+            pass
+        return os.getenv('FLASK_ENV', 'development').strip().lower() == 'production'
+
     def is_demo_mode(self) -> bool:
         """
         Environment-gated check for controlled OTP verification fallback.
-        Never silently enabled in production: ProductionConfig disables this unless
-        ENABLE_PRODUCTION_OTP_FALLBACK is explicitly set in the environment.
+        Strictly disabled in production: a failed email delivery must never reveal
+        an OTP or grant authentication in production.
         """
+        if self._is_production_runtime():
+            return False
         try:
             from flask import current_app
             if current_app:
                 return bool(current_app.config.get('ENABLE_DEMO_OTP', False))
         except Exception:
             pass
-        if os.getenv('FLASK_ENV', 'development').strip().lower() == 'production':
-            return os.getenv('ENABLE_PRODUCTION_OTP_FALLBACK', 'False').lower() in ('true', '1', 't')
         return os.getenv('ENABLE_DEMO_OTP', 'False').lower() in ('true', '1', 't')
 
     def should_expose_fallback_otp(self, to_email: str, dispatch_result: Optional[Dict[str, Any]] = None) -> bool:
         """
-        Determines whether controlled in-app OTP autofill is available for this challenge:
-        - Strictly disabled in production unless ENABLE_PRODUCTION_OTP_FALLBACK=True.
-        - Enabled across local development / evaluation environments when ENABLE_DEMO_OTP=True
-          so reviewers and demo accounts without accessible inboxes can complete 2FA.
+        Determines whether controlled in-app OTP autofill is available:
+        - NEVER enabled in production (not even for whitelisted accounts).
+        - Enabled only in local development / automated testing when ENABLE_DEMO_OTP=True.
         """
+        if self._is_production_runtime():
+            return False
         return self.is_demo_mode()
 
-    def is_configured(self) -> bool:
-        """Checks if real SMTP transport credentials are configured in the environment."""
+    def is_acs_configured(self) -> bool:
+        """
+        Checks if Azure Communication Services Email (HTTPS) is explicitly enabled
+        and configured. ACS remains inactive unless ENABLE_ACS_EMAIL=true.
+        """
+        try:
+            from flask import current_app
+            if current_app and current_app.config.get('TESTING'):
+                return False
+        except Exception:
+            pass
+        if os.getenv('ENABLE_ACS_EMAIL', 'False').strip().lower() not in ('true', '1', 't'):
+            return False
+        conn_str = os.getenv('ACS_EMAIL_CONNECTION_STRING', '').strip()
+        sender = os.getenv('ACS_EMAIL_SENDER', '').strip()
+        return bool(conn_str and sender)
+
+    def is_smtp_configured(self) -> bool:
+        """Checks if SMTP transport credentials are configured in the environment."""
         try:
             from flask import current_app
             if current_app and current_app.config.get('TESTING'):
@@ -103,12 +134,38 @@ class EmailService:
         password = os.getenv('SMTP_PASSWORD', '').strip()
         return bool(host and user and password)
 
+    def is_configured(self) -> bool:
+        """Checks if real email transport (SMTP primary, or explicitly enabled ACS) is configured."""
+        return self.is_smtp_configured() or self.is_acs_configured()
+
+    def _open_smtp_connection(self, host: str, port: int, use_tls: bool, timeout: int = 10):
+        """Opens an SMTP or SMTP_SSL connection with proper RFC 3207 EHLO/STARTTLS handshake."""
+        if port == 465:
+            server = smtplib.SMTP_SSL(host, port, timeout=timeout)
+            server.ehlo()
+            return server
+        server = smtplib.SMTP(host, port, timeout=timeout)
+        server.ehlo()
+        if use_tls:
+            server.starttls()
+            server.ehlo()
+        return server
+
     def verify_smtp_health(self) -> Tuple[bool, str]:
         """
-        Genuinely verifies whether the configured SMTP server can connect and authenticate.
-        Does not reveal credentials.
+        Genuinely verifies whether the active email transport (SMTP primary, or explicitly
+        enabled ACS) can connect and authenticate. Does not reveal credentials.
         """
-        if not self.is_configured():
+        if self.is_acs_configured():
+            try:
+                from azure.communication.email import EmailClient  # type: ignore
+                conn_str = os.getenv('ACS_EMAIL_CONNECTION_STRING', '').strip()
+                EmailClient.from_connection_string(conn_str)
+                return True, "Operational (Azure Communication Services Email)"
+            except Exception as e:
+                return False, f"Degraded ACS ({type(e).__name__})"
+
+        if not self.is_smtp_configured():
             return False, "Unconfigured (Missing SMTP credentials)"
 
         host = os.getenv('SMTP_HOST', '').strip()
@@ -118,11 +175,7 @@ class EmailService:
         use_tls = os.getenv('SMTP_USE_TLS', 'True').lower() in ('true', '1', 't')
 
         try:
-            server = smtplib.SMTP(host, port, timeout=5)
-            server.ehlo()
-            if use_tls:
-                server.starttls()
-                server.ehlo()
+            server = self._open_smtp_connection(host, port, use_tls, timeout=5)
             if user and password:
                 server.login(user, password)
             server.quit()
@@ -161,7 +214,9 @@ class EmailService:
     def send_otp_email(self, to_email: str, otp_code: str, user_name: str = 'User') -> Dict[str, Any]:
         """
         Dispatches a 6-digit OTP verification email to the user.
-        Uses real SMTP if configured; otherwise prepares demo payload cleanly.
+        Priority 1: Azure Communication Services Email over HTTPS (port 443) when configured.
+        Priority 2: SMTP relay when configured.
+        Priority 3: Controlled evaluation/test fallback when eligible.
         Never logs the active OTP in runtime logs.
         """
         now_utc = datetime.now(timezone.utc)
@@ -169,14 +224,16 @@ class EmailService:
         expiry_minutes = max(1, expiry_seconds // 60)
         expiry_utc = now_utc + timedelta(seconds=expiry_seconds)
 
+        acs_conn_str = os.getenv('ACS_EMAIL_CONNECTION_STRING', '').strip()
+        acs_sender = os.getenv('ACS_EMAIL_SENDER', '').strip()
+
         smtp_host = os.getenv('SMTP_HOST', '').strip()
         smtp_port = int(os.getenv('SMTP_PORT', '587'))
         smtp_user = os.getenv('SMTP_USER', '').strip()
         smtp_password = os.getenv('SMTP_PASSWORD', '').strip()
-        smtp_sender = os.getenv('SMTP_SENDER', 'infravision-alerts@strathmore.edu').strip()
+        smtp_sender = os.getenv('SMTP_SENDER', '').strip() or smtp_user or 'infravision.system@gmail.com'
         use_tls = os.getenv('SMTP_USE_TLS', 'True').lower() in ('true', '1', 't')
 
-        allow_demo_exposure = False
         is_testing = False
         try:
             from flask import current_app
@@ -185,47 +242,87 @@ class EmailService:
         except Exception:
             pass
 
-        if self.is_configured():
+        subject = 'InfraVision Two-Factor Authentication (2FA) Code'
+        text_content = (
+            f"Hello {user_name},\n\n"
+            f"Your 6-digit InfraVision authentication passcode is: {otp_code}\n\n"
+            f"This code will expire in {expiry_minutes} minutes. "
+            "If you did not initiate this login request, please ignore this email and contact your system administrator.\n\n"
+            "Civil Infrastructure Monitoring System - Strathmore University"
+        )
+        html_content = f"""
+        <div style="font-family: -apple-system, BlinkMacSystemFont, 'Montserrat', 'Segoe UI', Roboto, sans-serif; max-width: 560px; margin: 0 auto; padding: 24px; border: 1px solid #e2e8f0; border-radius: 12px; background-color: #ffffff;">
+            <div style="text-align: center; margin-bottom: 20px;">
+                <span style="font-size: 26px; font-weight: 800; color: #0f172a; letter-spacing: -0.5px;">InfraVision</span>
+                <p style="font-size: 13px; color: #64748b; margin-top: 4px;">Civil Infrastructure Defect Monitoring</p>
+            </div>
+            <div style="background-color: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 20px; text-align: center; margin: 24px 0;">
+                <p style="font-size: 13px; color: #475569; margin: 0 0 10px; font-weight: 600;">Your One-Time Authentication Code</p>
+                <span style="font-size: 36px; font-weight: 800; letter-spacing: 8px; color: #0f172a; font-family: monospace;">{otp_code}</span>
+                <p style="font-size: 12px; color: #dc2626; margin: 12px 0 0; font-weight: 500;">Valid for {expiry_minutes} minutes • Single use only</p>
+            </div>
+            <p style="font-size: 13px; color: #334155; line-height: 1.5;">
+                Hello <strong>{user_name}</strong>, enter this verification code to complete your secure sign-in.
+            </p>
+            <p style="font-size: 12px; color: #94a3b8; margin-top: 24px; border-top: 1px solid #e2e8f0; padding-top: 16px;">
+                If you did not initiate this login request, please ignore this email. Your account credentials remain secure.
+            </p>
+        </div>
+        """
+
+        acs_error: Optional[str] = None
+        # Priority 1: Azure Communication Services Email (HTTPS Port 443)
+        if self.is_acs_configured():
+            try:
+                from azure.communication.email import EmailClient  # type: ignore
+                client = EmailClient.from_connection_string(acs_conn_str)
+                acs_message = {
+                    'senderAddress': acs_sender,
+                    'recipients': {
+                        'to': [{'address': to_email, 'displayName': user_name}]
+                    },
+                    'content': {
+                        'subject': subject,
+                        'plainText': text_content,
+                        'html': html_content,
+                    },
+                }
+                poller = client.begin_send(acs_message)
+                acs_result = poller.result(timeout=15)
+                status = (
+                    acs_result.get('status', 'Succeeded')
+                    if isinstance(acs_result, dict)
+                    else getattr(acs_result, 'status', 'Succeeded')
+                )
+                if str(status).lower() != 'failed':
+                    res_acs: Dict[str, Any] = {
+                        'delivered': True,
+                        'method': 'azure_communication_services',
+                        'email': to_email,
+                        'expires_at': expiry_utc.isoformat(),
+                        'expires_in_seconds': expiry_seconds,
+                        'error': None
+                    }
+                    if self.should_expose_fallback_otp(to_email, res_acs):
+                        res_acs['demo_code'] = otp_code
+                    return res_acs
+                acs_error = f"ACSSendStatus:{status}"
+            except Exception as e:
+                acs_error = type(e).__name__
+
+        # Priority 2: SMTP relay (if configured and not in TESTING mode)
+        smtp_ready = (not is_testing) and bool(smtp_host and smtp_user and smtp_password)
+        if smtp_ready:
             try:
                 msg = MIMEMultipart('alternative')
-                msg['Subject'] = 'InfraVision Two-Factor Authentication (2FA) Code'
+                msg['Subject'] = subject
                 msg['From'] = f"InfraVision Security <{smtp_sender}>"
                 msg['To'] = to_email
-
-                text_content = (
-                    f"Hello {user_name},\n\n"
-                    f"Your 6-digit InfraVision authentication passcode is: {otp_code}\n\n"
-                    f"This code will expire in {expiry_minutes} minutes. "
-                    "If you did not initiate this login request, please ignore this email and contact your system administrator.\n\n"
-                    "Civil Infrastructure Monitoring System - Strathmore University"
-                )
-
-                html_content = f"""
-                <div style="font-family: -apple-system, BlinkMacSystemFont, 'Montserrat', 'Segoe UI', Roboto, sans-serif; max-width: 560px; margin: 0 auto; padding: 24px; border: 1px solid #e2e8f0; border-radius: 12px; background-color: #ffffff;">
-                    <div style="text-align: center; margin-bottom: 20px;">
-                        <span style="font-size: 26px; font-weight: 800; color: #0f172a; letter-spacing: -0.5px;">InfraVision</span>
-                        <p style="font-size: 13px; color: #64748b; margin-top: 4px;">Civil Infrastructure Defect Monitoring</p>
-                    </div>
-                    <div style="background-color: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 20px; text-align: center; margin: 24px 0;">
-                        <p style="font-size: 13px; color: #475569; margin: 0 0 10px; font-weight: 600;">Your One-Time Authentication Code</p>
-                        <span style="font-size: 36px; font-weight: 800; letter-spacing: 8px; color: #0f172a; font-family: monospace;">{otp_code}</span>
-                        <p style="font-size: 12px; color: #dc2626; margin: 12px 0 0; font-weight: 500;">Valid for {expiry_minutes} minutes • Single use only</p>
-                    </div>
-                    <p style="font-size: 13px; color: #334155; line-height: 1.5;">
-                        Hello <strong>{user_name}</strong>, enter this verification code to complete your secure sign-in.
-                    </p>
-                    <p style="font-size: 12px; color: #94a3b8; margin-top: 24px; border-top: 1px solid #e2e8f0; padding-top: 16px;">
-                        If you did not initiate this login request, please ignore this email. Your account credentials remain secure.
-                    </p>
-                </div>
-                """
 
                 msg.attach(MIMEText(text_content, 'plain'))
                 msg.attach(MIMEText(html_content, 'html'))
 
-                server = smtplib.SMTP(smtp_host, smtp_port, timeout=10)
-                if use_tls:
-                    server.starttls()
+                server = self._open_smtp_connection(smtp_host, smtp_port, use_tls, timeout=10)
                 if smtp_user and smtp_password:
                     server.login(smtp_user, smtp_password)
 
@@ -252,29 +349,42 @@ class EmailService:
                     'email': to_email,
                     'expires_at': expiry_utc.isoformat(),
                     'expires_in_seconds': expiry_seconds,
-                    'error': type(e).__name__
+                    'error': acs_error or type(e).__name__
                 }
                 if self.should_expose_fallback_otp(to_email, res_fail):
                     res_fail['demo_code'] = otp_code
                 return res_fail
-        else:
-            # Controlled evaluation / test dispatch mode
-            if is_testing:
-                self._demo_last_dispatched[to_email] = {
-                    'otp': otp_code,
-                    'expires_at': expiry_utc.isoformat()
-                }
-            res_fallback: Dict[str, Any] = {
-                'delivered': self.is_demo_mode(),
-                'method': 'controlled_fallback' if self.is_demo_mode() else 'smtp_unconfigured',
+
+        if acs_error:
+            res_acs_fail: Dict[str, Any] = {
+                'delivered': False,
+                'method': 'acs_failed_fallback',
                 'email': to_email,
                 'expires_at': expiry_utc.isoformat(),
                 'expires_in_seconds': expiry_seconds,
-                'note': 'SMTP transport unconfigured.'
+                'error': acs_error
             }
-            if self.should_expose_fallback_otp(to_email, res_fallback):
-                res_fallback['demo_code'] = otp_code
-            return res_fallback
+            if self.should_expose_fallback_otp(to_email, res_acs_fail):
+                res_acs_fail['demo_code'] = otp_code
+            return res_acs_fail
+
+        # Priority 3: Controlled evaluation / test dispatch mode
+        if is_testing:
+            self._demo_last_dispatched[to_email] = {
+                'otp': otp_code,
+                'expires_at': expiry_utc.isoformat()
+            }
+        res_fallback: Dict[str, Any] = {
+            'delivered': self.is_demo_mode(),
+            'method': 'controlled_fallback' if self.is_demo_mode() else 'email_unconfigured',
+            'email': to_email,
+            'expires_at': expiry_utc.isoformat(),
+            'expires_in_seconds': expiry_seconds,
+            'note': 'ACS and SMTP email transports unconfigured.'
+        }
+        if self.should_expose_fallback_otp(to_email, res_fallback):
+            res_fallback['demo_code'] = otp_code
+        return res_fallback
 
 
 # Global singleton instance

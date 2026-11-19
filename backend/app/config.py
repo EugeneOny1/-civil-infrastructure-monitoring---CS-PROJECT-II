@@ -62,7 +62,10 @@ class Config:
     SEVERITY_CRITICAL_THRESHOLD = float(os.getenv('SEVERITY_CRITICAL_THRESHOLD', '0.15')) # >= 15%
     DUPLICATE_IOU_THRESHOLD = float(os.getenv('DUPLICATE_IOU_THRESHOLD', '0.50'))
 
-    # Two-Factor Authentication (2FA) & Real Email Delivery (SMTP)
+    # Two-Factor Authentication (2FA) & Real Email Delivery (SMTP primary; optional ACS HTTPS)
+    ENABLE_ACS_EMAIL = os.getenv('ENABLE_ACS_EMAIL', 'False').lower() in ('true', '1', 't')
+    ACS_EMAIL_CONNECTION_STRING = os.getenv('ACS_EMAIL_CONNECTION_STRING', '').strip()
+    ACS_EMAIL_SENDER = os.getenv('ACS_EMAIL_SENDER', '').strip()
     SMTP_HOST = os.getenv('SMTP_HOST', '').strip()
     SMTP_PORT = int(os.getenv('SMTP_PORT', '587'))
     SMTP_USER = os.getenv('SMTP_USER', '').strip()
@@ -101,9 +104,8 @@ class DevelopmentConfig(Config):
 class ProductionConfig(Config):
     DEBUG = False
     REQUIRE_PERSISTENT_DB = os.getenv('REQUIRE_PERSISTENT_DB', 'True').lower() in ('true', '1', 't')
-    # Never inherit development ENABLE_DEMO_OTP silently in production;
-    # controlled evaluation fallback requires explicit ENABLE_PRODUCTION_OTP_FALLBACK=true
-    ENABLE_DEMO_OTP = os.getenv('ENABLE_PRODUCTION_OTP_FALLBACK', 'False').lower() in ('true', '1', 't')
+    # Production NEVER reveals or bypasses OTP codes (failed delivery must never grant authentication)
+    ENABLE_DEMO_OTP = False
     # Same-origin by default in production unless explicit allowed origins are supplied
     _prod_cors = os.getenv('CORS_ORIGINS', '').strip()
     CORS_ORIGINS = [] if _prod_cors in ('', '*') else [o.strip() for o in _prod_cors.split(',') if o.strip()]

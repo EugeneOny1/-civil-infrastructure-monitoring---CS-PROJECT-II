@@ -277,34 +277,28 @@ def submit_review(current_user, assessment_id):
                 'reviewed_at': now_iso
             }
 
+            previous_status = rep.get('status', '')
             db_service.update_one('infrastructure_reports', {'_id': report_id}, {
                 'status': InfrastructureReport.STATUS_VERIFIED,
                 'metadata': meta
             })
 
-            # Citizen feedback notification on professional review
+            # Citizen feedback notification on persisted transition to Verified
             if submitter_id:
                 from ..services.notification_service import notification_service
-                action_text = f" Next Action: {next_action}." if next_action else ""
-                date_text = f" Target Inspection: {follow_up_date}." if (follow_up_date and next_action == 'On-site inspection recommended') else ""
-                if decision == ProfessionalReview.DECISION_OVERRIDDEN:
-                    orig_class = assessment.get('defect_class', 'Defect')
-                    orig_sev = assessment.get('relative_severity', 'Low')
-                    corr_class = override_details.get('override_class', orig_class)
-                    corr_sev = override_details.get('override_severity', orig_sev)
-                    changes = []
-                    if corr_class != orig_class:
-                        changes.append(f"{orig_class} → {corr_class}")
-                    if corr_sev != orig_sev:
-                        changes.append(f"{orig_sev} → {corr_sev}")
-                    change_str = ", ".join(changes) if changes else f"{corr_class} ({corr_sev})"
-                    reason_str = f" Reason: {comments}." if comments else ""
-                    msg = f"Engineer assessment updated: {change_str}.{reason_str}{action_text}{date_text}"
-                    notification_service.create_notification(submitter_id, report_id, 'override', 'Assessment Updated', msg)
-                else:
-                    feedback_str = f" Engineer feedback: {comments}." if comments and comments != 'Confirmed' else ""
-                    msg = f"Your report has been professionally verified.{feedback_str}{action_text}{date_text}"
-                    notification_service.create_notification(submitter_id, report_id, 'verified', 'Report Verified', msg)
+                notification_service.notify_citizen_report_status(
+                    submitter_id=submitter_id,
+                    report_id=report_id,
+                    previous_status=previous_status,
+                    new_status=InfrastructureReport.STATUS_VERIFIED,
+                    decision=decision,
+                    override_details=override_details if decision == ProfessionalReview.DECISION_OVERRIDDEN else None,
+                    original_class=assessment.get('defect_class', 'Defect'),
+                    original_severity=assessment.get('relative_severity', 'Low'),
+                    notes=comments,
+                    next_action=next_action,
+                    follow_up_date=follow_up_date,
+                )
 
     return jsonify({
         'message': 'Engineer review and assessment validation submitted successfully.',
@@ -468,33 +462,22 @@ def review_by_report(current_user, report_id):
         'metadata': meta
     })
 
-    # Dispatch citizen report feedback notification
+    # Dispatch deduplicated citizen notification on persisted lifecycle transition
     if submitter_id:
         from ..services.notification_service import notification_service
-        action_text = f" Next Action: {next_action}." if next_action else ""
-        date_text = f" Target Inspection: {follow_up_date}." if (follow_up_date and next_action == 'On-site inspection recommended') else ""
-        if target_status == InfrastructureReport.STATUS_RESOLVED:
-            feedback_str = f" Note: {notes}" if notes else ""
-            msg = f"Your infrastructure report has been marked resolved.{feedback_str}"
-            notification_service.create_notification(submitter_id, report_id, 'resolved', 'Report Resolved', msg)
-        elif decision == 'Overridden' and override_details:
-            corr_class = override_details.get('override_class')
-            corr_sev = override_details.get('override_severity')
-            orig_class = meta.get('defect_class', 'Defect')
-            orig_sev = meta.get('relative_severity', 'Low')
-            changes = []
-            if corr_class and corr_class != orig_class:
-                changes.append(f"{orig_class} → {corr_class}")
-            if corr_sev and corr_sev != orig_sev:
-                changes.append(f"{orig_sev} → {corr_sev}")
-            change_str = ", ".join(changes) if changes else (f"{corr_class} ({corr_sev})" if corr_class else "Updated")
-            reason_str = f" Reason: {notes}." if notes else ""
-            msg = f"Engineer assessment updated: {change_str}.{reason_str}{action_text}{date_text}"
-            notification_service.create_notification(submitter_id, report_id, 'override', 'Assessment Updated', msg)
-        elif target_status == InfrastructureReport.STATUS_VERIFIED:
-            feedback_str = f" Engineer feedback: {notes}." if notes and notes != 'Confirmed' else ""
-            msg = f"Your report has been professionally verified.{feedback_str}{action_text}{date_text}"
-            notification_service.create_notification(submitter_id, report_id, 'verified', 'Report Verified', msg)
+        notification_service.notify_citizen_report_status(
+            submitter_id=submitter_id,
+            report_id=report_id,
+            previous_status=current_status,
+            new_status=target_status,
+            decision=decision,
+            override_details=override_details if decision == 'Overridden' else None,
+            original_class=meta.get('defect_class', 'Defect'),
+            original_severity=meta.get('relative_severity', 'Low'),
+            notes=notes,
+            next_action=next_action,
+            follow_up_date=follow_up_date,
+        )
 
     return jsonify({
         'message': f"Report successfully transitioned to '{target_status}'.",
